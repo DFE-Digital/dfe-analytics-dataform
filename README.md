@@ -27,7 +27,7 @@ module.exports = require("dfe-analytics-dataform/includes/data_functions");
 ## Using the functions in your queries
 Dataform allows you to break into Javascript within a SQLX file using the syntax ```${Your Javascript goes here.}```. This means that you can use the functions in the data_functions module provided by this package below within the rest of your Dataform project.
 
-The examples below assume that you have an events table created by the dfe-analytics gem which contains a field called 'DATA' which is an ARRAY of STRUCTs named ```DATA.key``` and ```DATA.value```:
+The examples below assume that you have an events table created by the dfe-analytics gem which contains a field called ```DATA``` which is an ARRAY of STRUCTs named ```DATA.key``` and ```DATA.value```:
 - Extract the value of a given ```key``` from within ```DATA```. If more than one value is present for ```key``` or in the unlikely event that the same ```key``` occurs multiple times, returns a comma-separated list of all values for this key. If the only values are empty strings or not present, returns ```NULL```.
 
 > ```${eventDataExtract("DATA","key")}```
