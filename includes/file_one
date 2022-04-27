@@ -1,0 +1,8 @@
+module.exports = (params) => {
+
+  return publish("file_one", {
+    ...params.defaultConfig
+  }).query(ctx => `
+--TODO: add SQL
+`)
+}
