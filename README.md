@@ -1,2 +1,2 @@
-# dataform-package-base
-Use this as the base when creating a new package
+# dfe-analytics-dataform
+Dataform package containing commonly used SQL functions and table definitions, for use with event data streamed to BigQuery using DfE-Digital/dfe-analytics.
