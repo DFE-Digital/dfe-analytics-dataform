@@ -30,28 +30,28 @@ Dataform allows you to break into Javascript within a SQLX file using the syntax
 The examples below assume that you have an events table created by the dfe-analytics gem which contains a field called 'DATA' which is an ARRAY of STRUCTs named ```DATA.key``` and ```DATA.value```:
 - Extract the value of a given ```key``` from within ```DATA```. If more than one value is present for ```key``` or in the unlikely event that the same ```key``` occurs multiple times, returns a comma-separated list of all values for this key. If the only values are empty strings or not present, returns ```NULL```.
 
-> ```${eventDataExtract("DATA","key"}```
+> ```${eventDataExtract("DATA","key")}```
 
 - Extract the value of all ```key```s beginning with the string ```key_to_extract_begins``` from DATA and return them as a comma-separated list of all ```value```s for this ```key```. If the only ```value```s are empty strings or no keys begin ```key_to_extract_begins```, returns ```NULL```.
 
-> ```${eventDataExtractListOfStringsBeginning("DATA","key_to_extract_begins"}```
+> ```${eventDataExtractListOfStringsBeginning("DATA","key_to_extract_begins")}```
 
-- Return ```TRUE``` if a given key is present in ```DATA```, and ```FALSE``` otherwise
+- Return ```TRUE``` if a given ```key``` is present in ```DATA```, and ```FALSE``` otherwise
 
-> ```${keyIsInEventData("DATA","key_to_extract_begins"}```
+> ```${keyIsInEventData("DATA","key")}```
 
 - Shortcut to run ```eventDataExtract``` and then parse the string extracted as a timestamp, attempting multiple formats. If timezone is not present, assumes timezone is Europe/London. If unable to parse the string as a timestamp in any of the formats, returns ```NULL``` (not an error).
 
-> ```${eventDataExtractTimestamp("DATA","key"}```
+> ```${eventDataExtractTimestamp("DATA","key")}```
 
 - Shortcut to run ```eventDataExtract``` and then parse the string extracted as a date, attempting multiple formats. If unable to parse the string as a date in any of the formats, returns ```NULL``` (not an error).
 
-> ```${eventDataExtractDate("DATA","key"}```
+> ```${eventDataExtractDate("DATA","key")}```
 
 - Shortcut to extract a string like ```[3,75,2,1]``` from ```DATA``` using ```event_data_extract``` and then convert it into an array of integers.
 
-> ```${eventDataExtractIntegerArray("DATA","your_key_name_here"}```
+> ```${eventDataExtractIntegerArray("DATA","your_key_name_here")}```
 
 - Sets or replaces the ```value``` of ```key``` to/with ```value``` and returns the entirety of a new version of ```DATA```, having done this
 
-> ```${eventDataCreateOrReplace("DATA","key","value"}```
+> ```${eventDataCreateOrReplace("DATA","key","value")}```
