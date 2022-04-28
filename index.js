@@ -3,8 +3,8 @@
 // const file_two = require("./includes/file_two");
 
 const dataFunctions = require("./includes/data_functions");
-const testTable1 = require ("./includes/test_table_counting_apply_events_today");
-const testTable2 = require ("./includes/test_table_counting_apply_events_today2");
+const testTable1 = require ("./includes/test_table_counting_events_today");
+const testTable2 = require ("./includes/test_table_counting_events_today2");
 
 module.exports = (params) => {
     
