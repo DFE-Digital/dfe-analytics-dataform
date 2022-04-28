@@ -3,5 +3,5 @@ module.exports = (params) => {
     type: "declaration",
     schema: params.bqDatasetName,
     name: params.bqTableName
-  });
+  })
 }
