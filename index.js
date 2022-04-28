@@ -9,6 +9,7 @@ const testTable2 = require ("./includes/test_table_counting_apply_events_today2"
 module.exports = (params) => {
     
  params = {
+    tableSuffix: null, // suffix to append to table names to distinguish them if this package is run more than once
     bqProjectName: null, // name of the BigQuery project that dfe-analytics streams event data into
     bqDatasetName: null, // name of the BigQuery dataset that dfe-analytics streams event data into
     bqEventsTableName: 'events', // name of the BigQuery table that dfe-analytics streams event data into
@@ -17,6 +18,7 @@ module.exports = (params) => {
 
   const {
     defaultConfig,
+    tableSuffix,
     bqProjectName,
     bqDatasetName,
     bqEventsTableName
