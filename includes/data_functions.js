@@ -55,21 +55,21 @@ function eventDataExtractTimestamp(dataField, keyToExtract) {
     SAFE.PARSE_TIMESTAMP(
       '%FT%H:%M:%E*S%Ez',
       TRIM(
-        ${eventDataExtract("data", "key_to_extract")},
+        ${eventDataExtract("${dataField}", "${keyToExtract}")},
         "\\""
       )
     ),
     SAFE.PARSE_TIMESTAMP(
       '%FT%T%Ez',
       TRIM(
-        ${eventDataExtract("data", "key_to_extract")},
+        ${eventDataExtract("${dataField}", "${keyToExtract}")},
         "\\""
       )
     ),
     SAFE.PARSE_TIMESTAMP(
       '%e %B %Y %R',
       TRIM(
-        ${eventDataExtract("data", "key_to_extract")},
+        ${eventDataExtract("${dataField}", "${keyToExtract}")},
         "\\""
       ),
       "Europe/London"
@@ -79,7 +79,7 @@ function eventDataExtractTimestamp(dataField, keyToExtract) {
       REPLACE(
         REPLACE(
           TRIM(
-            ${eventDataExtract("data", "key_to_extract")},
+            ${eventDataExtract("${dataField}", "${keyToExtract}")},
             "\\""
           ),
           "pm",
@@ -99,11 +99,11 @@ function eventDataExtractDate(dataField, keyToExtract) {
   return `COALESCE(
     SAFE.PARSE_DATE(
       '%F',
-      ${eventDataExtract("data", "key_to_extract")}
+      ${eventDataExtract("${dataField}", "${keyToExtract}")}
     ),
     SAFE.PARSE_DATE(
       '%e %B %Y',
-      ${eventDataExtract("data", "key_to_extract")}
+      ${eventDataExtract("${dataField}", "${keyToExtract}")}
     )
   )`
 };
@@ -122,7 +122,7 @@ function eventDataExtractIntegerArray(dataField, keyToExtract) {
           UNNEST(
             SPLIT(
               TRIM(
-                ${eventDataExtract("data", "key_to_extract")},
+                ${eventDataExtract("${dataField}", "${keyToExtract}")},
                 "[]"
               ),
               ","
