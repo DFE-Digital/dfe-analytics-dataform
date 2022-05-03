@@ -56,21 +56,21 @@ function eventDataExtractTimestamp(dataField, keyToExtract) {
       '%FT%H:%M:%E*S%Ez',
       TRIM(
         ${eventDataExtract("data", "key_to_extract")},
-        '\"'
+        "\""
       )
     ),
     SAFE.PARSE_TIMESTAMP(
       '%FT%T%Ez',
       TRIM(
         ${eventDataExtract("data", "key_to_extract")},
-        '\"'
+        "\""
       )
     ),
     SAFE.PARSE_TIMESTAMP(
       '%e %B %Y %R',
       TRIM(
         ${eventDataExtract("data", "key_to_extract")},
-        '\"'
+        "\""
       ),
       "Europe/London"
     ),
@@ -80,7 +80,7 @@ function eventDataExtractTimestamp(dataField, keyToExtract) {
         REPLACE(
           TRIM(
             ${eventDataExtract("data", "key_to_extract")},
-            '\"'
+            "\""
           ),
           "pm",
           "PM"
