@@ -3,17 +3,18 @@
 // const file_two = require("./includes/file_two");
 
 const dataFunctions = require("./includes/data_functions");
-const testTable1 = require ("./includes/test_table_counting_events_today");
-const testTable2 = require ("./includes/test_table_counting_events_today2");
-const entityVersion = require ("./includes/entity_version");
+const testTable1 = require("./includes/test_table_counting_events_today");
+const testTable2 = require("./includes/test_table_counting_events_today2");
+const entityVersion = require("./includes/entity_version");
 
 module.exports = (params) => {
-    
- params = {
+
+  params = {
     tableSuffix: null, // suffix to append to table names to distinguish them if this package is run more than once
     bqProjectName: null, // name of the BigQuery project that dfe-analytics streams event data into
     bqDatasetName: null, // name of the BigQuery dataset that dfe-analytics streams event data into
     bqEventsTableName: 'events', // name of the BigQuery table that dfe-analytics streams event data into
+    transformEntityEvents: true,
     ...params
   };
 
@@ -22,9 +23,10 @@ module.exports = (params) => {
     tableSuffix,
     bqProjectName,
     bqDatasetName,
-    bqEventsTableName
+    bqEventsTableName,
+    transformEntityEvents
   } = params;
-  
+
   // Declare the source table
   const eventsRaw = declare({
     ...defaultConfig,
@@ -35,11 +37,19 @@ module.exports = (params) => {
 
   // Publish and return datasets.
 
-  return {
+  if (params.transformEntityEvents) {
+    return {
       eventsRaw,
       testTable1: testTable1(params),
       testTable2: testTable2(params),
       entityVersion: entityVersion(params),
       dataFunctions
+    }
+  } else {
+    return {
+      eventsRaw,
+      testTable1: testTable1(params),
+      testTable2: testTable2(params)
+    }
   }
 }
