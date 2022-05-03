@@ -5,6 +5,7 @@
 const dataFunctions = require("./includes/data_functions");
 const testTable1 = require ("./includes/test_table_counting_events_today");
 const testTable2 = require ("./includes/test_table_counting_events_today2");
+const entityVersion = require ("./includes/entity_version");
 
 module.exports = (params) => {
     
@@ -38,6 +39,7 @@ module.exports = (params) => {
       eventsRaw,
       testTable1: testTable1(params),
       testTable2: testTable2(params),
+      entityVersion: entityVersion(params),
       dataFunctions
   }
 }
