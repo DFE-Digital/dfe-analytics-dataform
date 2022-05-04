@@ -12,7 +12,7 @@ FROM
     SELECT
       entity_table_name,
       key,
-      COUNT(DISTINCT id) AS updates_made_yesterday_with_this_key
+      COUNT(DISTINCT entity_id) AS updates_made_yesterday_with_this_key
     FROM
       ${ctx.ref(params.tableSuffix + "_entity_version")},
       UNNEST(DATA)
