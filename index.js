@@ -17,7 +17,6 @@ module.exports = (params) => {
     bqEventsTableName: 'events', // name of the BigQuery table that dfe-analytics streams event data into
     transformEntityEvents: true, // whether to generate tables that transform entity CRUD events into flattened tables,
     dataSchema: [],
-    analyticsYmlFileLatest: null,
     ...params
   };
 
@@ -28,8 +27,7 @@ module.exports = (params) => {
     bqDatasetName,
     bqEventsTableName,
     transformEntityEvents,
-    dataSchema,
-    analyticsYmlFileLatest
+    dataSchema
   } = params;
 
   // Declare the source table
