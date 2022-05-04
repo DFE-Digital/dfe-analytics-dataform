@@ -55,7 +55,7 @@ module.exports = require("dfe-analytics-dataform/includes/data_functions");
 ## Tables, assertions, and declarations this will create
 For each occurrence of ```dfeAnalyticsDataform()``` in ``definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the UI by opening ```definitions/dfe_analytics_dataform.js```.
 
-The names of these will vary depending on the tableSuffix you have specified. For example if your tableSuffix was ```foo``` then the following will be created:
+The names of these will vary depending on the ```tableSuffix``` you have specified. For example if your ```tableSuffix``` was ```foo``` then the following will be created:
 - A declaration of your events table, which you can access via ```${ref("bqDatasetName","bqEventsTableName")}``` (replacing those values with your own).
 - An incremental table called ```foo_entity_version```, containing each version of every entity in the database over time, with a ```valid_from``` and ```valid_to``` timestamp.
 - A table called ```foo_analytics_yml_latest```, which is a table version of the ```dataSchema``` you specified.
