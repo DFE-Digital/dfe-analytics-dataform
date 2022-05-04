@@ -31,21 +31,21 @@ module.exports = (params) => {
   entity_id AS id,
   ${data_functions.eventDataExtractTimestamp("DATA","created_at")} AS created_at,
   ${data_functions.eventDataExtractTimestamp("DATA","updated_at")} AS updated_at,
-  ${tableSchema.keys.map(key => {return 
+  ${tableSchema.keys.map(key => { 
         if(key.dataType == 'boolean') {
-          `CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS BOOL) AS ${key.keyName},`
+          return `CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS BOOL) AS ${key.keyName},`;
         } else if (key.dataType == 'timestamp') {
-          `${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS ${key.keyName},`
+          return `${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS ${key.keyName},`;
         } else if (key.dataType == 'date') {
-          `${data_functions.eventDataExtractDate("DATA",key.keyName)} AS ${key.keyName},`
+          return `${data_functions.eventDataExtractDate("DATA",key.keyName)} AS ${key.keyName},`;
         } else if (key.dataType == 'timestamp_as_date') {
-          `CAST(${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS DATE) AS ${key.keyName},`
+          return `CAST(${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS DATE) AS ${key.keyName},`;
         } else if (key.dataType == 'integer') {
-          `CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS INT64) AS ${key.keyName},`
+          return `CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS INT64) AS ${key.keyName},`;
         } else if (key.dataType == 'integer_array') {
-          `${data_functions.eventDataExtractIntegerArray("DATA",key.keyName)} AS ${key.keyName},`
+          return `${data_functions.eventDataExtractIntegerArray("DATA",key.keyName)} AS ${key.keyName},`;
         } else {
-          `${data_functions.eventDataExtract("DATA",key.keyName)} AS ${key.keyName},`
+          return `${data_functions.eventDataExtract("DATA",key.keyName)} AS ${key.keyName},`;
         }
       }
     ).join('\n')
