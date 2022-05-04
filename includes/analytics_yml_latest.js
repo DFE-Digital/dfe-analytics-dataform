@@ -10,7 +10,7 @@ module.exports = (params) => {
   }).query(ctx => `SELECT * FROM UNNEST([
       ${params.dataSchema.map(tableSchema => {
         return `STRUCT("${tableSchema.entityTableName}" AS entity_name, [${tableSchema.keys.map(key => {
-          return `"${key}"`;
+          return `"${key.keyName}"`;
           }
         ).join(',')}] AS keys),`;
       }
