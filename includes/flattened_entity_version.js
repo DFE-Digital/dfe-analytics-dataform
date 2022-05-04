@@ -31,24 +31,24 @@ module.exports = (params) => {
   entity_id AS id,
   ${data_functions.eventDataExtractTimestamp("DATA","created_at")} AS created_at,
   ${data_functions.eventDataExtractTimestamp("DATA","updated_at")} AS updated_at,
-  ${tableSchema.keys.forEach(key => {
+  ${tableSchema.keys.map(key => {
         if(key.dataType = 'boolean') {
-          return `CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS BOOL) AS ${key.keyName},`;
+          `CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS BOOL) AS ${key.keyName},`
         } else if (key.dataType = 'timestamp') {
-          return `${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS ${key.keyName},`;
+          `${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS ${key.keyName},`
         } else if (key.dataType = 'date') {
-          return `${data_functions.eventDataExtractDate("DATA",key.keyName)} AS ${key.keyName},`;
+          `${data_functions.eventDataExtractDate("DATA",key.keyName)} AS ${key.keyName},`
         } else if (key.dataType = 'timestamp_as_date') {
-          return `CAST(${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS DATE) AS ${key.keyName},`;
+          `CAST(${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS DATE) AS ${key.keyName},`
         } else if (key.dataType = 'integer') {
-          return `CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS INT64) AS ${key.keyName},`;
+          `CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS INT64) AS ${key.keyName},`
         } else if (key.dataType = 'integer_array') {
-          return `${data_functions.eventDataExtractIntegerArray("DATA",key.keyName)} AS ${key.keyName},`;
+          `${data_functions.eventDataExtractIntegerArray("DATA",key.keyName)} AS ${key.keyName},`
         } else {
-          return `${data_functions.eventDataExtract("DATA",key.keyName)} AS ${key.keyName},`;
+          `${data_functions.eventDataExtract("DATA",key.keyName)} AS ${key.keyName},`
         }
       }
-    )
+    ).join('\n')
   }
 FROM
   ${ctx.ref(params.tableSuffix + "_entity_version")}
