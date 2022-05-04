@@ -21,7 +21,7 @@ module.exports = (params) => {
       valid_from: "Timestamp from which this version of this entity started to be valid.",
       valid_to: "Timestamp until which this version of this entity was valid.",
       event_type: "Event type of the event that provided us with this version of this entity. Either create_entity, update_entity or import_entity.",
-      entity_name: "Indicates which table this entity version came from",
+      entity_table_name: "Indicates which table this entity version came from",
       entity_id: "Hashed (anonymised) version of the ID of this entity from the database.",
       created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
       updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
@@ -89,7 +89,7 @@ FROM
 WHERE
   event_type != "delete_entity"
   AND (
-    /* If we run a backfill job for entity events then occurred_at is set to the created_at date of the entity, not the timestamp when the import event happened. However this creates two entity versions at the same time, one of which is only valid for zero seconds. This excludes these from this table, ensuring that the combination of valid_from, entity_id and entity_name provides a unique identifier for an entity version. */
+    /* If we run a backfill job for entity events then occurred_at is set to the created_at date of the entity, not the timestamp when the import event happened. However this creates two entity versions at the same time, one of which is only valid for zero seconds. This excludes these from this table, ensuring that the combination of valid_from, entity_id and entity_table_name provides a unique identifier for an entity version. */
     valid_from != valid_to
     OR valid_to IS NULL
   )`).preOps(ctx => `DECLARE event_timestamp_checkpoint DEFAULT (

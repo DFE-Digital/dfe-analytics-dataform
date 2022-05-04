@@ -53,7 +53,7 @@ module.exports = (params) => {
 FROM
   ${ctx.ref(params.tableSuffix + "_entity_version")}
 WHERE
-  entity_name = "${tableSchema.entityTableName}"
+  entity_table_name = "${tableSchema.entityTableName}"
   AND (
     valid_to > event_timestamp_checkpoint
     OR valid_to IS NULL

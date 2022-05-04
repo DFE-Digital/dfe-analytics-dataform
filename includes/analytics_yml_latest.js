@@ -12,7 +12,7 @@ module.exports = (params) => {
     *
   FROM
     UNNEST(
-      REGEXP_EXTRACT_ALL(${params.analyticsYmlFileLatest}, r"(  [a-z0-9_]+:\n(?:    - [a-z0-9_]+\n)+)")
+      REGEXP_EXTRACT_ALL("""${params.analyticsYmlFileLatest}""", r"(  [a-z0-9_]+:\n(?:    - [a-z0-9_]+\n)+)")
     ) AS entity_yaml
 )
 SELECT
