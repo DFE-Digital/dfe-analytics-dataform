@@ -18,13 +18,5 @@ dfeAnalyticsDataform({
       keyName: "Your timestamp field name here (when it actually contains a date!)",
       dataType: "date_as_timestamp"
     }]
-  }],
-  analyticsYmlFileLatest: `
-  # Copy your analytics.yml file here from your production repository that uses dfe-analytics
-shared:
-  entity_name:
-    - field_name
-    - other_field_name
-    - and_so_on
-    `
+  }]
 });
