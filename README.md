@@ -53,7 +53,7 @@ module.exports = require("dfe-analytics-dataform/includes/data_functions");
 10. Run a 'full refresh' on your entire pipeline, and resolve any errors this flags (e.g. errors you made when specifying a dataSchema).
 
 ## Tables, assertions, and declarations this will create
-For each occurrence of ```dfeAnalyticsDataform()``` in ``definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the UI by opening ```definitions/dfe_analytics_dataform.js```.
+For each occurrence of ```dfeAnalyticsDataform()``` in ```definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the UI by opening ```definitions/dfe_analytics_dataform.js```.
 
 The names of these will vary depending on the ```tableSuffix``` you have specified. For example if your ```tableSuffix``` was ```foo``` then the following will be created:
 - A declaration of your events table, which you can access via ```${ref("bqDatasetName","bqEventsTableName")}``` (replacing those values with your own).
