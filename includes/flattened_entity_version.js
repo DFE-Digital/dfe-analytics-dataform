@@ -1,6 +1,6 @@
-function publishFlattenedEntityVersionTable(tableSchema, index, dataSchema, ...params) {
-  return publish(tableSchema.entityTableName + "_entity_version", {
-    ...params.defaultConfig, 
+module.exports = (params) => {
+  return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_version_" + params.tableSuffix, {
+    ...params.defaultConfig,
     type: "incremental",
     uniqueKey: ["id", "valid_from"],
     /*dependencies: ["entities_are_up_to_date"], */
@@ -31,19 +31,33 @@ function publishFlattenedEntityVersionTable(tableSchema, index, dataSchema, ...p
   entity_id AS id,
   ${data_functions.eventDataExtractTimestamp("DATA","created_at")} AS created_at,
   ${data_functions.eventDataExtractTimestamp("DATA","updated_at")} AS updated_at,
-  /*${tableSchema.keys.forEach(key => data_functions.eventDataExtract("DATA", key.keyName))};*/
+  ${tableSchema.keys.forEach(key => {
+        if(key.dataType = 'boolean') {
+          `CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS BOOL) AS ${key.keyName},`
+        } else if (key.dataType = 'timestamp') {
+          `${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS ${key.keyName},`
+        } else if (key.dataType = 'date') {
+          `${data_functions.eventDataExtractDate("DATA",key.keyName)} AS ${key.keyName},`
+        } else if (key.dataType = 'timestamp_as_date') {
+          `CAST(${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS DATE) AS ${key.keyName},`
+        } else if (key.dataType = 'integer') {
+          `CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS INT64) AS ${key.keyName},`
+        } else if (key.dataType = 'integer_array') {
+          `${data_functions.eventDataExtractIntegerArray("DATA",key.keyName)} AS ${key.keyName},`
+        } else {
+          `${data_functions.eventDataExtract("DATA",key.keyName)} AS ${key.keyName},`
+        }
+      }
+    )
+  }
 FROM
   ${ctx.ref(params.tableSuffix + "_entity_version")}
 WHERE
-  entity_name = "references"
+  entity_name = "${tableSchema.entityTableName}"
   AND (
     valid_to > event_timestamp_checkpoint
     OR valid_to IS NULL
   )`).preOps(ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(),`SELECT MAX(valid_to) FROM ${ctx.self()}`,`SELECT TIMESTAMP("2018-01-01")`)}
-      )`)
-};
-
-module.exports = (params) => {
-  return params.dataSchema.forEach(publishFlattenedEntityVersionTable, ...params)
+      )`))
 }
