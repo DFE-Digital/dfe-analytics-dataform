@@ -49,6 +49,18 @@ dfeAnalyticsDataform({
 ```
 module.exports = require("dfe-analytics-dataform/includes/data_functions");
 ```
+9. Commit your changes and merge to master.
+10. Run a 'full refresh' on your entire pipeline, and resolve any errors this flags (e.g. errors you made when specifying a dataSchema).
+
+## Tables, assertions, and declarations this will create
+For each occurrence of ```dfeAnalyticsDataform()``` in ``definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the UI by opening ```definitions/dfe_analytics_dataform.js```.
+
+The names of these will vary depending on the tableSuffix you have specified. For example if your tableSuffix was ```foo``` then the following will be created:
+- A declaration of your events table, which you can access via ```${ref("bqDatasetName","bqEventsTableName")}``` (replacing those values with your own).
+- An incremental table called foo_entity_version, containing each version of every entity in the database over time, with a valid_from and valid_to timestamp.
+- A table called foo_analytics_yml_latest, which is a table version of the dataSchema you specified.
+- For each entityTableName you specified in dataSchema like bar, tables called something like bar_version_foo and bar_latest_foo. bar_version_foo is a flattened version of foo_version, flattened according to the schema for foo you specified in dataSchema. bar_latest_foo is the same as bar_version_foo except that it only includes the latest version of each entity (i.e. with valid_to IS NULL).
+- Assertions which will tell you if foo_entities_are_missing_expected_fields or if foo_unhandled_field_or_entity_is_being_streamed. The former will halt your pipeline from executing, while the latter will just alert you to the assertion failure.
 
 ## Using the functions in your queries
 Dataform allows you to break into Javascript within a SQLX file using the syntax ```${Your Javascript goes here.}```. If you created includes/data_functions.js then this means that you can use the functions in the data_functions module provided by this package within SQL queries in the rest of your Dataform project.
