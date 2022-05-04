@@ -12,7 +12,7 @@ module.exports = (params) => {
         return `STRUCT("${tableSchema.entityTableName}" AS entity_name, [${tableSchema.keys.map(key => {
           return `"${key.keyName}"`;
           }
-        ).join(',')}] AS keys),`;
+        ).join(',')}] AS keys)`;
       }
     ).join(',')}  
   ])`)
