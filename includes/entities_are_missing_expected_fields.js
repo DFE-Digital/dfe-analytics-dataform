@@ -1,8 +1,8 @@
 module.exports = (params) => {
   return assert(params.tableSuffix + "_entities_are_missing_expected_fields", {
     ...params.defaultConfig,
-  type: "assertion",
-  description: "Counts the number of entities updated yesterday which did not contain an expected field, excluding updates which were before a new field was introduced partway through the day. The list is taken from the configuration file https://github.com/DFE-Digital/apply-for-teacher-training/blob/main/config/analytics.yml via apply_analytics_yml_latest, but the assertion will fail if that file is updated but this assertion is not in order to alert us that we need to think through the implications for analytics of losing a field. If this assertion fails, we need to ask developers why, and ask them either to fix the bug, or if the field was intentionally removed, remove the field from {entity_name}_latest and any points where it used downstream in the pipeline."
+    type: "assertion",
+    description: "Counts the number of entities updated yesterday which did not contain an expected field, excluding updates which were before a new field was introduced partway through the day. The list is taken from the dataSchema JSON parameter passed to dfe-analytics-dataform, but the assertion will fail if that file is updated but this assertion is not in order to alert us that we need to think through the implications for analytics of losing a field. If this assertion fails, we need to ask developers why, and ask them either to fix the bug, or if the field was intentionally removed, remove the field from dataSchema and any points where it used downstream in the pipeline."
   }).query(ctx => `
 WITH expected_entity_fields AS (
   SELECT
@@ -62,7 +62,7 @@ FROM
   JOIN expected_entity_fields ON entity_name = entity_table_name
 WHERE
   DATE(valid_from) >= CURRENT_DATE - 1
-  AND last_streamed_event_type != "delete_entity"
+  AND event_type != "delete_entity"
 GROUP BY
   entity_name,
   key
