@@ -15,14 +15,14 @@ module.exports = (params) => {
       partitionBy: "DATE(valid_to)",
       updatePartitionFilter: "valid_to IS NULL"
     },
-    description: "Versions of each reference that was in the reference table in the production database from valid_from until just before valid_to.",
+    description: "Versions of each entity that was in the entity table in the production database from valid_from until just before valid_to.",
     columns: {
       valid_from: "Timestamp from which this version of this entity started to be valid.",
       valid_to: "Timestamp until which this version of this entity was valid.",
-      type: "Event type of the event that provided us with this version of this entity. Either entity_created,entity_updated or entity_imported.",
-      id: "Hashed (anonymised) version of the ID of this reference from the database.",
-      created_at: "Date this reference was first saved in the database, according to the latest version of the data received from the database.",
-      updated_at: "Date this reference was last updated in the database, according to the latest version of the data received from the database.",
+      type: "Event type of the event that provided us with this version of this entity. Either entity_created, entity_updated or entity_imported.",
+      id: "Hashed (anonymised) version of the ID of this entity from the database.",
+      created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
+      updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
     }
   }).query(ctx => `SELECT
   valid_from,
