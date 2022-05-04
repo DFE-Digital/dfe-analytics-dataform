@@ -31,7 +31,7 @@ module.exports = (params) => {
   entity_id AS id,
   ${data_functions.eventDataExtractTimestamp("DATA","created_at")} AS created_at,
   ${data_functions.eventDataExtractTimestamp("DATA","updated_at")} AS updated_at,
-  ${tableSchema.keys.forEach(key => {
+  ${tableSchema.keys.forEach(key => {return 
         if(key.dataType = 'boolean') {
           `CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS BOOL) AS ${key.keyName},`
         } else if (key.dataType = 'timestamp') {
