@@ -19,13 +19,39 @@ It should now look something like:
 }
 ```
 5. Click the 'Install Packages' button on the right hand side of the package.json screen. This will also update package-lock.json automatically.
-6. Create a file called includes/data_functions.js containing the following line:
+6. Create a file called definitions/dfe_analytics_dataform.js that looks like the following:
+```
+const dfeAnalyticsDataform = require("dfe-analytics-dataform");
+
+// Repeat the lines below for each and every events table you want dfe-analytics-dataform to process in your Dataform project
+dfeAnalyticsDataform({
+  tableSuffix: "Your table suffix here",
+  bqProjectName: "Your BigQuery project name here",
+  bqDatasetName: "Your BigQuery dataset name here",
+  bqEventsTableName: "Your BigQuery events table name here - usually just 'events'",
+  dataSchema: [{
+    entityTableName: "Your entity table name here from your production database analytics.yml",
+    keys: [{
+      keyName: "Your string field name here",
+      dataType: "string"
+    }, {
+      keyName: "Yoour boolean field name here",
+      dataType: "boolean"
+    }, {
+      keyName: "Your timestamp field name here (when it actually contains a date!)",
+      dataType: "date_as_timestamp"
+    }]
+  }]
+});
+```
+7. Replace the parameters in this file with the parameters you need - including specifying the full schema from your analytics.yml file with data types.
+8. Create a second file called includes/data_functions.js containing the following line:
 ```
 module.exports = require("dfe-analytics-dataform/includes/data_functions");
 ```
 
 ## Using the functions in your queries
-Dataform allows you to break into Javascript within a SQLX file using the syntax ```${Your Javascript goes here.}```. This means that you can use the functions in the data_functions module provided by this package within SQL queries in the rest of your Dataform project.
+Dataform allows you to break into Javascript within a SQLX file using the syntax ```${Your Javascript goes here.}```. If you created includes/data_functions.js then this means that you can use the functions in the data_functions module provided by this package within SQL queries in the rest of your Dataform project.
 
 The examples below assume that you have an events table created by the dfe-analytics gem which contains a field called ```DATA``` which is an ARRAY of STRUCTs named ```DATA.key``` and ```DATA.value```:
 - Extract the value of a given ```key``` from within ```DATA```. If more than one value is present for ```key``` or in the unlikely event that the same ```key``` occurs multiple times, returns a comma-separated list of all values for this key. If the only values are empty strings or not present, returns ```NULL```.
