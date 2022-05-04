@@ -4,6 +4,7 @@ module.exports = (params) => {
     type: "incremental",
     uniqueKey: ["id", "valid_from"],
     /*dependencies: ["entities_are_up_to_date"], */
+    dependencies: [params.tableSuffix + "_entities_are_missing_expected_fields"],
     assertions: {
       uniqueKey: ["valid_from", "id"],
       nonNull: ["id", "created_at", "updated_at"],
