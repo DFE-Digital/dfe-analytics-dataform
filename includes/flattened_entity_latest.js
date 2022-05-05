@@ -2,7 +2,6 @@ module.exports = (params) => {
   return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_latest_" + params.tableSuffix, {
     ...params.defaultConfig,
     type: "table",
-    /*dependencies: ["apply_entities_were_not_streamed_yesterday"], */
     assertions: {
       uniqueKey: ["id"],
       nonNull: ["last_streamed_event_occurred_at", "last_streamed_event_type", "id", "created_at", "updated_at"]

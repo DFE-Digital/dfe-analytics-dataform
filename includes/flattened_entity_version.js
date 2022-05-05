@@ -3,7 +3,6 @@ module.exports = (params) => {
     ...params.defaultConfig,
     type: "incremental",
     uniqueKey: ["id", "valid_from"],
-    /*dependencies: ["entities_are_up_to_date"], */
     dependencies: [params.tableSuffix + "_entities_are_missing_expected_fields"],
     assertions: {
       uniqueKey: ["valid_from", "id"],
