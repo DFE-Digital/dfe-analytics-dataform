@@ -34,15 +34,15 @@ module.exports = (params) => {
   ${data_functions.eventDataExtractTimestamp("DATA","updated_at")} AS updated_at,
   ${tableSchema.keys.map(key => { 
         if(key.dataType == 'boolean') {
-          return `CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS BOOL) AS ${key.keyName},`;
+          return `SAFE_CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS BOOL) AS ${key.keyName},`;
         } else if (key.dataType == 'timestamp') {
           return `${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS ${key.keyName},`;
         } else if (key.dataType == 'date') {
           return `${data_functions.eventDataExtractDate("DATA",key.keyName)} AS ${key.keyName},`;
         } else if (key.dataType == 'timestamp_as_date') {
-          return `CAST(${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS DATE) AS ${key.keyName},`;
+          return `SAFE_CAST(${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS DATE) AS ${key.keyName},`;
         } else if (key.dataType == 'integer') {
-          return `CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS INT64) AS ${key.keyName},`;
+          return `SAFE_CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS INT64) AS ${key.keyName},`;
         } else if (key.dataType == 'integer_array') {
           return `${data_functions.eventDataExtractIntegerArray("DATA",key.keyName)} AS ${key.keyName},`;
         } else {
