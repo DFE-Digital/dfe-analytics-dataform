@@ -9,13 +9,17 @@ module.exports = (params) => {
     bigquery: {
       partitionBy: "DATE(created_at)"
     },
-    description: "The latest version of each entity from the table with the same name in the Apply production database that has been streamed into the events table.",
+    description: tableSchema.description,
     columns: {
       last_streamed_event_occurred_at: "Timestamp of the event that we think provided us with the latest version of this entity.",
       last_streamed_event_type: "Event type of the event that we think provided us with the latest version of this entity. Either entity_created, entity_updated, entity_destroyed or entity_imported.",
       id: "UID",
       created_at: "Date this entity was created, according to the latest version of the data received from the database.",
       updated_at: "Date this entity was last updated something in the database, according to the latest version of the data received from the database.",
+      ...tableSchema.keys.map(key => ({
+        [key.keyName]: key.description
+      })
+    ).entries()
     }
   }).query(ctx => `SELECT
   *

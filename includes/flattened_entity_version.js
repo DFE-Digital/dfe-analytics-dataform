@@ -15,7 +15,7 @@ module.exports = (params) => {
       partitionBy: "DATE(valid_to)",
       updatePartitionFilter: "valid_to IS NULL"
     },
-    description: "Versions of each entity that was in the entity table in the production database from valid_from until just before valid_to.",
+    description: "Versions of entities in the database valid between valid_from and valid_to. Description of these entities is: " + tableSchema.description,
     columns: {
       valid_from: "Timestamp from which this version of this entity started to be valid.",
       valid_to: "Timestamp until which this version of this entity was valid.",
@@ -23,6 +23,10 @@ module.exports = (params) => {
       id: "Hashed (anonymised) version of the ID of this entity from the database.",
       created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
       updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
+      ...tableSchema.keys.map(key => ({
+        [key.keyName]: key.description
+      })
+    ).entries()
     }
   }).query(ctx => `SELECT
   valid_from,
