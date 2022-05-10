@@ -17,9 +17,9 @@ module.exports = (params) => {
       created_at: "Date this entity was created, according to the latest version of the data received from the database.",
       updated_at: "Date this entity was last updated something in the database, according to the latest version of the data received from the database.",
       ...tableSchema.keys.map(key => ({
-        [key.keyName]: key.description
-      })
-    ).entries()
+        columns: {[key.keyName]: key.description}
+          })
+        )
     }
   }).query(ctx => `SELECT
   *

@@ -24,10 +24,10 @@ module.exports = (params) => {
       created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
       updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
       ...tableSchema.keys.map(key => ({
-        [key.keyName]: key.description
-      })
-    ).entries()
-    }
+        columns: {[key.keyName]: key.description}
+          })
+        )
+    } 
   }).query(ctx => `SELECT
   valid_from,
   valid_to,
@@ -61,7 +61,9 @@ WHERE
   AND (
     valid_to > event_timestamp_checkpoint
     OR valid_to IS NULL
-  )`).preOps(ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
+  )`).preOps(
+          ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(),`SELECT MAX(valid_to) FROM ${ctx.self()}`,`SELECT TIMESTAMP("2018-01-01")`)}
-      )`))
+      )`)
+      )
 }
