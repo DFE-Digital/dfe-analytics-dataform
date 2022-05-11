@@ -44,7 +44,7 @@ dfeAnalyticsDataform({
   }]
 });
 ```
-7. Replace the parameters in this file with the parameters you need - including specifying the full schema from your analytics.yml file with data types.
+7. Replace the parameters in this file with the parameters you need - including specifying the full schema from your analytics.yml file with data types. Optionally, you can generate a blank dataSchema JSON to paste in here by creating the data_schema_json_latest table from the right hand sidebar when you open dfe_analytics_dataform in the UI. This will save you time if you're starting with a blank project.
 8. Create a second file called includes/data_functions.js containing the following line:
 ```
 module.exports = require("dfe-analytics-dataform/includes/data_functions");
