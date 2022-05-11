@@ -7,14 +7,22 @@ Dataform package containing commonly used SQL functions and table definitions, f
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
+<<<<<<< HEAD
 "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4"
+=======
+"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.3"
+>>>>>>> refs/remotes/origin/master
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
         "@dataform/core": "1.21.1",
+<<<<<<< HEAD
         "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4"
+=======
+        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.3"
+>>>>>>> refs/remotes/origin/master
     }
 }
 ```
@@ -31,26 +39,30 @@ dfeAnalyticsDataform({
   bqEventsTableName: "Your BigQuery events table name here - usually just 'events'",
   dataSchema: [{
     entityTableName: "Your entity table name here from your production database analytics.yml",
+    description: "Description of this entity to include in metadata of denormalised tables produced for this entity.",
     keys: [{
       keyName: "Your string field name here",
-      dataType: "string"
+      dataType: "string",
+      description: "Description of this field to include in metadata here."
     }, {
       keyName: "Yoour boolean field name here",
-      dataType: "boolean"
+      dataType: "boolean",
+      description: "Description of this field to include in metadata here."
     }, {
       keyName: "Your timestamp field name here (when it actually contains a date!)",
-      dataType: "date_as_timestamp"
+      dataType: "date_as_timestamp",
+      description: "Description of this field to include in metadata here."
     }]
   }]
 });
 ```
-7. Replace the parameters in this file with the parameters you need - including specifying the full schema from your analytics.yml file with data types. Optionally, you can generate a blank dataSchema JSON to paste in here by creating the data_schema_json_latest table from the right hand sidebar when you open dfe_analytics_dataform in the UI. This will save you time if you're starting with a blank project.
-8. Create a second file called includes/data_functions.js containing the following line:
+7. Replace the parameters in this file with the parameters you need - including specifying the full schema from your ```analytics.yml``` file with data types. Optionally, to save time if you're starting from scratch, you can generate a blank ```dataSchema``` JSON to paste in here by running the query in Dataform to create the ```data_schema_json_latest``` table. You can do this from the right hand sidebar when you open ```dfe_analytics_dataform``` in the Dataform web client, and then copying and pasting the output from the table this produces in BigQuery (don't copy and paste from Dataform as it doesn't handle newlines well).
+8. Create a second file called ```includes/data_functions.js``` containing the following line:
 ```
 module.exports = require("dfe-analytics-dataform/includes/data_functions");
 ```
-9. Commit your changes and merge to master.
-10. Run a 'full refresh' on your entire pipeline, and resolve any errors this flags (e.g. errors you made when specifying a dataSchema).
+9. Commit your changes and merge to ```master```.
+10. Run a 'full refresh' on your entire pipeline, and resolve any errors this flags (e.g. omissions made when specifying a ```dataSchema```).
 
 ## Tables, assertions, and declarations this will create
 For each occurrence of ```dfeAnalyticsDataform()``` in ```definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the UI by opening ```definitions/dfe_analytics_dataform.js```.
@@ -59,7 +71,8 @@ The names of these will vary depending on the ```tableSuffix``` you have specifi
 - A declaration of your events table, which you can access via ```${ref("bqDatasetName","bqEventsTableName")}``` (replacing those values with your own).
 - An incremental table called ```foo_entity_version```, containing each version of every entity in the database over time, with a ```valid_from``` and ```valid_to``` timestamp.
 - A table called ```foo_analytics_yml_latest```, which is a table version of the ```dataSchema``` you specified.
-- For each ```entityTableName``` you specified in ```dataSchema``` like ```bar```, tables called something like ```bar_version_foo``` and ```bar_latest_foo```. ```bar_version_foo``` is a denormalised ('flattened') version of ```foo_version```, flattened according to the schema for ```foo``` you specified in ```dataSchema```. ```bar_latest_foo``` is the same as ```bar_version_foo``` except that it only includes the latest version of each entity (i.e. with ```valid_to IS NULL```).
+- A table called ```foo_data_schema_json_latest```, which is a default dataSchema JSON you could use to get started specifying this in dfe_analytics_dataform.js
+- For each ```entityTableName``` you specified in ```dataSchema``` like ```bar```, tables called something like ```bar_version_foo``` and ```bar_latest_foo```. ```bar_version_foo``` is a denormalised ('flattened') version of ```foo_version```, flattened according to the schema for ```foo``` you specified in ```dataSchema```. ```bar_latest_foo``` is the same as ```bar_version_foo``` except that it only includes the latest version of each entity (i.e. with ```valid_to IS NULL```). Both tables and fields within them will have metadata set to match the descriptions set in ```dataSchema```.
 - Assertions to help spot when your ```dataSchema``` has become out of date or has a problem. These will tell you if ```foo_entities_are_missing_expected_fields``` or if ```foo_unhandled_field_or_entity_is_being_streamed```. The former will halt your pipeline from executing, while the latter will just alert you to the assertion failure.
 - A table called ```foo_entity_field_updates```, which contains one row for each time a field was updated for any entity that is streamed as events from the database, setting out the name of the field, the previous value of the field and the new value of the field. Entity deletions and updates to any ```updated_at``` fields are not included, but ```NULL``` values are.
 
