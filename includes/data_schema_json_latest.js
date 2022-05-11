@@ -7,11 +7,11 @@ module.exports = (params) => {
       valid_from: "Timestamp from which this version of this entity started to be valid."
     }
   }).query(ctx => `SELECT
-  "dataSchema: [" || STRING_AGG(tableSchemaJSON, ",\n") || "]" AS dataSchemaJSON
+  "dataSchema: [" || STRING_AGG(tableSchemaJSON, ",\\n") || "]" AS dataSchemaJSON
 FROM (
   SELECT
     entity_table_name,
-    "{\n   entityTableName: \"" || entity_table_name || "\",\n   description: \"\",\n   keys: [" || STRING_AGG("{\n      keyName: \"" || key || "\",\n      dataType: \"string\",\n      description: \"\"\n   }", ", ") || "]\n}" AS tableSchemaJSON
+    "{\\n   entityTableName: \\"" || entity_table_name || "\\",\\n   description: \\"\\",\\n   keys: [" || STRING_AGG("{\\n      keyName: \\"" || key || "\\",\\n      dataType: \\"string\\",\\n      description: \\"\\"\\n   }", ", ") || "]\\n}" AS tableSchemaJSON
   FROM (
     SELECT
       DISTINCT entity_table_name,

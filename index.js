@@ -5,7 +5,7 @@ const flattenedEntityLatest = require("./includes/flattened_entity_latest");
 const analyticsYmlLatest = require("./includes/analytics_yml_latest");
 const entitiesAreMissingExpectedFields = require("./includes/entities_are_missing_expected_fields");
 const unhandledFieldOrEntityIsBeingStreamed = require("./includes/unhandled_field_or_entity_is_being_streamed");
-const dataSchemaLatest = require("./includes/data_schema_latest");
+const dataSchemaJSONLatest = require("./includes/data_schema_json_latest");
 
 module.exports = (params) => {
 
@@ -49,7 +49,7 @@ module.exports = (params) => {
       analyticsYmlLatest: analyticsYmlLatest(params),
       entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
       unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
-      dataSchemaLatest: dataSchemaLatest(params)
+      dataSchemaJSONLatest: dataSchemaJSONLatest(params)
     }
   } else {
     return {
