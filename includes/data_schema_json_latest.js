@@ -2,9 +2,9 @@ module.exports = (params) => {
   return publish(params.tableSuffix + "_data_schema_latest", {
     ...params.defaultConfig,
     type: "table",
-    description: "",
+    description: "Generates a blank version of the dataSchema JSON that needs to be set in dfe_analytics_dataform.js in order for the dfe-analytics-dataform package to denormalise entity CRUD tables according to this schema. This is populated based on the entity CRUD events that were streamed yesterday, and the field names within them. By default all data types are set to string, and all metadata is set to an empty string.",
     columns: {
-      valid_from: "Timestamp from which this version of this entity started to be valid."
+      dataSchemaJSON: "Blank version of the dataSchema JSON that needs to be set in dfe_analytics_dataform.js in order for the dfe-analytics-dataform package to denormalise entity CRUD tables according to this schema. This is populated based on the entity CRUD events that were streamed yesterday, and the field names within them. By default all data types are set to string, and all metadata is set to an empty string."
     }
   }).query(ctx => `SELECT
   "dataSchema: [" || STRING_AGG(tableSchemaJSON, ",\\n") || "]" AS dataSchemaJSON
