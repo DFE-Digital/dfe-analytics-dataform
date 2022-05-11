@@ -7,7 +7,7 @@ Dataform package containing commonly used SQL functions and table definitions, f
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.2"
+"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.3"
 ```
 It should now look something like:
 ```
