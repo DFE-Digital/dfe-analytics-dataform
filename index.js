@@ -1,7 +1,3 @@
-// TODO: import files from includes
-// const file_one = require("./includes/file_one");
-// const file_two = require("./includes/file_two");
-
 const dataFunctions = require("./includes/data_functions");
 const entityVersion = require("./includes/entity_version");
 const flattenedEntityVersion = require("./includes/flattened_entity_version");
@@ -9,6 +5,7 @@ const flattenedEntityLatest = require("./includes/flattened_entity_latest");
 const analyticsYmlLatest = require("./includes/analytics_yml_latest");
 const entitiesAreMissingExpectedFields = require("./includes/entities_are_missing_expected_fields");
 const unhandledFieldOrEntityIsBeingStreamed = require("./includes/unhandled_field_or_entity_is_being_streamed");
+const dataSchemaLatest = require("./includes/data_schema_latest");
 
 module.exports = (params) => {
 
@@ -51,7 +48,8 @@ module.exports = (params) => {
       dataFunctions,
       analyticsYmlLatest: analyticsYmlLatest(params),
       entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
-      unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params)
+      unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
+      dataSchemaLatest: dataSchemaLatest(params)
     }
   } else {
     return {

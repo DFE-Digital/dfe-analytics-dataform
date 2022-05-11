@@ -15,11 +15,11 @@ module.exports = (params) => {
       last_streamed_event_type: "Event type of the event that we think provided us with the latest version of this entity. Either entity_created, entity_updated, entity_destroyed or entity_imported.",
       id: "UID",
       created_at: "Date this entity was created, according to the latest version of the data received from the database.",
-      updated_at: "Date this entity was last updated something in the database, according to the latest version of the data received from the database.",
+      updated_at: "Date this entity was last updated something in the database, according to the latest version of the data received from the database."/*,
       ...tableSchema.keys.map(key => ({
-        columns: {[key.keyName]: key.description}
+        [key.keyName]: key.description
           })
-        )
+        )*/
     }
   }).query(ctx => `SELECT
   *

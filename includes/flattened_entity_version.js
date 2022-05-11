@@ -22,11 +22,11 @@ module.exports = (params) => {
       type: "Event type of the event that provided us with this version of this entity. Either entity_created, entity_updated or entity_imported.",
       id: "Hashed (anonymised) version of the ID of this entity from the database.",
       created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
-      updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
+      updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database."/*,
       ...tableSchema.keys.map(key => ({
         columns: {[key.keyName]: key.description}
           })
-        )
+        )*/
     } 
   }).query(ctx => `SELECT
   valid_from,
