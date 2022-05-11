@@ -1,5 +1,6 @@
 const dataFunctions = require("./includes/data_functions");
 const entityVersion = require("./includes/entity_version");
+const entityFieldUpdates = require("./includes/entity_field_updates");
 const flattenedEntityVersion = require("./includes/flattened_entity_version");
 const flattenedEntityLatest = require("./includes/flattened_entity_latest");
 const analyticsYmlLatest = require("./includes/analytics_yml_latest");
@@ -43,6 +44,7 @@ module.exports = (params) => {
     return {
       eventsRaw,
       entityVersion: entityVersion(params),
+      entityFieldUpdates: entityFieldUpdates(params),
       flattenedEntityVersion: flattenedEntityVersion(params),
       flattenedEntityLatest: flattenedEntityLatest(params),
       dataFunctions,
