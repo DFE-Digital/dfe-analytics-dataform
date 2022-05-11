@@ -14,7 +14,7 @@ It should now look something like:
 {
     "dependencies": {
         "@dataform/core": "1.21.1",
-        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.2"
+        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.3"
     }
 }
 ```
@@ -48,13 +48,13 @@ dfeAnalyticsDataform({
   }]
 });
 ```
-7. Replace the parameters in this file with the parameters you need - including specifying the full schema from your analytics.yml file with data types. Optionally, you can generate a blank dataSchema JSON to paste in here by creating the data_schema_json_latest table from the right hand sidebar when you open dfe_analytics_dataform in the UI. This will save you time if you're starting with a blank project.
-8. Create a second file called includes/data_functions.js containing the following line:
+7. Replace the parameters in this file with the parameters you need - including specifying the full schema from your ```analytics.yml``` file with data types. Optionally, to save time if you're starting from scratch, you can generate a blank ```dataSchema``` JSON to paste in here by running the query in Dataform to create the ```data_schema_json_latest``` table. You can do this from the right hand sidebar when you open ```dfe_analytics_dataform``` in the Dataform web client, and then copying and pasting the output from the table this produces in BigQuery (don't copy and paste from Dataform as it doesn't handle newlines well).
+8. Create a second file called ```includes/data_functions.js``` containing the following line:
 ```
 module.exports = require("dfe-analytics-dataform/includes/data_functions");
 ```
-9. Commit your changes and merge to master.
-10. Run a 'full refresh' on your entire pipeline, and resolve any errors this flags (e.g. errors you made when specifying a dataSchema).
+9. Commit your changes and merge to ```master```.
+10. Run a 'full refresh' on your entire pipeline, and resolve any errors this flags (e.g. omissions made when specifying a ```dataSchema```).
 
 ## Tables, assertions, and declarations this will create
 For each occurrence of ```dfeAnalyticsDataform()``` in ```definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the UI by opening ```definitions/dfe_analytics_dataform.js```.
