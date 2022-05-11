@@ -31,15 +31,19 @@ dfeAnalyticsDataform({
   bqEventsTableName: "Your BigQuery events table name here - usually just 'events'",
   dataSchema: [{
     entityTableName: "Your entity table name here from your production database analytics.yml",
+    description: "Description of this entity to include in metadata of denormalised tables produced for this entity.",
     keys: [{
       keyName: "Your string field name here",
-      dataType: "string"
+      dataType: "string",
+      description: "Description of this field to include in metadata here."
     }, {
       keyName: "Yoour boolean field name here",
-      dataType: "boolean"
+      dataType: "boolean",
+      description: "Description of this field to include in metadata here."
     }, {
       keyName: "Your timestamp field name here (when it actually contains a date!)",
-      dataType: "date_as_timestamp"
+      dataType: "date_as_timestamp",
+      description: "Description of this field to include in metadata here."
     }]
   }]
 });
@@ -59,7 +63,8 @@ The names of these will vary depending on the ```tableSuffix``` you have specifi
 - A declaration of your events table, which you can access via ```${ref("bqDatasetName","bqEventsTableName")}``` (replacing those values with your own).
 - An incremental table called ```foo_entity_version```, containing each version of every entity in the database over time, with a ```valid_from``` and ```valid_to``` timestamp.
 - A table called ```foo_analytics_yml_latest```, which is a table version of the ```dataSchema``` you specified.
-- For each ```entityTableName``` you specified in ```dataSchema``` like ```bar```, tables called something like ```bar_version_foo``` and ```bar_latest_foo```. ```bar_version_foo``` is a denormalised ('flattened') version of ```foo_version```, flattened according to the schema for ```foo``` you specified in ```dataSchema```. ```bar_latest_foo``` is the same as ```bar_version_foo``` except that it only includes the latest version of each entity (i.e. with ```valid_to IS NULL```).
+- A table called ```foo_data_schema_json_latest```, which is a default dataSchema JSON you could use to get started specifying this in dfe_analytics_dataform.js
+- For each ```entityTableName``` you specified in ```dataSchema``` like ```bar```, tables called something like ```bar_version_foo``` and ```bar_latest_foo```. ```bar_version_foo``` is a denormalised ('flattened') version of ```foo_version```, flattened according to the schema for ```foo``` you specified in ```dataSchema```. ```bar_latest_foo``` is the same as ```bar_version_foo``` except that it only includes the latest version of each entity (i.e. with ```valid_to IS NULL```). Both tables and fields within them will have metadata set to match the descriptions set in ```dataSchema```.
 - Assertions to help spot when your ```dataSchema``` has become out of date or has a problem. These will tell you if ```foo_entities_are_missing_expected_fields``` or if ```foo_unhandled_field_or_entity_is_being_streamed```. The former will halt your pipeline from executing, while the latter will just alert you to the assertion failure.
 
 ## Using the functions in your queries
