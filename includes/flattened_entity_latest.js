@@ -1,3 +1,9 @@
+const getKeys = (keys) => {
+    return keys.map(key => ({
+      [key.keyName]: key.description
+    })
+  )
+};
 module.exports = (params) => {
   return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_latest_" + params.tableSuffix, {
     ...params.defaultConfig,
@@ -10,17 +16,13 @@ module.exports = (params) => {
       partitionBy: "DATE(created_at)"
     },
     description: tableSchema.description,
-    columns: {
-      last_streamed_event_occurred_at: "Timestamp of the event that we think provided us with the latest version of this entity.",
-      last_streamed_event_type: "Event type of the event that we think provided us with the latest version of this entity. Either entity_created, entity_updated, entity_destroyed or entity_imported.",
-      id: "UID",
-      created_at: "Date this entity was created, according to the latest version of the data received from the database.",
-      updated_at: "Date this entity was last updated something in the database, according to the latest version of the data received from the database."/*,
-      ...tableSchema.keys.map(key => ({
-        [key.keyName]: key.description
-          })
-        )*/
-    }
+    columns: Object.assign({
+        last_streamed_event_occurred_at: "Timestamp of the event that we think provided us with the latest version of this entity.",
+        last_streamed_event_type: "Event type of the event that we think provided us with the latest version of this entity. Either entity_created, entity_updated, entity_destroyed or entity_imported.",
+        id: "UID",
+        created_at: "Date this entity was created, according to the latest version of the data received from the database.",
+        updated_at: "Date this entity was last updated something in the database, according to the latest version of the data received from the database.",
+      }, ...getKeys(tableSchema.keys))
   }).query(ctx => `SELECT
   *
 EXCEPT
@@ -31,5 +33,6 @@ FROM
   ${ctx.ref(tableSchema.entityTableName + "_version_" + params.tableSuffix)}
 WHERE
   valid_to IS NULL
-`))
+`)
+)
 }

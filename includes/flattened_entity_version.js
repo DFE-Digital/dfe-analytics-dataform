@@ -1,3 +1,9 @@
+const getKeys = (keys) => {
+    return keys.map(key => ({
+      [key.keyName]: key.description
+    })
+  )
+};
 module.exports = (params) => {
   return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_version_" + params.tableSuffix, {
     ...params.defaultConfig,
@@ -16,18 +22,14 @@ module.exports = (params) => {
       updatePartitionFilter: "valid_to IS NULL"
     },
     description: "Versions of entities in the database valid between valid_from and valid_to. Description of these entities is: " + tableSchema.description,
-    columns: {
-      valid_from: "Timestamp from which this version of this entity started to be valid.",
-      valid_to: "Timestamp until which this version of this entity was valid.",
-      type: "Event type of the event that provided us with this version of this entity. Either entity_created, entity_updated or entity_imported.",
-      id: "Hashed (anonymised) version of the ID of this entity from the database.",
-      created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
-      updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database."/*,
-      ...tableSchema.keys.map(key => ({
-        columns: {[key.keyName]: key.description}
-          })
-        )*/
-    } 
+    columns: Object.assign({
+        valid_from: "Timestamp from which this version of this entity started to be valid.",
+        valid_to: "Timestamp until which this version of this entity was valid.",
+        type: "Event type of the event that provided us with this version of this entity. Either entity_created, entity_updated or entity_imported.",
+        id: "Hashed (anonymised) version of the ID of this entity from the database.",
+        created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
+        updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
+      }, ...getKeys(tableSchema.keys))
   }).query(ctx => `SELECT
   valid_from,
   valid_to,
