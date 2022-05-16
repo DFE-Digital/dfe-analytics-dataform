@@ -7,14 +7,14 @@ Dataform package containing commonly used SQL functions and table definitions, f
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4"
+"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4.1"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
         "@dataform/core": "1.21.1",
-        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4"
+        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4.1"
     }
 }
 ```
@@ -99,3 +99,5 @@ The examples below assume that you have an events table created by the dfe-analy
 - Sets or replaces the ```value``` of ```key``` to/with ```value``` and returns the entirety of a new version of ```DATA```, having done this
 
 > ```${data_functions.eventDataCreateOrReplace("DATA","key","value")}```
+
+If you want to use one of the functions to extract a field whose name is set dynamically from another SQL field, add an additional ```true``` parameter to the end of the function e.g. ```${data_functions.eventDataExtract("DATA", "key", true)}```.
