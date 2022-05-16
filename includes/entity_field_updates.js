@@ -94,7 +94,7 @@ EXCEPT(event_type),
   TIMESTAMP_DIFF(occurred_at, previous_occurred_at, SECOND) AS seconds_since_previous_update,
   TIMESTAMP_DIFF(occurred_at, created_at, SECOND) AS seconds_since_created,
   /* Works out whether this update represented a change from the original value of this field. For this to be the case we check that (a) this is a change (we know this from the WHERE below) (b) the value we're changing from is the original value of the field and (c) the original value we have came from an entity creation event, and not an import event. */
-  ${data_functions.eventDataExtract("instance_updates.original_data", "new_data.key")} = ARRAY_TO_STRING(previous_data.value,",")
+  ${data_functions.eventDataExtract("instance_updates.original_data", "new_data.key", true)} = ARRAY_TO_STRING(previous_data.value,",")
   AND ARRAY_TO_STRING(previous_data.value,",") IS NOT NULL
   AND ARRAY_TO_STRING(previous_data.value,",") NOT IN (
     "",

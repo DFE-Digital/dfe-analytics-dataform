@@ -17,42 +17,42 @@ SELECT
   key,
   COUNT(
     IF(
-      NOT ${data_functions.keyIsInEventData("DATA", "key")},
+      NOT ${data_functions.keyIsInEventData("DATA", "key", true)},
       entity_id,
       NULL
     )
   ) AS updates_made_yesterday_without_this_key,
   COUNT(
     IF(
-      ${data_functions.keyIsInEventData("DATA", "key")},
+      ${data_functions.keyIsInEventData("DATA", "key", true)},
       entity_id,
       NULL
     )
   ) AS updates_made_yesterday_with_this_key,
   MIN(
     IF(
-      NOT ${data_functions.keyIsInEventData("DATA", "key")},
+      NOT ${data_functions.keyIsInEventData("DATA", "key", true)},
       valid_from,
       NULL
     )
   ) AS first_update_yesterday_without_this_key_at,
   MAX(
     IF(
-      NOT ${data_functions.keyIsInEventData("DATA", "key")},
+      NOT ${data_functions.keyIsInEventData("DATA", "key", true)},
       valid_from,
       NULL
     )
   ) AS last_update_yesterday_without_this_key_at,
   MIN(
     IF(
-      ${data_functions.keyIsInEventData("DATA", "key")},
+      ${data_functions.keyIsInEventData("DATA", "key", true)},
       valid_from,
       NULL
     )
   ) AS first_update_yesterday_with_this_key_at,
   MAX(
     IF(
-      ${data_functions.keyIsInEventData("DATA", "key")},
+      ${data_functions.keyIsInEventData("DATA", "key", true)},
       valid_from,
       NULL
     )

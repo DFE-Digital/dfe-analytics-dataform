@@ -1,6 +1,10 @@
 /* The events table uses a repeated STRUCT field containing field names key and value to store data about the event as a NoSQL-style set (document) of key-value pairs. Value is in turn a repeated field within the STRUCT. This function extracts the value of a given key from said repeated STRUCTS. If more than one value is present for key or in the unlikely event that the same key occurs multiple times, returns a comma-separated list of all values for this key. If the only values are empty strings or not present, returns NULL */
 
-function eventDataExtract(dataField, keyToExtract) {
+function eventDataExtract(dataField, keyToExtract, dynamic = false) {
+  var condition = `key = "${keyToExtract}"`;
+  if (dynamic) {
+    condition = `key = ${keyToExtract}`
+  };
   return `NULLIF(
     (
       SELECT
@@ -8,7 +12,7 @@ function eventDataExtract(dataField, keyToExtract) {
       FROM
         UNNEST(${dataField}) AS ${dataField}
       WHERE
-        key = "${keyToExtract}"
+        ${condition}
     ),
     ""
   )`
@@ -16,7 +20,11 @@ function eventDataExtract(dataField, keyToExtract) {
 
 /* The events table uses a repeated STRUCT field containing field names key and value to store data about the event as a NoSQL-style set (document) of key-value pairs. Value is in turn a repeated field within the STRUCT. This function extracts the value of all keys beginning key_to_extract_begins from said repeated STRUCTS and returns them as a comma-separated list of all values for this key. If the only values are empty strings or no keys begin key_to_extract_begins, returns NULL. */
 
-function eventDataExtractListOfStringsBeginning(dataField, keyToExtractBegins) {
+function eventDataExtractListOfStringsBeginning(dataField, keyToExtractBegins, dynamic = false) {
+  var condition = `STARTS_WITH(key, "${keyToExtractBegins}")`;
+  if (dynamic) {
+    condition = `STARTS_WITH(key, ${keyToExtractBegins})`
+  };
   return `NULLIF(
     (
       SELECT
@@ -24,7 +32,7 @@ function eventDataExtractListOfStringsBeginning(dataField, keyToExtractBegins) {
       FROM
         UNNEST(${dataField}) AS ${dataField}
       WHERE
-        STARTS_WITH(key, "${keyToExtractBegins}")
+        ${condition}
     ),
     ""
   )`
@@ -32,7 +40,11 @@ function eventDataExtractListOfStringsBeginning(dataField, keyToExtractBegins) {
 
 /* The events table uses a repeated STRUCT field containing field names key and value to store data about the event as a NoSQL-style set (document) of key-value pairs. Returns TRUE if a given key is present in DATA, and FALSE otherwise. */
 
-function keyIsInEventData(dataField, keyToLookFor) {
+function keyIsInEventData(dataField, keyToLookFor, dynamic = false) {
+  var condition = `key = "${keyToLookFor}"`;
+  if (dynamic) {
+    condition = `key = ${keyToLookFor}`
+  };
   return `(
     SELECT
       COUNT(*)
@@ -43,33 +55,33 @@ function keyIsInEventData(dataField, keyToLookFor) {
         FROM
           UNNEST(${dataField}) AS ${dataField}
         WHERE
-          key = "${keyToLookFor}"
+          ${condition}
       )
   ) = 1`
 };
 
 /* Shortcut to run eventDataExtract and then parse the string extracted as a timestamp, attempting multiple formats. If timezone is not present, assumes timezone is Europe/London. If unable to parse the string as a timestamp in any of the formats, returns NULL (not an error). */
 
-function eventDataExtractTimestamp(dataField, keyToExtract) {
+function eventDataExtractTimestamp(dataField, keyToExtract, dynamic = false) {
   return `COALESCE(
     SAFE.PARSE_TIMESTAMP(
       '%FT%H:%M:%E*S%Ez',
       TRIM(
-        ${eventDataExtract(dataField, keyToExtract)},
+        ${eventDataExtract(dataField, keyToExtract, dynamic)},
         "\\""
       )
     ),
     SAFE.PARSE_TIMESTAMP(
       '%FT%T%Ez',
       TRIM(
-        ${eventDataExtract(dataField, keyToExtract)},
+        ${eventDataExtract(dataField, keyToExtract, dynamic)},
         "\\""
       )
     ),
     SAFE.PARSE_TIMESTAMP(
       '%e %B %Y %R',
       TRIM(
-        ${eventDataExtract(dataField, keyToExtract)},
+        ${eventDataExtract(dataField, keyToExtract, dynamic)},
         "\\""
       ),
       "Europe/London"
@@ -79,7 +91,7 @@ function eventDataExtractTimestamp(dataField, keyToExtract) {
       REPLACE(
         REPLACE(
           TRIM(
-            ${eventDataExtract(dataField, keyToExtract)},
+            ${eventDataExtract(dataField, keyToExtract, dynamic)},
             "\\""
           ),
           "pm",
@@ -95,22 +107,22 @@ function eventDataExtractTimestamp(dataField, keyToExtract) {
 
 /* Shortcut to run eventDataExtract and then parse the string extracted as a date, attempting multiple formats. If unable to parse the string as a date in any of the formats, returns NULL (not an error). */
 
-function eventDataExtractDate(dataField, keyToExtract) {
+function eventDataExtractDate(dataField, keyToExtract, dynamic = false) {
   return `COALESCE(
     SAFE.PARSE_DATE(
       '%F',
-      ${eventDataExtract(dataField, keyToExtract)}
+      ${eventDataExtract(dataField, keyToExtract, dynamic)}
     ),
     SAFE.PARSE_DATE(
       '%e %B %Y',
-      ${eventDataExtract(dataField, keyToExtract)}
+      ${eventDataExtract(dataField, keyToExtract, dynamic)}
     )
   )`
 };
 
 /* Shortcut to extract a string like [3,75,2,1] from a DATA struct using eventDataExtract and then convert it into an ARRAY of integers. */
 
-function eventDataExtractIntegerArray(dataField, keyToExtract) {
+function eventDataExtractIntegerArray(dataField, keyToExtract, dynamic = false) {
   return `ARRAY(
     SELECT
       step_int
@@ -122,7 +134,7 @@ function eventDataExtractIntegerArray(dataField, keyToExtract) {
           UNNEST(
             SPLIT(
               TRIM(
-                ${eventDataExtract(dataField, keyToExtract)},
+                ${eventDataExtract(dataField, keyToExtract, dynamic)},
                 "[]"
               ),
               ","
