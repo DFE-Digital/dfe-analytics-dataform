@@ -99,3 +99,5 @@ The examples below assume that you have an events table created by the dfe-analy
 - Sets or replaces the ```value``` of ```key``` to/with ```value``` and returns the entirety of a new version of ```DATA```, having done this
 
 > ```${data_functions.eventDataCreateOrReplace("DATA","key","value")}```
+
+If you want to use one of the functions to extract a field whose name is set dynamically from another SQL field, add an additional ```true``` parameter to the end of the function e.g. ```${data_functions.eventDataExtract("DATA", "key", true)}```.
