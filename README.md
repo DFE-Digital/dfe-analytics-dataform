@@ -37,7 +37,7 @@ dfeAnalyticsDataform({
       dataType: "string",
       description: "Description of this field to include in metadata here."
     }, {
-      keyName: "Yoour boolean field name here",
+      keyName: "Your boolean field name here",
       dataType: "boolean",
       description: "Description of this field to include in metadata here."
     }, {
