@@ -10,7 +10,7 @@ function eventDataExtract(dataField, keyToExtract, dynamic = false) {
       SELECT
         ARRAY_TO_STRING(ARRAY_CONCAT_AGG(value), ",") as concat_value
       FROM
-        UNNEST(${dataField}) AS ${dataField}
+        UNNEST(${dataField})
       WHERE
         ${condition}
     ),
@@ -30,7 +30,7 @@ function eventDataExtractListOfStringsBeginning(dataField, keyToExtractBegins, d
       SELECT
         ARRAY_TO_STRING(ARRAY_CONCAT_AGG(value), ",") as concat_value
       FROM
-        UNNEST(${dataField}) AS ${dataField}
+        UNNEST(${dataField})
       WHERE
         ${condition}
     ),
@@ -53,7 +53,7 @@ function keyIsInEventData(dataField, keyToLookFor, dynamic = false) {
         SELECT
           key
         FROM
-          UNNEST(${dataField}) AS ${dataField}
+          UNNEST(${dataField})
         WHERE
           ${condition}
       )
