@@ -7,8 +7,8 @@ const getKeys = (keys) => {
 module.exports = (params) => {
   return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_version_" + params.eventSourceName, {
     ...params.defaultConfig,
-    type: "incremental",
-    uniqueKey: ["id", "valid_from"],
+    type: "table",
+    /*uniqueKey: ["id", "valid_from"],*/
     dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
     assertions: {
       uniqueKey: ["valid_from", "id"],
@@ -44,7 +44,7 @@ module.exports = (params) => {
           return `${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS ${key.keyName},`;
         } else if (key.dataType == 'date') {
           return `${data_functions.eventDataExtractDate("DATA",key.keyName)} AS ${key.keyName},`;
-        } else if (key.dataType == 'timestamp_as_date') {
+        } else if (key.dataType == 'date_as_timestamp') {
           return `SAFE_CAST(${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS DATE) AS ${key.keyName},`;
         } else if (key.dataType == 'integer') {
           return `SAFE_CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS INT64) AS ${key.keyName},`;
@@ -63,9 +63,9 @@ WHERE
   AND (
     valid_to > event_timestamp_checkpoint
     OR valid_to IS NULL
-  )`).preOps(
+  )`)/*.preOps(
           ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(),`SELECT MAX(valid_to) FROM ${ctx.self()}`,`SELECT TIMESTAMP("2018-01-01")`)}
-      )`)
+      )`)*/
       )
 }
