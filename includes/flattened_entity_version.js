@@ -59,11 +59,10 @@ module.exports = (params) => {
 FROM
   ${ctx.ref(params.eventSourceName + "_entity_version")}
 WHERE
-  entity_table_name = "${tableSchema.entityTableName}"
-  AND (
+  entity_table_name = "${tableSchema.entityTableName}"`)/*`AND (
     valid_to > event_timestamp_checkpoint
     OR valid_to IS NULL
-  )`)/*.preOps(
+  )`).preOps(
           ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(),`SELECT MAX(valid_to) FROM ${ctx.self()}`,`SELECT TIMESTAMP("2018-01-01")`)}
       )`)*/
