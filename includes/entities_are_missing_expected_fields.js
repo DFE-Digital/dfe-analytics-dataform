@@ -7,52 +7,52 @@ module.exports = (params) => {
 WITH expected_entity_fields AS (
   SELECT
     entity_name,
-    key
+    key AS expected_key
   FROM
     ${ctx.ref(params.eventSourceName + "_analytics_yml_latest")},
     UNNEST(keys) AS key
 )
 SELECT
   entity_name,
-  key,
+  expected_key,
   COUNT(
     IF(
-      NOT ${data_functions.keyIsInEventData("DATA", "key", true)},
+      NOT ${data_functions.keyIsInEventData("DATA", "expected_key", true)},
       entity_id,
       NULL
     )
   ) AS updates_made_yesterday_without_this_key,
   COUNT(
     IF(
-      ${data_functions.keyIsInEventData("DATA", "key", true)},
+      ${data_functions.keyIsInEventData("DATA", "expected_key", true)},
       entity_id,
       NULL
     )
   ) AS updates_made_yesterday_with_this_key,
   MIN(
     IF(
-      NOT ${data_functions.keyIsInEventData("DATA", "key", true)},
+      NOT ${data_functions.keyIsInEventData("DATA", "expected_key", true)},
       valid_from,
       NULL
     )
   ) AS first_update_yesterday_without_this_key_at,
   MAX(
     IF(
-      NOT ${data_functions.keyIsInEventData("DATA", "key", true)},
+      NOT ${data_functions.keyIsInEventData("DATA", "expected_key", true)},
       valid_from,
       NULL
     )
   ) AS last_update_yesterday_without_this_key_at,
   MIN(
     IF(
-      ${data_functions.keyIsInEventData("DATA", "key", true)},
+      ${data_functions.keyIsInEventData("DATA", "expected_key", true)},
       valid_from,
       NULL
     )
   ) AS first_update_yesterday_with_this_key_at,
   MAX(
     IF(
-      ${data_functions.keyIsInEventData("DATA", "key", true)},
+      ${data_functions.keyIsInEventData("DATA", "expected_key", true)},
       valid_from,
       NULL
     )
@@ -65,12 +65,12 @@ WHERE
   AND event_type != "delete_entity"
 GROUP BY
   entity_name,
-  key
+  expected_key
 HAVING
   updates_made_yesterday_without_this_key > 0
   /* Don't flag an error if the field was a new field introduced midway through yesterday. */
   AND NOT (last_update_yesterday_without_this_key_at < first_update_yesterday_with_this_key_at)
 ORDER BY
   entity_name,
-  key`)
+  expected_key`)
 }
