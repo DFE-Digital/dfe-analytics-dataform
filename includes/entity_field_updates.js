@@ -1,5 +1,5 @@
 module.exports = (params) => {
-  return publish(params.tableSuffix + "_entity_field_updates", {
+  return publish(params.eventSourceName + "_entity_field_updates", {
     ...params.defaultConfig,
     type: "incremental",
     protected: false,

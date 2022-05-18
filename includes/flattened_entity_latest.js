@@ -5,7 +5,7 @@ const getKeys = (keys) => {
   )
 };
 module.exports = (params) => {
-  return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_latest_" + params.tableSuffix, {
+  return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_latest_" + params.eventSourceName, {
     ...params.defaultConfig,
     type: "table",
     assertions: {
@@ -30,7 +30,7 @@ EXCEPT
   valid_from AS last_streamed_event_occurred_at,
   event_type AS last_streamed_event_type
 FROM
-  ${ctx.ref(tableSchema.entityTableName + "_version_" + params.tableSuffix)}
+  ${ctx.ref(tableSchema.entityTableName + "_version_" + params.eventSourceName)}
 WHERE
   valid_to IS NULL
 `)

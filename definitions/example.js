@@ -1,8 +1,8 @@
 const dfeAnalyticsDataform = require("../"); // change ../ to dfe-analytics-dataform when using this in your own Dataform project
 
-// Repeat the lines below for each and every events table you want dfe-analytics-dataform to process in your Dataform project
+// Repeat the lines below for each and every events table you want dfe-analytics-dataform to process in your Dataform project - distinguish between them by giving each one a different eventSourceName. This will cause all the tables produced automatically by dfe-analytics-dataform to have your suffix included in them to allow users to tell the difference between them.
 dfeAnalyticsDataform({
-  tableSuffix: "Your table suffix here",
+  eventSourceName: "Short name for your event source here - this might be a short name for your service, for example",
   bqProjectName: "Your BigQuery project name here",
   bqDatasetName: "Your BigQuery dataset name here",
   bqEventsTableName: "Your BigQuery events table name here - usually just 'events'",
@@ -14,7 +14,7 @@ dfeAnalyticsDataform({
       dataType: "string",
       description: "Description of this field to include in metadata here."
     }, {
-      keyName: "Yoour boolean field name here",
+      keyName: "Your boolean field name here",
       dataType: "boolean",
       description: "Description of this field to include in metadata here."
     }, {

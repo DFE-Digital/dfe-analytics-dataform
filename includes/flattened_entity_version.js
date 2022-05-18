@@ -5,11 +5,11 @@ const getKeys = (keys) => {
   )
 };
 module.exports = (params) => {
-  return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_version_" + params.tableSuffix, {
+  return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_version_" + params.eventSourceName, {
     ...params.defaultConfig,
     type: "incremental",
     uniqueKey: ["id", "valid_from"],
-    dependencies: [params.tableSuffix + "_entities_are_missing_expected_fields"],
+    dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
     assertions: {
       uniqueKey: ["valid_from", "id"],
       nonNull: ["id", "created_at", "updated_at"],
@@ -57,7 +57,7 @@ module.exports = (params) => {
     ).join('\n')
   }
 FROM
-  ${ctx.ref(params.tableSuffix + "_entity_version")}
+  ${ctx.ref(params.eventSourceName + "_entity_version")}
 WHERE
   entity_table_name = "${tableSchema.entityTableName}"
   AND (

@@ -7,25 +7,29 @@ Dataform package containing commonly used SQL functions and table definitions, f
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4.2"
+"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4.3"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
         "@dataform/core": "1.21.1",
-        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4.2"
+        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4.3"
     }
 }
 ```
 5. Click the 'Install Packages' button on the right hand side of the package.json screen. This will also update package-lock.json automatically.
-6. Create a file called definitions/dfe_analytics_dataform.js that looks like the following:
+6. Create a file called ```includes/data_functions.js``` containing the following line:
+```
+module.exports = require("dfe-analytics-dataform/includes/data_functions");
+```
+7. Create a second file called definitions/dfe_analytics_dataform.js that looks like the following:
 ```
 const dfeAnalyticsDataform = require("dfe-analytics-dataform");
 
-// Repeat the lines below for each and every events table you want dfe-analytics-dataform to process in your Dataform project
+// Repeat the lines below for each and every events table you want dfe-analytics-dataform to process in your Dataform project - distinguish between them by giving each one a different eventSourceName. This will cause all the tables produced automatically by dfe-analytics-dataform to have your suffix included in them to allow users to tell the difference between them.
 dfeAnalyticsDataform({
-  tableSuffix: "Your table suffix here",
+  eventSourceName: "Short name for your event source here - this might be a short name for your service, for example",
   bqProjectName: "Your BigQuery project name here",
   bqDatasetName: "Your BigQuery dataset name here",
   bqEventsTableName: "Your BigQuery events table name here - usually just 'events'",
@@ -48,18 +52,15 @@ dfeAnalyticsDataform({
   }]
 });
 ```
-7. Replace the parameters in this file with the parameters you need - including specifying the full schema from your ```analytics.yml``` file with data types. Optionally, to save time if you're starting from scratch, you can generate a blank ```dataSchema``` JSON to paste in here by running the query in Dataform to create the ```data_schema_json_latest``` table. You can do this from the right hand sidebar when you open ```dfe_analytics_dataform``` in the Dataform web client, and then copying and pasting the output from the table this produces in BigQuery (don't copy and paste from Dataform as it doesn't handle newlines well).
-8. Create a second file called ```includes/data_functions.js``` containing the following line:
-```
-module.exports = require("dfe-analytics-dataform/includes/data_functions");
-```
+8. Replace the parameters in this file with the parameters you need - including specifying the full schema from your ```analytics.yml``` file with data types. Optionally, to save time if you're starting from scratch, you can generate a blank ```dataSchema``` JSON to paste in here by running the query in Dataform to create the ```data_schema_json_latest``` table. You can do this from the right hand sidebar when you open ```dfe_analytics_dataform``` in the Dataform web client, and then copying and pasting the output from the table this produces in BigQuery (don't copy and paste from Dataform as it doesn't handle newlines well).
+
 9. Commit your changes and merge to ```master```.
 10. Run a 'full refresh' on your entire pipeline, and resolve any errors this flags (e.g. omissions made when specifying a ```dataSchema```).
 
 ## Tables, assertions, and declarations this will create
 For each occurrence of ```dfeAnalyticsDataform()``` in ```definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the UI by opening ```definitions/dfe_analytics_dataform.js```.
 
-The names of these will vary depending on the ```tableSuffix``` you have specified. For example if your ```tableSuffix``` was ```foo``` then the following will be created:
+The names of these will vary depending on the ```eventSourceName``` you have specified. For example if your ```eventSourceName``` was ```foo``` then the following will be created:
 - A declaration of your events table, which you can access via ```${ref("bqDatasetName","bqEventsTableName")}``` (replacing those values with your own).
 - An incremental table called ```foo_entity_version```, containing each version of every entity in the database over time, with a ```valid_from``` and ```valid_to``` timestamp.
 - A table called ```foo_analytics_yml_latest```, which is a table version of the ```dataSchema``` you specified.

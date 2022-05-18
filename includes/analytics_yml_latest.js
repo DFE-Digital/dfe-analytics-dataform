@@ -1,5 +1,5 @@
 module.exports = (params) => {
-  return publish(params.tableSuffix + "_analytics_yml_latest", {
+  return publish(params.eventSourceName + "_analytics_yml_latest", {
     ...params.defaultConfig,
     type: "table",
     description: "Structured version of the latest version of the schema which dfe-analytics-dataform has been configured to process entity CRUD events from. This is NOT necessarily the same as the latest version in analytics.yml in the production Github repository.",
