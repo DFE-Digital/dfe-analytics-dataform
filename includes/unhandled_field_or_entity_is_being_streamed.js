@@ -17,7 +17,7 @@ FROM
       ${ctx.ref(params.eventSourceName + "_entity_version")},
       UNNEST(DATA)
     WHERE
-      DATE(valid_from) = CURRENT_DATE - 1
+      DATE(valid_from) >= CURRENT_DATE - 1
     GROUP BY
       entity_table_name,
       key
