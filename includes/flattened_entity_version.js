@@ -8,7 +8,6 @@ module.exports = (params) => {
   return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_version_" + params.eventSourceName, {
     ...params.defaultConfig,
     type: "table",
-    /*uniqueKey: ["id", "valid_from"],*/
     dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
     assertions: {
       uniqueKey: ["valid_from", "id"],
@@ -50,8 +49,10 @@ module.exports = (params) => {
           return `SAFE_CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS INT64) AS ${key.keyName},`;
         } else if (key.dataType == 'integer_array') {
           return `${data_functions.eventDataExtractIntegerArray("DATA",key.keyName)} AS ${key.keyName},`;
-        } else {
+        } else if (key.dataType == 'string' || key.dataType == undefined) {
           return `${data_functions.eventDataExtract("DATA",key.keyName)} AS ${key.keyName},`;
+        } else {
+          throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, date_as_timestamp, integer, integer_array or string or not set.`);
         }
       }
     ).join('\n')
@@ -59,12 +60,6 @@ module.exports = (params) => {
 FROM
   ${ctx.ref(params.eventSourceName + "_entity_version")}
 WHERE
-  entity_table_name = "${tableSchema.entityTableName}"`)/*`AND (
-    valid_to > event_timestamp_checkpoint
-    OR valid_to IS NULL
-  )`).preOps(
-          ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
-        ${ctx.when(ctx.incremental(),`SELECT MAX(valid_to) FROM ${ctx.self()}`,`SELECT TIMESTAMP("2018-01-01")`)}
-      )`)*/
-      )
+  entity_table_name = "${tableSchema.entityTableName}"`)
+  )
 }

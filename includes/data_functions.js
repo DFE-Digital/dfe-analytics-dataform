@@ -3,7 +3,10 @@
 function eventDataExtract(dataField, keyToExtract, dynamic = false) {
   var condition = `key = "${keyToExtract}"`;
   if (dynamic) {
-    condition = `key = ${keyToExtract}`
+    condition = `key = ${keyToExtract}`;
+    if (keyToExtract === 'key') {
+      throw new Error("eventDataExtract cannot be used in dynamic mode to extract the value from DATA with a key in DATA that matches a field/variable named key. Try giving your key field/variable an alias first before passing it to eventDataExtract.");
+    }
   };
   return `NULLIF(
     (
@@ -23,7 +26,10 @@ function eventDataExtract(dataField, keyToExtract, dynamic = false) {
 function eventDataExtractListOfStringsBeginning(dataField, keyToExtractBegins, dynamic = false) {
   var condition = `STARTS_WITH(key, "${keyToExtractBegins}")`;
   if (dynamic) {
-    condition = `STARTS_WITH(key, ${keyToExtractBegins})`
+    condition = `STARTS_WITH(key, ${keyToExtractBegins})`;
+    if (keyToExtractBegins === 'key') {
+      throw new Error("eventDataExtractListOfStringsBeginning cannot be used in dynamic mode to extract the value from DATA with a key in DATA that matches a field/variable named key. Try giving your key field/variable an alias first before passing it to eventDataExtractListOfStringsBeginning.");
+    }
   };
   return `NULLIF(
     (
@@ -43,7 +49,10 @@ function eventDataExtractListOfStringsBeginning(dataField, keyToExtractBegins, d
 function keyIsInEventData(dataField, keyToLookFor, dynamic = false) {
   var condition = `key = "${keyToLookFor}"`;
   if (dynamic) {
-    condition = `key = ${keyToLookFor}`
+    condition = `key = ${keyToLookFor}`;
+    if (keyToLookFor === 'key') {
+      throw new Error("keyIsInEventData cannot be used in dynamic mode to search for the value from DATA with a key in DATA that matches a field/variable named key. Try giving your key field/variable an alias first before passing it to keyIsInEventData.");
+    }
   };
   return `(
     SELECT
