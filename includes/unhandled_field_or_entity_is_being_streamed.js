@@ -27,7 +27,7 @@ FROM
 
 WHERE
   key NOT IN UNNEST(analytics_yml_latest.keys)
-  AND key NOT IN ("entity_name")
+  AND key NOT IN ("entity_name","id","created_at","updated_at")
 ORDER BY
   entity_table_name,
   key`)
