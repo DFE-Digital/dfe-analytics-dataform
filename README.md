@@ -7,14 +7,14 @@ Dataform package containing commonly used SQL functions and table definitions, f
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4.9"
+"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4.10"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
         "@dataform/core": "1.21.1",
-        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4.9"
+        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.4.10"
     }
 }
 ```
@@ -45,8 +45,8 @@ dfeAnalyticsDataform({
       dataType: "boolean",
       description: "Description of this field to include in metadata here."
     }, {
-      keyName: "Your timestamp field name here (when it actually contains a date!)",
-      dataType: "date_as_timestamp",
+      keyName: "Your date field name here",
+      dataType: "date",
       description: "Description of this field to include in metadata here."
     }]
   }]
@@ -89,7 +89,7 @@ The examples below assume that you have an events table created by the dfe-analy
 
 > ```${data_functions.eventDataExtractTimestamp("DATA","key")}```
 
-- Shortcut to run ```eventDataExtract``` and then parse the string extracted as a date, attempting multiple formats. If unable to parse the string as a date in any of the formats, returns ```NULL``` (not an error).
+- Shortcut to run ```eventDataExtract``` and then parse the string extracted as a date, attempting multiple formats (including a timestamp cast to a date). If unable to parse the string as a date in any of the formats, returns ```NULL``` (not an error).
 
 > ```${data_functions.eventDataExtractDate("DATA","key")}```
 

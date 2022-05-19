@@ -18,8 +18,8 @@ dfeAnalyticsDataform({
       dataType: "boolean",
       description: "Description of this field to include in metadata here."
     }, {
-      keyName: "Your timestamp field name here (when it actually contains a date!)",
-      dataType: "date_as_timestamp",
+      keyName: "Your date field name here",
+      dataType: "date",
       description: "Description of this field to include in metadata here."
     }]
   }]

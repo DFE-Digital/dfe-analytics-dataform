@@ -38,20 +38,20 @@ module.exports = (params) => {
     name: bqEventsTableName
   });
 
-  // Publish and return datasets.
+  // Publish and return datasets - assertions first for quick access in the Dataform UI
 
   if (params.transformEntityEvents) {
     return {
+      entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
+      unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
       eventsRaw,
       entityVersion: entityVersion(params),
       entityFieldUpdates: entityFieldUpdates(params),
-      flattenedEntityVersion: flattenedEntityVersion(params),
-      flattenedEntityLatest: flattenedEntityLatest(params),
       dataFunctions,
       analyticsYmlLatest: analyticsYmlLatest(params),
-      entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
-      unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
-      dataSchemaJSONLatest: dataSchemaJSONLatest(params)
+      dataSchemaJSONLatest: dataSchemaJSONLatest(params),
+      flattenedEntityVersion: flattenedEntityVersion(params),
+      flattenedEntityLatest: flattenedEntityLatest(params)
     }
   } else {
     return {

@@ -43,8 +43,6 @@ module.exports = (params) => {
           return `${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS ${key.keyName},`;
         } else if (key.dataType == 'date') {
           return `${data_functions.eventDataExtractDate("DATA",key.keyName)} AS ${key.keyName},`;
-        } else if (key.dataType == 'date_as_timestamp') {
-          return `SAFE_CAST(${data_functions.eventDataExtractTimestamp("DATA",key.keyName)} AS DATE) AS ${key.keyName},`;
         } else if (key.dataType == 'integer') {
           return `SAFE_CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS INT64) AS ${key.keyName},`;
         } else if (key.dataType == 'integer_array') {
@@ -52,7 +50,7 @@ module.exports = (params) => {
         } else if (key.dataType == 'string' || key.dataType == undefined) {
           return `${data_functions.eventDataExtract("DATA",key.keyName)} AS ${key.keyName},`;
         } else {
-          throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, date_as_timestamp, integer, integer_array or string or not set.`);
+          throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array or string or not set.`);
         }
       }
     ).join('\n')

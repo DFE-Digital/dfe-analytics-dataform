@@ -114,7 +114,7 @@ function eventDataExtractTimestamp(dataField, keyToExtract, dynamic = false) {
   )`
 };
 
-/* Shortcut to run eventDataExtract and then parse the string extracted as a date, attempting multiple formats. If unable to parse the string as a date in any of the formats, returns NULL (not an error). */
+/* Shortcut to run eventDataExtract and then parse the string extracted as a date, attempting multiple formats (including a timestamp cast to a date). If unable to parse the string as a date in any of the formats, returns NULL (not an error). */
 
 function eventDataExtractDate(dataField, keyToExtract, dynamic = false) {
   return `COALESCE(
@@ -125,7 +125,8 @@ function eventDataExtractDate(dataField, keyToExtract, dynamic = false) {
     SAFE.PARSE_DATE(
       '%e %B %Y',
       ${eventDataExtract(dataField, keyToExtract, dynamic)}
-    )
+    ),
+    CAST(${eventDataExtractTimestamp(dataField, keyToExtract, dynamic)} AS DATE)
   )`
 };
 
