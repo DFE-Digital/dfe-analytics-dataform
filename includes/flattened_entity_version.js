@@ -47,10 +47,12 @@ module.exports = (params) => {
           return `SAFE_CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS INT64) AS ${key.keyName},`;
         } else if (key.dataType == 'integer_array') {
           return `${data_functions.eventDataExtractIntegerArray("DATA",key.keyName)} AS ${key.keyName},`;
+        } else if (key.dataType == 'float') {
+          return `SAFE_CAST(${data_functions.eventDataExtract("DATA",key.keyName)} AS FLOAT64) AS ${key.keyName},`;
         } else if (key.dataType == 'string' || key.dataType == undefined) {
           return `${data_functions.eventDataExtract("DATA",key.keyName)} AS ${key.keyName},`;
         } else {
-          throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array or string or not set.`);
+          throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array, float or string or not set.`);
         }
       }
     ).join('\n')
