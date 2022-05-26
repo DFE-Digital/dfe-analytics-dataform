@@ -14,7 +14,10 @@ module.exports = (params) => {
     bigquery: {
       partitionBy: "DATE(valid_to)",
       clusterBy: ["entity_table_name"],
-      updatePartitionFilter: "valid_to IS NULL"
+      updatePartitionFilter: "valid_to IS NULL",
+      labels: {
+        eventSourceName: params.eventSourceName
+      }
     },
     description: "Each row represents a version of an entity in the " + params.eventSourceName + " database that was been streamed into the events table. Versions are valid from valid_from until just before valid_to. If valid_to is NULL then this version is the latest version of this entity. If valid_to is not NULL, but no later version exists, then this entity has been deleted.",
     columns: {

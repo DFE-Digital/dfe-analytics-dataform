@@ -13,7 +13,10 @@ module.exports = (params) => {
       nonNull: ["last_streamed_event_occurred_at", "last_streamed_event_type", "id", "created_at", "updated_at"]
     },
     bigquery: {
-      partitionBy: "DATE(created_at)"
+      partitionBy: "DATE(created_at)",
+      labels: {
+        eventSourceName: params.eventSourceName
+      }
     },
     description: tableSchema.description,
     columns: Object.assign({

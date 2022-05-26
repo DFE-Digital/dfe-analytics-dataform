@@ -18,7 +18,10 @@ module.exports = (params) => {
     },
     bigquery: {
       partitionBy: "DATE(valid_to)",
-      updatePartitionFilter: "valid_to IS NULL"
+      updatePartitionFilter: "valid_to IS NULL",
+      labels: {
+        eventSourceName: params.eventSourceName
+      }
     },
     description: "Versions of entities in the database valid between valid_from and valid_to. Description of these entities is: " + tableSchema.description,
     columns: Object.assign({

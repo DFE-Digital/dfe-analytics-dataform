@@ -7,6 +7,11 @@ module.exports = (params) => {
       entity_name: "Name of the table we want entities to be streamed for.",
       description: "Description of this table to include in table metadata.",
       keys: "ARRAY of STRINGs listing the names of the fields we want streamed entity events to contain."
+    },
+    bigquery: {
+      labels: {
+        eventSourceName: params.eventSourceName
+      }
     }
   }).query(ctx => `SELECT * FROM UNNEST([
       ${params.dataSchema.map(tableSchema => {
