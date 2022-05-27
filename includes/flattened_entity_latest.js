@@ -35,4 +35,7 @@ EXCEPT
 FROM
   ${ctx.ref(tableSchema.entityTableName + "_version_" + params.eventSourceName)}
 WHERE
-  valid_to I
+  valid_to IS NULL
+`)
+)
+}
