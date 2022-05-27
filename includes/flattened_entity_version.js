@@ -20,7 +20,7 @@ module.exports = (params) => {
       partitionBy: "DATE(valid_to)",
       updatePartitionFilter: "valid_to IS NULL",
       labels: {
-        eventSourceName: params.eventSourceName
+        eventsource: params.eventSourceName.toLowerCase()
       }
     },
     description: "Versions of entities in the database valid between valid_from and valid_to. Description of these entities is: " + tableSchema.description,

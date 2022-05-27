@@ -10,7 +10,7 @@ module.exports = (params) => {
     },
     bigquery: {
       labels: {
-        eventSourceName: params.eventSourceName
+        eventsource: params.eventSourceName.toLowerCase()
       }
     }
   }).query(ctx => `SELECT * FROM UNNEST([

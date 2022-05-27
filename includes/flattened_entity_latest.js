@@ -15,7 +15,7 @@ module.exports = (params) => {
     bigquery: {
       partitionBy: "DATE(created_at)",
       labels: {
-        eventSourceName: params.eventSourceName
+        eventsource: params.eventSourceName.toLowerCase()
       }
     },
     description: tableSchema.description,
@@ -35,7 +35,4 @@ EXCEPT
 FROM
   ${ctx.ref(tableSchema.entityTableName + "_version_" + params.eventSourceName)}
 WHERE
-  valid_to IS NULL
-`)
-)
-}
+  valid_to I
