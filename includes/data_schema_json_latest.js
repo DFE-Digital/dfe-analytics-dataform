@@ -8,7 +8,8 @@ module.exports = (params) => {
     },
     bigquery: {
       labels: {
-        eventsource: params.eventSourceName.toLowerCase()
+        eventsource: params.eventSourceName.toLowerCase(),
+        sourcedataset: params.bqDatasetName.toLowerCase()
       }
     }
   }).query(ctx => `SELECT

@@ -11,7 +11,8 @@ module.exports = (params) => {
       partitionBy: "DATE(occurred_at)",
       clusterBy: ["entity_table_name"],
       labels: {
-        eventsource: params.eventSourceName.toLowerCase()
+        eventsource: params.eventSourceName.toLowerCase(),
+        sourcedataset: params.bqDatasetName.toLowerCase()
       }
     },
     description: "One row for each time a field was updated for any entity that is streamed as events from the database, setting out the name of the field, the previous value of the field and the new value of the field. Entity deletions and updates to the updated_at field are not included, but NULL values are.",
@@ -92,8 +93,8 @@ SELECT
 EXCEPT(event_type),
   FARM_FINGERPRINT(entity_id || entity_table_name || CAST(occurred_at AS STRING)) AS update_id,
   new_data.key AS key_updated,
-  new_data.value AS new_value,
-  previous_data.value AS previous_value,
+  ARRAY_TO_STRING(new_data.value,",") AS new_value,
+  ARRAY_TO_STRING(previous_data.value,",") AS previous_value,
   TIMESTAMP_DIFF(occurred_at, previous_occurred_at, SECOND) AS seconds_since_previous_update,
   TIMESTAMP_DIFF(occurred_at, created_at, SECOND) AS seconds_since_created,
   /* Works out whether this update represented a change from the original value of this field. For this to be the case we check that (a) this is a change (we know this from the WHERE below) (b) the value we're changing from is the original value of the field and (c) the original value we have came from an entity creation event, and not an import event. */

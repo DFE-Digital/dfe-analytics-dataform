@@ -15,10 +15,12 @@ module.exports = (params) => {
     bigquery: {
       partitionBy: "DATE(created_at)",
       labels: {
-        eventsource: params.eventSourceName.toLowerCase()
+        eventsource: params.eventSourceName.toLowerCase(),
+        sourcedataset: params.bqDatasetName.toLowerCase(),
+        entitytabletype: "latest"
       }
     },
-    description: tableSchema.description,
+    description: "Latest version of " + tableSchema.entityTableName + ". Taken from entity Create, Update and Delete events streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project." + tableSchema.description,
     columns: Object.assign({
         last_streamed_event_occurred_at: "Timestamp of the event that we think provided us with the latest version of this entity.",
         last_streamed_event_type: "Event type of the event that we think provided us with the latest version of this entity. Either entity_created, entity_updated, entity_destroyed or entity_imported.",

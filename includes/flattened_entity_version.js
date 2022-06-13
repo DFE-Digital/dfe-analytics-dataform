@@ -20,10 +20,12 @@ module.exports = (params) => {
       partitionBy: "DATE(valid_to)",
       updatePartitionFilter: "valid_to IS NULL",
       labels: {
-        eventsource: params.eventSourceName.toLowerCase()
+        eventsource: params.eventSourceName.toLowerCase(),
+        sourcedataset: params.bqDatasetName.toLowerCase(),
+        entitytabletype: "version"
       }
     },
-    description: "Versions of entities in the database valid between valid_from and valid_to. Description of these entities is: " + tableSchema.description,
+    description: "Versions of entities in the database valid between valid_from and valid_to. Taken from entity Create, Update and Delete events streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project. Description of these entities is: " + tableSchema.description,
     columns: Object.assign({
         valid_from: "Timestamp from which this version of this entity started to be valid.",
         valid_to: "Timestamp until which this version of this entity was valid.",
