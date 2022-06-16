@@ -71,7 +71,7 @@ module.exports = (params) => {
         }
       }
     ).join('\n')
-  },
+  }
     request_uuid,
     request_path,
     request_user_id,

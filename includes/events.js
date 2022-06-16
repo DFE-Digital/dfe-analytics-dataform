@@ -54,8 +54,6 @@ module.exports = (params) => {
 SELECT
   event.*
 EXCEPT(
-    occurred_at,
-    request_uuid,
     request_path,
     user_id,
     request_method,
@@ -67,6 +65,9 @@ EXCEPT(
     anonymised_user_agent_and_ip
   ),
   web_request_event.*
+  EXCEPT (
+    occurred_at,
+    request_uuid)
 FROM
   ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS event
   LEFT JOIN web_request_event ON DATE(event.occurred_at) = DATE(web_request_event.occurred_at)
