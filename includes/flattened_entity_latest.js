@@ -1,6 +1,6 @@
 const getKeys = (keys) => {
     return keys.map(key => ({
-      [key.keyName]: key.description
+      [key.alias || key.keyName]: key.description
     })
   )
 };
