@@ -29,7 +29,17 @@ module.exports = (params) => {
       entity_id: "Hashed (anonymised) version of the ID of this entity from the database.",
       created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
       updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
-      DATA: "ARRAY of STRUCTs containing all data stored against this entity as of the latest version we have. Some fields that are in the database may have been removed or hashed (anonymised) if they contained personally identifiable information (PII) or were not deemed to be useful for analytics. NULL if entity has been deleted from the database."
+      DATA: "ARRAY of STRUCTs containing all data stored against this entity as of the latest version we have. Some fields that are in the database may have been removed or hashed (anonymised) if they contained personally identifiable information (PII) or were not deemed to be useful for analytics. NULL if entity has been deleted from the database.",
+      request_user_id: "If a user was logged in when they sent a web request event that caused this version to be created, then this is the UID of this user.",
+      request_uuid: "UUID of the web request that caused this version to be created.",
+      request_method: "Whether the web request that caused this version to be created was a GET or a POST request.",
+      request_path: "The path, starting with a / and excluding any query parameters, of the web request that caused this version to be created.",
+      request_user_agent: "The user agent of the web request that caused this version to be created. Allows a user's browser and operating system to be identified.",
+      request_referer: "The URL of any page the user was viewing when they initiated the web request that caused this version to be created. This is the full URL, including protocol (https://) and any query parameters, if the browser shared these with our application as part of the web request. It is very common for this referer to be truncated for referrals from external sites.",
+      request_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters that were sent to the application as part of the web request that caused this version to be created.",
+      response_content_type: "Content type of any data that was returned to the browser following the web request that caused this version to be created. For example, 'text/html; charset=utf-8'. Image views, for example, may have a non-text/html content type.",
+      response_status: "HTTP response code returned by the application in response to the web request that caused this version to be created. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status.",
+      anonymised_user_agent_and_ip: "One way hash of a combination of the IP address and user agent of the user who made the web request that caused this version to be created. Can be used to identify the user anonymously, even when user_id is not set. Cannot be used to identify the user over a time period of longer than about a month, because of IP address changes and browser updates."
     }
   }).query(ctx => `WITH entity_events AS (
   /* all entity events that have been streamed since we last ran this query, UNION ALLed with the latest events only for events that this query already processed in the past - this avoids having to process any unnecessary entity events later in the query */
@@ -44,11 +54,19 @@ module.exports = (params) => {
         ${data_functions.eventDataExtract("data", "id")} AS entity_id,
         ${data_functions.eventDataExtractTimestamp("data", "created_at")} AS created_at,
         ${data_functions.eventDataExtractTimestamp("data", "updated_at")} AS updated_at,
-        DATA
-        /*,
-        request_ab_tests*/
+        DATA,
+        request_uuid,
+        request_path,
+        request_user_id,
+        request_method,
+        request_user_agent,
+        request_referer,
+        request_query,
+        response_content_type,
+        response_status,
+        anonymised_user_agent_and_ip
       FROM
-        ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)}
+        ${ctx.ref("events_" + params.eventSourceName)}
       WHERE
         occurred_at > event_timestamp_checkpoint
         AND event_type IN (
@@ -62,7 +80,7 @@ module.exports = (params) => {
     )
     ${
       ctx.when(ctx.incremental(),
-        `UNION ALL (SELECT event_type, valid_from AS occurred_at, entity_table_name, entity_id, created_at, updated_at, DATA/*, request_ab_tests*/ FROM ${ctx.self()} WHERE valid_to IS NULL AND valid_from <= event_timestamp_checkpoint)`)
+        `UNION ALL (SELECT event_type, valid_from AS occurred_at, entity_table_name, entity_id, created_at, updated_at, DATA,request_uuid,request_path,request_user_id,request_method,request_user_agent,request_referer,request_query,response_content_type,response_status,anonymised_user_agent_and_ip FROM ${ctx.self()} WHERE valid_to IS NULL AND valid_from <= event_timestamp_checkpoint)`)
     }
 )
 SELECT
@@ -78,9 +96,17 @@ FROM
       entity_id,
       created_at,
       updated_at,
-      DATA
-      /*,
-      request_ab_tests*/
+      DATA,
+      request_uuid,
+      request_path,
+      request_user_id,
+      request_method,
+      request_user_agent,
+      request_referer,
+      request_query,
+      response_content_type,
+      response_status,
+      anonymised_user_agent_and_ip
     FROM
       entity_events WINDOW future_events_for_this_entity AS (
         PARTITION BY entity_table_name,

@@ -33,6 +33,16 @@ module.exports = (params) => {
         id: "Hashed (anonymised) version of the ID of this entity from the database.",
         created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
         updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
+        request_user_id: "If a user was logged in when they sent a web request event that caused this version to be created, then this is the UID of this user.",
+        request_uuid: "UUID of the web request that caused this version to be created.",
+        request_method: "Whether the web request that caused this version to be created was a GET or a POST request.",
+        request_path: "The path, starting with a / and excluding any query parameters, of the web request that caused this version to be created.",
+        request_user_agent: "The user agent of the web request that caused this version to be created. Allows a user's browser and operating system to be identified.",
+        request_referer: "The URL of any page the user was viewing when they initiated the web request that caused this version to be created. This is the full URL, including protocol (https://) and any query parameters, if the browser shared these with our application as part of the web request. It is very common for this referer to be truncated for referrals from external sites.",
+        request_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters that were sent to the application as part of the web request that caused this version to be created.",
+        response_content_type: "Content type of any data that was returned to the browser following the web request that caused this version to be created. For example, 'text/html; charset=utf-8'. Image views, for example, may have a non-text/html content type.",
+        response_status: "HTTP response code returned by the application in response to the web request that caused this version to be created. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status.",
+        anonymised_user_agent_and_ip: "One way hash of a combination of the IP address and user agent of the user who made the web request that caused this version to be created. Can be used to identify the user anonymously, even when user_id is not set. Cannot be used to identify the user over a time period of longer than about a month, because of IP address changes and browser updates."
       }, ...getKeys(tableSchema.keys))
   }).query(ctx => `SELECT
   valid_from,
@@ -61,7 +71,17 @@ module.exports = (params) => {
         }
       }
     ).join('\n')
-  }
+  },
+    request_uuid,
+    request_path,
+    request_user_id,
+    request_method,
+    request_user_agent,
+    request_referer,
+    request_query,
+    response_content_type,
+    response_status,
+    anonymised_user_agent_and_ip
 FROM
   ${ctx.ref(params.eventSourceName + "_entity_version")}
 WHERE

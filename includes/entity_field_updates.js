@@ -34,8 +34,16 @@ module.exports = (params) => {
       original_DATA: "Full DATA struct for the first version of this entity that we have available, either from when it was created or imported.",
       original_event_type: "Usually should be either create_entity or entity_imported, depending on whether the first entity data we have available is from when it was created, or whether we're relying on an import.",
       change_from_original_value: "TRUE if this update to this field represents a change away from the original value that the entity was created with, if that original value was not null or empty.",
-      request_ab_tests: "STRUCT of A:B tests and variants that were active when this update was made.",
-      original_request_ab_tests: "STRUCT of A:B tests and variants that were active when this entity was first created."
+      request_user_id: "If a user was logged in when they sent a web request event that caused this update, then this is the UID of this user.",
+      request_uuid: "UUID of the web request that caused this update.",
+      request_method: "Whether the web request that caused this update was a GET or a POST request.",
+      request_path: "The path, starting with a / and excluding any query parameters, of the web request that caused this update.",
+      request_user_agent: "The user agent of the web request that caused this update. Allows a user's browser and operating system to be identified.",
+      request_referer: "The URL of any page the user was viewing when they initiated the web request that caused this update. This is the full URL, including protocol (https://) and any query parameters, if the browser shared these with our application as part of the web request. It is very common for this referer to be truncated for referrals from external sites.",
+      request_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters that were sent to the application as part of the web request that caused this update.",
+      response_content_type: "Content type of any data that was returned to the browser following the web request that caused this update. For example, 'text/html; charset=utf-8'. Image views, for example, may have a non-text/html content type.",
+      response_status: "HTTP response code returned by the application in response to the web request that caused this update. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status.",
+      anonymised_user_agent_and_ip: "One way hash of a combination of the IP address and user agent of the user who made the web request that caused this update. Can be used to identify the user anonymously, even when user_id is not set. Cannot be used to identify the user over a time period of longer than about a month, because of IP address changes and browser updates."
     }
   }).query(ctx => `WITH instance_versions AS (
   SELECT
@@ -45,9 +53,19 @@ module.exports = (params) => {
     ${data_functions.eventDataExtract("data", "id")} AS entity_id,
     ${data_functions.eventDataExtractTimestamp("data", "created_at")} AS created_at,
     ${data_functions.eventDataExtractTimestamp("data", "updated_at")} AS updated_at,
-    data
+    data,
+    request_uuid,
+    request_path,
+    request_user_id,
+    request_method,
+    request_user_agent,
+    request_referer,
+    request_query,
+    response_content_type,
+    response_status,
+    anonymised_user_agent_and_ip
   FROM
-    ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)}
+    ${ctx.ref("events_" + params.eventSourceName)}
   WHERE
     event_type IN (
       "update_entity",

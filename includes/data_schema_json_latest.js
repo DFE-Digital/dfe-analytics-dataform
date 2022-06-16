@@ -23,7 +23,7 @@ FROM (
       DISTINCT entity_table_name,
       DATA.key AS key
     FROM
-      ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)},
+      ${ctx.ref("events_" + params.eventSourceName)},
       UNNEST(DATA) AS DATA
     WHERE
       DATE(occurred_at) = CURRENT_DATE - 1
