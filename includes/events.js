@@ -43,7 +43,7 @@ module.exports = (params) => {
   GROUP BY
     request_uuid),
   earliest_event_for_web_request AS (
-  SELECT DISTINCT
+  SELECT
     minimal_earliest_event_for_web_request.occurred_at,
     minimal_earliest_event_for_web_request.request_uuid,
     request_path,
