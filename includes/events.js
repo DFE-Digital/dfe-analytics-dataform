@@ -97,4 +97,5 @@ FROM
 WHERE
   event.occurred_at > event_timestamp_checkpoint`).preOps(ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(),`SELECT MAX(occurred_at) FROM ${ctx.self()}`,`SELECT TIMESTAMP("2000-01-01")`)}
-    
+      )`)
+}
