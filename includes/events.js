@@ -82,7 +82,7 @@ EXCEPT(
     anonymised_user_agent_and_ip
   ),
   COALESCE(event.request_path,earliest_event_for_web_request.request_path) AS request_path,
-  COALESCE(event.user_id,earliest_event_for_web_request.user_id) AS user_id,
+  COALESCE(event.user_id,earliest_event_for_web_request.request_user_id) AS request_user_id,
   COALESCE(event.request_method,earliest_event_for_web_request.request_method) AS request_method,
   COALESCE(event.request_user_agent,earliest_event_for_web_request.request_user_agent) AS request_user_agent,
   COALESCE(event.request_referer,earliest_event_for_web_request.request_referer) AS request_referer,
@@ -97,5 +97,4 @@ FROM
 WHERE
   event.occurred_at > event_timestamp_checkpoint`).preOps(ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(),`SELECT MAX(occurred_at) FROM ${ctx.self()}`,`SELECT TIMESTAMP("2000-01-01")`)}
-      )`)
-}
+    
