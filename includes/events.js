@@ -67,7 +67,6 @@ module.exports = (params) => {
     /* Process web requests as far back as 1 day before the timestamp we're updating this table from, to ensure that we do find the web request for each non-web request event, even if the non-web request event occurred the other side of event_timestamp_checkpoint from the web request event that caused it */
     AND minimal_earliest_event_for_web_request.occurred_at > TIMESTAMP_SUB(event_timestamp_checkpoint, INTERVAL 1 DAY)
     AND web_request.occurred_at > TIMESTAMP_SUB(event_timestamp_checkpoint, INTERVAL 1 DAY)
-  GROUP BY request_uuid
 )
 SELECT
   event.*
