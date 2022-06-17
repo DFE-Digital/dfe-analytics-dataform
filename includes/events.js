@@ -30,10 +30,22 @@ module.exports = (params) => {
       entity_table_name: "If event_type was an entity create, update, delete or import event, the name of the table in the database that this entity is stored in. NULL otherwise.",
       anonymised_user_agent_and_ip: "One way hash of a combination of the user's IP address and user agent. Can be used to identify the user anonymously, even when user_id is not set. Cannot be used to identify the user over a time period of longer than about a month, because of IP address changes and browser updates."
     }
-  }).query(ctx => `WITH web_request_event AS (
+  }).query(ctx => `WITH
+  minimal_earliest_event_for_web_request AS (
   SELECT
-    occurred_at,
     request_uuid,
+    MIN(occurred_at) AS occurred_at
+  FROM
+    ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)}
+  WHERE
+    event_type = "web_request"
+    AND occurred_at > TIMESTAMP_SUB(event_timestamp_checkpoint, INTERVAL 1 DAY)
+  GROUP BY
+    request_uuid),
+  earliest_event_for_web_request AS (
+  SELECT DISTINCT
+    minimal_earliest_event_for_web_request.occurred_at,
+    minimal_earliest_event_for_web_request.request_uuid,
     request_path,
     user_id AS request_user_id,
     request_method,
@@ -43,13 +55,18 @@ module.exports = (params) => {
     response_content_type,
     response_status,
     anonymised_user_agent_and_ip
-    /* Add Woothee lines here in future to add in browse and OS details for each event */
   FROM
-    ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)}
+    minimal_earliest_event_for_web_request
+  LEFT JOIN
+     ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS web_request
+  ON
+    minimal_earliest_event_for_web_request.request_uuid = web_request.request_uuid
+    AND minimal_earliest_event_for_web_request.occurred_at = web_request.occurred_at
   WHERE
     event_type = "web_request"
     /* Process web requests as far back as 1 day before the timestamp we're updating this table from, to ensure that we do find the web request for each non-web request event, even if the non-web request event occurred the other side of event_timestamp_checkpoint from the web request event that caused it */
     AND occurred_at > TIMESTAMP_SUB(event_timestamp_checkpoint, INTERVAL 1 DAY)
+  GROUP BY request_uuid
 )
 SELECT
   event.*
@@ -64,14 +81,19 @@ EXCEPT(
     response_status,
     anonymised_user_agent_and_ip
   ),
-  web_request_event.*
-  EXCEPT (
-    occurred_at,
-    request_uuid)
+  COALESCE(event.request_path,earliest_event_for_web_request.request_path) AS request_path,
+  COALESCE(event.user_id,earliest_event_for_web_request.user_id) AS user_id,
+  COALESCE(event.request_method,earliest_event_for_web_request.request_method) AS request_method,
+  COALESCE(event.request_user_agent,earliest_event_for_web_request.request_user_agent) AS request_user_agent,
+  COALESCE(event.request_referer,earliest_event_for_web_request.request_referer) AS request_referer,
+  IF(ARRAY_LENGTH(event.request_query)>0,event.request_query,earliest_event_for_web_request.request_query) AS request_query,
+  COALESCE(event.response_status,earliest_event_for_web_request.response_status) AS response_status,
+  COALESCE(event.response_content_type,earliest_event_for_web_request.response_content_type) AS response_content_type,
+  COALESCE(event.anonymised_user_agent_and_ip,earliest_event_for_web_request.anonymised_user_agent_and_ip) AS anonymised_user_agent_and_ip
 FROM
   ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS event
-  LEFT JOIN web_request_event ON DATE(event.occurred_at) = DATE(web_request_event.occurred_at)
-  AND event.request_uuid = web_request_event.request_uuid
+  LEFT JOIN earliest_event_for_web_request ON DATE(event.occurred_at) = DATE(earliest_event_for_web_request.occurred_at)
+  AND event.request_uuid = earliest_event_for_web_request.request_uuid
 WHERE
   event.occurred_at > event_timestamp_checkpoint`).preOps(ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(),`SELECT MAX(occurred_at) FROM ${ctx.self()}`,`SELECT TIMESTAMP("2000-01-01")`)}
