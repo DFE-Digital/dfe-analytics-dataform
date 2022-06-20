@@ -86,7 +86,8 @@ SELECT
   COALESCE(event.anonymised_user_agent_and_ip,earliest_event_for_web_request.anonymised_user_agent_and_ip) AS anonymised_user_agent_and_ip
 FROM
   ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS event
-  LEFT JOIN event.request_uuid = earliest_event_for_web_request.request_uuid
+  LEFT JOIN earliest_event_for_web_request
+  ON event.request_uuid = earliest_event_for_web_request.request_uuid
   AND event.event_type != "web_request"
 WHERE
   event.occurred_at > event_timestamp_checkpoint`).preOps(ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
