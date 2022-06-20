@@ -95,7 +95,8 @@ FROM
   LEFT JOIN earliest_event_for_web_request ON DATE(event.occurred_at) = DATE(earliest_event_for_web_request.occurred_at)
   AND event.request_uuid = earliest_event_for_web_request.request_uuid
 WHERE
-  event.occurred_at > event_timestamp_checkpoint`).preOps(ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
+  event.event_type != "web_request"
+  AND event.occurred_at > event_timestamp_checkpoint`).preOps(ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(),`SELECT MAX(occurred_at) FROM ${ctx.self()}`,`SELECT TIMESTAMP("2000-01-01")`)}
       )`)
 }
