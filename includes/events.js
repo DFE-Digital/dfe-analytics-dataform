@@ -70,6 +70,7 @@ module.exports = (params) => {
 )
 SELECT
   event.occurred_at,
+  event.request_uuid,
   event.event_type,
   event.environment,
   event.namespace,
