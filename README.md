@@ -63,7 +63,7 @@ For each occurrence of ```dfeAnalyticsDataform()``` in ```definitions/dfe_analyt
 
 The names of these will vary depending on the ```eventSourceName``` you have specified. For example if your ```eventSourceName``` was ```foo``` then the following will be created:
 - A declaration of your events table, which you can access via ```${ref("bqDatasetName","bqEventsTableName")}``` (replacing those values with your own).
-- An incremental table called ```events_foo```, which you can access via ```${ref("events_foo)}```. This table will include all the events dfe-analytics streamed into the raw events table. It will also include details of the browser and operating system of the user who caused these events to be streamed, and will attach web request data (like the request path) to all events in the table, not just the web requests.
+- An incremental table called ```events_foo```, which you can access via ```${ref("events_foo")}```. This table will include all the events dfe-analytics streamed into the raw events table. It will also include details of the browser and operating system of the user who caused these events to be streamed, and will attach web request data (like the request path) to all events in the table, not just the web requests.
 - An incremental table called ```foo_entity_version```, containing each version of every entity in the database over time, with a ```valid_from``` and ```valid_to``` timestamp.
 - A table called ```foo_analytics_yml_latest```, which is a table version of the ```dataSchema``` you specified.
 - A table called ```foo_data_schema_json_latest```, which is a default dataSchema JSON you could use to get started specifying this in dfe_analytics_dataform.js
