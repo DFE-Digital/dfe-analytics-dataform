@@ -69,18 +69,12 @@ module.exports = (params) => {
     AND web_request.occurred_at > TIMESTAMP_SUB(event_timestamp_checkpoint, INTERVAL 1 DAY)
 )
 SELECT
-  event.*
-EXCEPT(
-    request_path,
-    user_id,
-    request_method,
-    request_user_agent,
-    request_referer,
-    request_query,
-    response_content_type,
-    response_status,
-    anonymised_user_agent_and_ip
-  ),
+  event.occurred_at,
+  event.event_type,
+  event.environment,
+  event.namespace,
+  event.data,
+  entity_table_name,
   COALESCE(event.request_path,earliest_event_for_web_request.request_path) AS request_path,
   COALESCE(event.user_id,earliest_event_for_web_request.request_user_id) AS request_user_id,
   COALESCE(event.request_method,earliest_event_for_web_request.request_method) AS request_method,
