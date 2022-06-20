@@ -118,7 +118,13 @@ FROM
       request_query,
       response_content_type,
       response_status,
-      anonymised_user_agent_and_ip
+      anonymised_user_agent_and_ip,
+      device_category,
+      browser_name,
+      browser_version,
+      operating_system_name,
+      operating_system_vendor,
+      operating_system_version
     FROM
       entity_events WINDOW future_events_for_this_entity AS (
         PARTITION BY entity_table_name,
