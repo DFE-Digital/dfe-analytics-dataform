@@ -74,7 +74,7 @@ SELECT
   event.environment,
   event.namespace,
   event.data,
-  entity_table_name,
+  event.entity_table_name,
   COALESCE(event.request_path,earliest_event_for_web_request.request_path) AS request_path,
   COALESCE(event.user_id,earliest_event_for_web_request.request_user_id) AS request_user_id,
   COALESCE(event.request_method,earliest_event_for_web_request.request_method) AS request_method,
