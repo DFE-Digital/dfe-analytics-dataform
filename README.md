@@ -53,10 +53,13 @@ dfeAnalyticsDataform({
   }]
 });
 ```
-8. Replace the parameters in this file with the parameters you need - including specifying the full schema from your ```analytics.yml``` file with data types. Optionally, to save time if you're starting from scratch, you can generate a blank ```dataSchema``` JSON to paste in here by running the query in Dataform to create the ```data_schema_json_latest``` table. You can do this from the right hand sidebar when you open ```dfe_analytics_dataform``` in the Dataform web client, and then copying and pasting the output from the table this produces in BigQuery (don't copy and paste from Dataform as it doesn't handle newlines well).
+8. Optionally, to save time if you're starting from scratch, generate a blank ```dataSchema``` JSON to paste in to this file by running the query in Dataform to create the ```data_schema_json_latest``` table. You can do this from the right hand sidebar when you open ```dfe_analytics_dataform``` in the Dataform web client, and then copying and pasting the output from the table this produces in BigQuery (don't copy and paste from Dataform as it doesn't handle newlines well).
 
-9. Commit your changes and merge to ```master```.
-10. Run a 'full refresh' on your entire pipeline, and resolve any errors this flags (e.g. omissions made when specifying a ```dataSchema```).
+9. Replace the parameters in this file with the parameters you need - including specifying the full schema from your ```analytics.yml``` file with data types and any aliases you need. Don't include the ```id```, ```created_at``` and ```updated_at``` fields - they are included automatically. At this stage compilation errors like ```Error: Not found: Dataset your-project-name:output-dataset-name was not found in location europe-west2 at [1:44]``` are normal because you haven't yet run the pipeline for the first time, which creates the output dataset.
+
+10. Commit your changes and merge to ```master```.
+
+11. Run a 'full refresh' on your entire pipeline, and resolve any errors this flags (e.g. omissions made when specifying a ```dataSchema```).
 
 ## Tables, assertions, and declarations this will create
 For each occurrence of ```dfeAnalyticsDataform()``` in ```definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the UI by opening ```definitions/dfe_analytics_dataform.js```.
