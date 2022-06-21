@@ -101,19 +101,20 @@ event_with_web_request_data AS (
     event.occurred_at > event_timestamp_checkpoint)
 SELECT
   event_with_web_request_data.*,
+  IF(REGEXP_CONTAINS(request_user_agent, '(?i)(bot|http|python|scan|check|spider|curl|trend|ruby|bash|batch|verification|qwantify|nuclei|ai|crawler|perl|java|test|scoop|fetch|adreview|cortex|nessus|bitdiscovery|postplanner|faraday|restsharp|hootsuite|mattermost|shortlink|retriever|auto|scrper|alyzer|dispatch|traackr|fiddler|crowsnest|gigablast|wakelet|installatron|intently|openurl|anthill|curb|trello|inject|ahc|sleep|sysdate|=|cloudinary|statuscake|cloudfront|archive|sleuth|bingpreview|facebookexternalhit|newspaper|eContext|PostmanRuntime)'),"bot",
   CASE parseUserAgent(request_user_agent).category
     WHEN "smartphone" THEN "mobile"
     WHEN "pc" THEN "desktop"
     WHEN "crawler" THEN "bot"
   ELSE
   "unknown"
-  END
+  END)
   AS device_category,
-  parseUserAgent(request_user_agent).name AS browser_name,
-  parseUserAgent(request_user_agent).version AS browser_version,
-  parseUserAgent(request_user_agent).os AS operating_system_name,
-  parseUserAgent(request_user_agent).vendor AS operating_system_vendor,
-  parseUserAgent(request_user_agent).os_version AS operating_system_version
+  REPLACE(parseUserAgent(request_user_agent).name,"UNKNOWN","unknown") AS browser_name,
+  REPLACE(parseUserAgent(request_user_agent).version,"UNKNOWN","unknown") AS browser_version,
+  REPLACE(parseUserAgent(request_user_agent).os,"UNKNOWN","unknown") AS operating_system_name,
+  REPLACE(parseUserAgent(request_user_agent).vendor,"UNKNOWN","unknown") AS operating_system_vendor,
+  REPLACE(parseUserAgent(request_user_agent).os_version,"UNKNOWN","unknown") AS operating_system_version
 FROM
   event_with_web_request_data
   `).preOps(ctx => `
