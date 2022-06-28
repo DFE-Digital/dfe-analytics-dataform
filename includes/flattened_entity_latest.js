@@ -10,7 +10,7 @@ module.exports = (params) => {
     type: "table",
     assertions: {
       uniqueKey: ["id"],
-      nonNull: ["last_streamed_event_occurred_at", "last_streamed_event_type", "id", "created_at", "updated_at"]
+      nonNull: ["last_streamed_event_occurred_at", "last_streamed_event_type", "id"]
     },
     bigquery: {
       partitionBy: "DATE(created_at)",

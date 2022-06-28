@@ -11,7 +11,7 @@ module.exports = (params) => {
     dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
     assertions: {
       uniqueKey: ["valid_from", "id"],
-      nonNull: ["id", "created_at", "updated_at"],
+      nonNull: ["id"],
       rowConditions: [
         'valid_from < valid_to OR valid_to IS NULL'
       ]
