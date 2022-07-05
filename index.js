@@ -4,6 +4,7 @@ const entityVersion = require("./includes/entity_version");
 const entityFieldUpdates = require("./includes/entity_field_updates");
 const flattenedEntityVersion = require("./includes/flattened_entity_version");
 const flattenedEntityLatest = require("./includes/flattened_entity_latest");
+const flattenedEntityFieldUpdates = require("./includes/flattened_entity_field_updates");
 const analyticsYmlLatest = require("./includes/analytics_yml_latest");
 const entitiesAreMissingExpectedFields = require("./includes/entities_are_missing_expected_fields");
 const unhandledFieldOrEntityIsBeingStreamed = require("./includes/unhandled_field_or_entity_is_being_streamed");
@@ -53,7 +54,8 @@ module.exports = (params) => {
       analyticsYmlLatest: analyticsYmlLatest(params),
       dataSchemaJSONLatest: dataSchemaJSONLatest(params),
       flattenedEntityVersion: flattenedEntityVersion(params),
-      flattenedEntityLatest: flattenedEntityLatest(params)
+      flattenedEntityLatest: flattenedEntityLatest(params),
+      flattenedEntityFieldUpdates: flattenedEntityFieldUpdates(params)
     }
   } else {
     return {
