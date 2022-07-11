@@ -216,7 +216,7 @@ FROM
   web_request_referral_aware
 `).preOps(ctx => `
     DECLARE event_date_checkpoint DEFAULT (
-        ${ctx.when(ctx.incremental(),`SELECT MAX(DATE(occurred_at)) FROM ${ctx.self()}`,`SELECT "2000-01-01"`)});
+        ${ctx.when(ctx.incremental(),`SELECT MAX(DATE(occurred_at)) FROM ${ctx.self()}`,`SELECT DATE("2000-01-01")`)});
 /* Referer URLs in events include URI-formatted codes for some characters e.g. '%20' for ' '.
 JS includes a decodeURIComponent function that parses these.
 This temporary UDF accesses this instead of trying to replicate it in SQL. */
