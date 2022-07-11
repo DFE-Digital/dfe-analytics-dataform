@@ -65,7 +65,7 @@ WITH
   web_request_with_processed_referer AS (
   SELECT
     *,
-    REGEXP_EXTRACT(request_referer, r"[^\/](\/[^\/][^?]*)(?:\?|$)") AS request_referer_path,
+    REGEXP_EXTRACT(request_referer, r"[^\\/](\\/[^\\/][^?]*)(?:\\?|$)") AS request_referer_path,
     ARRAY(
     SELECT
       AS STRUCT REGEXP_EXTRACT(string, r"^([^=]+)=") AS key,
