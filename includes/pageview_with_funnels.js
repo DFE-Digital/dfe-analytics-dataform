@@ -54,7 +54,7 @@ WITH
       UNNEST(value) AS value) AS request_query,
     REPLACE(DECODE_URI_COMPONENT(request_referer),"+"," ") AS request_referer,
   FROM
-    ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)}
+    ${ctx.ref("events_" + params.eventSourceName)}
   WHERE
     event_type="web_request"
     AND device_category != "bot"
