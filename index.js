@@ -1,5 +1,6 @@
 const dataFunctions = require("./includes/data_functions");
 const events = require("./includes/events");
+const pageviewWithFunnel = require("./includes/pageview_with_funnels");
 const entityVersion = require("./includes/entity_version");
 const entityFieldUpdates = require("./includes/entity_field_updates");
 const flattenedEntityVersion = require("./includes/flattened_entity_version");
@@ -46,6 +47,7 @@ module.exports = (params) => {
     return {
       eventsRaw,
       events: events(params),
+      pageviewWithFunnel: pageviewWithFunnel(params),
       entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
       unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
       entityVersion: entityVersion(params),
@@ -60,7 +62,8 @@ module.exports = (params) => {
   } else {
     return {
       eventsRaw,
-      events: events(params)
+      events: events(params),
+      pageviewWithFunnel: pageviewWithFunnel(params)
     }
   }
 }
