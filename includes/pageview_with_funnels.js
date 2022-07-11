@@ -217,14 +217,15 @@ FROM
 `).preOps(ctx => `
     DECLARE event_date_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(),`SELECT MAX(DATE(occurred_at)) FROM ${ctx.self()}`,`SELECT DATE("2000-01-01")`)});
-/* Referer URLs in events include URI-formatted codes for some characters e.g. '%20' for ' '.
-JS includes a decodeURIComponent function that parses these.
-This temporary UDF accesses this instead of trying to replicate it in SQL. */
-CREATE TEMPORARY FUNCTION DECODE_URI_COMPONENT(path STRING)
-RETURNS STRING
-LANGUAGE js AS """
-if (path == null) return null;
-return decodeURIComponent(path);
-""";`
+/* Referer URLs in events include URI-formatted codes for some characters e.g. '%20' for ' '. This UDF parses them. */
+CREATE TEMP FUNCTION DECODE_URI_COMPONENT(url STRING) AS ((
+  SELECT STRING_AGG(
+    IF(REGEXP_CONTAINS(y, r'^%[0-9a-fA-F]{2}'), 
+      SAFE_CONVERT_BYTES_TO_STRING(FROM_HEX(REPLACE(y, '%', ''))), y), '' 
+    ORDER BY i
+    )
+  FROM UNNEST(REGEXP_EXTRACT_ALL(url, r"%[0-9a-fA-F]{2}(?:%[0-9a-fA-F]{2})*|[^%]+")) y
+  WITH OFFSET AS i 
+));`
       )
 }
