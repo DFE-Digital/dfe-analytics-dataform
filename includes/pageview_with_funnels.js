@@ -280,7 +280,7 @@ END
     WHEN preceding_user_requests[SAFE_ORDINAL(2)].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(2)].request_path_grouped
     WHEN preceding_user_requests[SAFE_ORDINAL(1)].request_path_grouped IS NOT NULL
   AND preceding_user_requests[SAFE_ORDINAL(2)].total_number_of_unbroken_preceding_steps_in_funnel = 1 THEN "Different window or tab"
-    WHEN preceding_user_requests[SAFE_ORDINAL(1)].request_path_grouped IS NOT NULL THEN "Arrived at site"
+    WHEN preceding_user_requests[SAFE_ORDINAL(1)].request_path_grouped IS NOT NULL THEN "Arrived on site"
   ELSE
   NULL
 END
@@ -289,7 +289,7 @@ END
     WHEN preceding_user_requests[SAFE_ORDINAL(3)].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(3)].request_path_grouped
     WHEN preceding_user_requests[SAFE_ORDINAL(2)].request_path_grouped IS NOT NULL
   AND preceding_user_requests[SAFE_ORDINAL(3)].total_number_of_unbroken_preceding_steps_in_funnel = 2 THEN "Different window or tab"
-    WHEN preceding_user_requests[SAFE_ORDINAL(2)].request_path_grouped IS NOT NULL THEN "Arrived at site"
+    WHEN preceding_user_requests[SAFE_ORDINAL(2)].request_path_grouped IS NOT NULL THEN "Arrived on site"
   ELSE
   NULL
 END
@@ -298,7 +298,7 @@ END
     WHEN preceding_user_requests[SAFE_ORDINAL(4)].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(4)].request_path_grouped
     WHEN preceding_user_requests[SAFE_ORDINAL(3)].request_path_grouped IS NOT NULL
   AND preceding_user_requests[SAFE_ORDINAL(4)].total_number_of_unbroken_preceding_steps_in_funnel = 3 THEN "Different window or tab"
-    WHEN preceding_user_requests[SAFE_ORDINAL(3)].request_path_grouped IS NOT NULL THEN "Arrived at site"
+    WHEN preceding_user_requests[SAFE_ORDINAL(3)].request_path_grouped IS NOT NULL THEN "Arrived on site"
   ELSE
   NULL
 END
@@ -307,7 +307,7 @@ END
     WHEN preceding_user_requests[SAFE_ORDINAL(5)].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(5)].request_path_grouped
     WHEN preceding_user_requests[SAFE_ORDINAL(4)].request_path_grouped IS NOT NULL
   AND preceding_user_requests[SAFE_ORDINAL(5)].total_number_of_unbroken_preceding_steps_in_funnel = 4 THEN "Different window or tab"
-    WHEN preceding_user_requests[SAFE_ORDINAL(4)].request_path_grouped IS NOT NULL THEN "Arrived at site"
+    WHEN preceding_user_requests[SAFE_ORDINAL(4)].request_path_grouped IS NOT NULL THEN "Arrived on site"
   ELSE
   NULL
 END
