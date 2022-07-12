@@ -52,7 +52,7 @@ WITH
     FROM
       UNNEST(request_query) AS query,
       UNNEST(value) AS value) AS request_query,
-    REPLACE(DECODE_URI_COMPONENT(request_referer),"+"," ") AS request_referer,
+    REPLACE(DECODE_URI_COMPONENT(request_referer),"+"," ") AS request_referer
   FROM
     ${ctx.ref("events_" + params.eventSourceName)}
   WHERE
@@ -60,8 +60,7 @@ WITH
     AND device_category != "bot"
     AND CONTAINS_SUBSTR(response_content_type,
       "text/html")
-    AND DATE(occurred_at) < CURRENT_DATE
-    AND DATE(occurred_at) > event_date_checkpoint),
+    AND DATE(occurred_at) < CURRENT_DATE),
   web_request_with_processed_referer AS (
   SELECT
     *,
@@ -72,19 +71,14 @@ WITH
       REGEXP_EXTRACT(string, r"=([^=]+)$") AS value
     FROM
       UNNEST(REGEXP_EXTRACT_ALL(request_referer, r"[?&]([^&]+)(?:&|$)")) AS string) AS request_referer_query,
-    ARRAY_TO_STRING(
-      ARRAY(
-        SELECT
-          IF(
-            REGEXP_CONTAINS(path_part, "[0-9]"),
-            "UID",
-            path_part
-          )
-        FROM
-          UNNEST(SPLIT(request_path, "/")) AS path_part
-      ),
-      "/"
-    ) AS request_path_grouped
+    ARRAY_TO_STRING( ARRAY(
+      SELECT
+      IF
+        ( REGEXP_CONTAINS(path_part, "[0-9]"),
+          "UID",
+          path_part )
+      FROM
+        UNNEST(SPLIT(request_path, "/")) AS path_part ), "/" ) AS request_path_grouped
   FROM
     web_request),
   web_request_with_funnels AS (
@@ -98,7 +92,10 @@ WITH
         request_path_grouped,
         request_query,
         request_referer_path,
-        request_referer_query)) OVER (PARTITION BY anonymised_user_agent_and_ip, DATE(occurred_at) ORDER BY occurred_at ASC ROWS BETWEEN 10 PRECEDING AND 1 PRECEDING) AS preceding_user_requests,
+        request_referer_query)) OVER (PARTITION BY anonymised_user_agent_and_ip, DATE(occurred_at)
+    ORDER BY
+      occurred_at ASC ROWS BETWEEN 10 PRECEDING
+      AND 1 PRECEDING) AS preceding_user_requests,
     ARRAY_AGG(STRUCT(occurred_at,
         request_uuid,
         request_referer,
@@ -106,7 +103,10 @@ WITH
         request_path_grouped,
         request_query,
         request_referer_path,
-        request_referer_query)) OVER (PARTITION BY anonymised_user_agent_and_ip, DATE(occurred_at) ORDER BY occurred_at ASC ROWS BETWEEN 1 FOLLOWING AND 10 FOLLOWING) AS following_user_requests
+        request_referer_query)) OVER (PARTITION BY anonymised_user_agent_and_ip, DATE(occurred_at)
+    ORDER BY
+      occurred_at ASC ROWS BETWEEN 1 FOLLOWING
+      AND 10 FOLLOWING) AS following_user_requests
   FROM
     web_request_with_processed_referer),
   web_request_with_numbered_funnels AS (
@@ -148,7 +148,7 @@ WITH
   FROM
     web_request_with_funnels),
   web_request_referral_aware AS (
-    /* Ad a referred_to_next_request or referred_from_previous_request BOOL field to each next/previous request in the funnel for each event. This is TRUE if both the path and query for event N+1 match the path and query extracted from the referrer for event N */
+  /* Ad a referred_to_next_request or referred_from_previous_request BOOL field to each next/previous request in the funnel for each event. This is TRUE if both the path and query for event N+1 match the path and query extracted from the referrer for event N */
   SELECT
     * EXCEPT (preceding_user_requests,
       following_user_requests),
@@ -156,10 +156,34 @@ WITH
     SELECT
       AS STRUCT *,
       IFNULL(preceding_request.next_referer_path = preceding_request.request_path
-        AND (NOT EXISTS (SELECT * FROM UNNEST(preceding_request.next_referer_query) AS next_ref_query INNER JOIN UNNEST(preceding_request.request_query) AS this_query USING(key) WHERE (next_ref_query.key IS NULL OR this_query.key IS NULL OR next_ref_query.value != this_query.value)))
+        AND (NOT EXISTS (
+          SELECT
+            *
+          FROM
+            UNNEST(preceding_request.next_referer_query) AS next_ref_query
+          INNER JOIN
+            UNNEST(preceding_request.request_query) AS this_query
+          USING
+            (key)
+          WHERE
+            (next_ref_query.key IS NULL
+              OR this_query.key IS NULL
+              OR next_ref_query.value != this_query.value)))
         OR (step_number_backwards = 1
           AND web_request_with_numbered_funnels.request_referer_path = preceding_request.request_path
-          AND (NOT EXISTS (SELECT * FROM UNNEST(web_request_with_numbered_funnels.request_referer_query) AS next_ref_query INNER JOIN UNNEST(preceding_request.request_query) AS this_query USING(key) WHERE (next_ref_query.key IS NULL OR this_query.key IS NULL OR next_ref_query.value != this_query.value)))),
+          AND (NOT EXISTS (
+            SELECT
+              *
+            FROM
+              UNNEST(web_request_with_numbered_funnels.request_referer_query) AS next_ref_query
+            INNER JOIN
+              UNNEST(preceding_request.request_query) AS this_query
+            USING
+              (key)
+            WHERE
+              (next_ref_query.key IS NULL
+                OR this_query.key IS NULL
+                OR next_ref_query.value != this_query.value)))),
         FALSE) AS referred_to_next_request
     FROM
       UNNEST(preceding_user_requests) AS preceding_request ) AS preceding_user_requests,
@@ -167,65 +191,191 @@ WITH
     SELECT
       AS STRUCT *,
       IFNULL(following_request.previous_request_path = following_request.request_referer_path
-AND (NOT EXISTS (SELECT * FROM UNNEST(following_request.previous_request_query) AS prev_query INNER JOIN UNNEST(following_request.request_referer_query) AS this_query USING(key) WHERE (prev_query.key IS NULL OR this_query.key IS NULL OR prev_query.value != this_query.value)))
+        AND (NOT EXISTS (
+          SELECT
+            *
+          FROM
+            UNNEST(following_request.previous_request_query) AS prev_query
+          INNER JOIN
+            UNNEST(following_request.request_referer_query) AS this_query
+          USING
+            (key)
+          WHERE
+            (prev_query.key IS NULL
+              OR this_query.key IS NULL
+              OR prev_query.value != this_query.value)))
         OR (step_number_forwards = 1
           AND following_request.request_referer_path = web_request_with_numbered_funnels.request_path
-          AND (NOT EXISTS (SELECT * FROM UNNEST(web_request_with_numbered_funnels.request_query) AS prev_query INNER JOIN UNNEST(following_request.request_referer_query) AS this_query USING(key) WHERE (prev_query.key IS NULL OR this_query.key IS NULL OR prev_query.value != this_query.value)))),
+          AND (NOT EXISTS (
+            SELECT
+              *
+            FROM
+              UNNEST(web_request_with_numbered_funnels.request_query) AS prev_query
+            INNER JOIN
+              UNNEST(following_request.request_referer_query) AS this_query
+            USING
+              (key)
+            WHERE
+              (prev_query.key IS NULL
+                OR this_query.key IS NULL
+                OR prev_query.value != this_query.value)))),
         FALSE) AS referred_from_previous_request
     FROM
       UNNEST(following_user_requests) AS following_request ) AS following_user_requests
   FROM
-    web_request_with_numbered_funnels)
-/* Find points in the referral chain in preceding/following_user_requests where the chain breaks - i.e. where the referer no longer matches the immediately preceding request - and exclude everything before the most recent break point */
+    web_request_with_numbered_funnels),
+  web_request_with_unbroken_funnels_only AS (
+  /* Find points in the referral chain in preceding/following_user_requests where the chain breaks - i.e. where the referer no longer matches the immediately preceding request - and exclude everything before the most recent break point */
+  SELECT
+    * EXCEPT(preceding_user_requests,
+      following_user_requests),
+    ARRAY_LENGTH(preceding_user_requests) AS total_number_of_preceding_steps_in_funnel,
+    ARRAY_LENGTH(following_user_requests) AS total_number_of_following_steps_in_funnel,
+    ARRAY(
+    SELECT
+      AS STRUCT *,
+      IFNULL(MIN(
+        IF
+          (NOT referred_to_next_request,
+            step_number_backwards,
+            NULL)) OVER all_preceding_requests_in_reverse_time_order - 1,
+        MAX(step_number_backwards) OVER all_preceding_requests_in_reverse_time_order) AS total_number_of_unbroken_preceding_steps_in_funnel
+    FROM
+      UNNEST(preceding_user_requests) AS preceding_request QUALIFY step_number_backwards <= total_number_of_unbroken_preceding_steps_in_funnel
+    WINDOW
+      all_preceding_requests_in_reverse_time_order AS (
+      ORDER BY
+        preceding_request.step_number_backwards ASC ROWS BETWEEN UNBOUNDED PRECEDING
+        AND UNBOUNDED FOLLOWING) ) AS preceding_user_requests,
+    ARRAY(
+    SELECT
+      AS STRUCT *,
+      IFNULL(MIN(
+        IF
+          (NOT referred_from_previous_request,
+            step_number_forwards,
+            NULL)) OVER all_following_requests_in_increasing_time_order - 1,
+        MAX(step_number_forwards) OVER all_following_requests_in_increasing_time_order) AS total_number_of_unbroken_following_steps_in_funnel
+    FROM
+      UNNEST(following_user_requests) AS following_request QUALIFY step_number_forwards <= total_number_of_unbroken_following_steps_in_funnel
+    WINDOW
+      all_following_requests_in_increasing_time_order AS (
+      ORDER BY
+        following_request.step_number_forwards ASC ROWS BETWEEN UNBOUNDED PRECEDING
+        AND UNBOUNDED FOLLOWING) ) AS following_user_requests
+  FROM
+    web_request_referral_aware)
 SELECT
   * EXCEPT(preceding_user_requests,
     following_user_requests),
- ARRAY(
-  SELECT
-    AS STRUCT * EXCEPT(referred_to_next_request),
-    IFNULL(MIN(
-      IF
-        (NOT referred_to_next_request,
-          step_number_backwards,
-          NULL)) OVER all_preceding_requests_in_reverse_time_order - 1,
-      MAX(step_number_backwards) OVER all_preceding_requests_in_reverse_time_order) AS total_number_of_preceding_steps_in_funnel
-  FROM
-    UNNEST(preceding_user_requests) AS preceding_request QUALIFY step_number_backwards <= total_number_of_preceding_steps_in_funnel
-  WINDOW
-    all_preceding_requests_in_reverse_time_order AS (
-    ORDER BY
-      preceding_request.step_number_backwards ASC ROWS BETWEEN UNBOUNDED PRECEDING
-      AND UNBOUNDED FOLLOWING) ) AS preceding_user_requests,
-  ARRAY(
-  SELECT
-    AS STRUCT * EXCEPT(referred_from_previous_request),
-    IFNULL(MIN(
-      IF
-        (NOT referred_from_previous_request,
-          step_number_forwards,
-          NULL)) OVER all_following_requests_in_increasing_time_order - 1,
-      MAX(step_number_forwards) OVER all_following_requests_in_increasing_time_order) AS total_number_of_following_steps_in_funnel
-  FROM
-    UNNEST(following_user_requests) AS following_request QUALIFY step_number_forwards <= total_number_of_following_steps_in_funnel
-  WINDOW
-    all_following_requests_in_increasing_time_order AS (
-    ORDER BY
-      following_request.step_number_forwards ASC ROWS BETWEEN UNBOUNDED PRECEDING
-      AND UNBOUNDED FOLLOWING) ) AS following_user_requests
+  CASE
+    WHEN preceding_user_requests[SAFE_ORDINAL(1)].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(1)].request_path_grouped
+    WHEN total_number_of_preceding_steps_in_funnel > 0 THEN "Different window or tab"
+    WHEN total_number_of_preceding_steps_in_funnel = 0 THEN "Arrived on site"
+  ELSE
+  NULL
+END
+  AS preceding_request_path_grouped_1,
+  CASE
+    WHEN preceding_user_requests[SAFE_ORDINAL(2)].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(2)].request_path_grouped
+    WHEN preceding_user_requests[SAFE_ORDINAL(1)].request_path_grouped IS NOT NULL
+  AND preceding_user_requests[SAFE_ORDINAL(2)].total_number_of_unbroken_preceding_steps_in_funnel = 1 THEN "Different window or tab"
+    WHEN preceding_user_requests[SAFE_ORDINAL(1)].request_path_grouped IS NOT NULL THEN "Arrived at site"
+  ELSE
+  NULL
+END
+  AS preceding_request_path_grouped_2,
+  CASE
+    WHEN preceding_user_requests[SAFE_ORDINAL(3)].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(3)].request_path_grouped
+    WHEN preceding_user_requests[SAFE_ORDINAL(2)].request_path_grouped IS NOT NULL
+  AND preceding_user_requests[SAFE_ORDINAL(3)].total_number_of_unbroken_preceding_steps_in_funnel = 2 THEN "Different window or tab"
+    WHEN preceding_user_requests[SAFE_ORDINAL(2)].request_path_grouped IS NOT NULL THEN "Arrived at site"
+  ELSE
+  NULL
+END
+  AS preceding_request_path_grouped_3,
+  CASE
+    WHEN preceding_user_requests[SAFE_ORDINAL(4)].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(4)].request_path_grouped
+    WHEN preceding_user_requests[SAFE_ORDINAL(3)].request_path_grouped IS NOT NULL
+  AND preceding_user_requests[SAFE_ORDINAL(4)].total_number_of_unbroken_preceding_steps_in_funnel = 3 THEN "Different window or tab"
+    WHEN preceding_user_requests[SAFE_ORDINAL(3)].request_path_grouped IS NOT NULL THEN "Arrived at site"
+  ELSE
+  NULL
+END
+  AS preceding_request_path_grouped_4,
+  CASE
+    WHEN preceding_user_requests[SAFE_ORDINAL(5)].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(5)].request_path_grouped
+    WHEN preceding_user_requests[SAFE_ORDINAL(4)].request_path_grouped IS NOT NULL
+  AND preceding_user_requests[SAFE_ORDINAL(5)].total_number_of_unbroken_preceding_steps_in_funnel = 4 THEN "Different window or tab"
+    WHEN preceding_user_requests[SAFE_ORDINAL(4)].request_path_grouped IS NOT NULL THEN "Arrived at site"
+  ELSE
+  NULL
+END
+  AS preceding_request_path_grouped_5,
+  CASE
+    WHEN following_user_requests[SAFE_ORDINAL(1)].request_path_grouped IS NOT NULL THEN following_user_requests[SAFE_ORDINAL(1)].request_path_grouped
+    WHEN total_number_of_following_steps_in_funnel > 0 THEN "Different window or tab"
+    WHEN total_number_of_following_steps_in_funnel = 0 THEN "Left site"
+  ELSE
+  NULL
+END
+  AS following_request_path_grouped_1,
+  CASE
+    WHEN following_user_requests[SAFE_ORDINAL(2)].request_path_grouped IS NOT NULL THEN following_user_requests[SAFE_ORDINAL(2)].request_path_grouped
+    WHEN following_user_requests[SAFE_ORDINAL(1)].request_path_grouped IS NOT NULL
+  AND following_user_requests[SAFE_ORDINAL(2)].total_number_of_unbroken_following_steps_in_funnel = 1 THEN "Different window or tab"
+    WHEN following_user_requests[SAFE_ORDINAL(1)].request_path_grouped IS NOT NULL THEN "Left site"
+  ELSE
+  NULL
+END
+  AS following_request_path_grouped_2,
+  CASE
+    WHEN following_user_requests[SAFE_ORDINAL(3)].request_path_grouped IS NOT NULL THEN following_user_requests[SAFE_ORDINAL(3)].request_path_grouped
+    WHEN following_user_requests[SAFE_ORDINAL(2)].request_path_grouped IS NOT NULL
+  AND following_user_requests[SAFE_ORDINAL(3)].total_number_of_unbroken_following_steps_in_funnel = 2 THEN "Different window or tab"
+    WHEN following_user_requests[SAFE_ORDINAL(2)].request_path_grouped IS NOT NULL THEN "Left site"
+  ELSE
+  NULL
+END
+  AS following_request_path_grouped_3,
+  CASE
+    WHEN following_user_requests[SAFE_ORDINAL(4)].request_path_grouped IS NOT NULL THEN following_user_requests[SAFE_ORDINAL(4)].request_path_grouped
+    WHEN following_user_requests[SAFE_ORDINAL(3)].request_path_grouped IS NOT NULL
+  AND following_user_requests[SAFE_ORDINAL(4)].total_number_of_unbroken_following_steps_in_funnel = 3 THEN "Different window or tab"
+    WHEN following_user_requests[SAFE_ORDINAL(3)].request_path_grouped IS NOT NULL THEN "Left site"
+  ELSE
+  NULL
+END
+  AS following_request_path_grouped_4,
+  CASE
+    WHEN following_user_requests[SAFE_ORDINAL(5)].request_path_grouped IS NOT NULL THEN following_user_requests[SAFE_ORDINAL(5)].request_path_grouped
+    WHEN following_user_requests[SAFE_ORDINAL(4)].request_path_grouped IS NOT NULL
+  AND following_user_requests[SAFE_ORDINAL(5)].total_number_of_unbroken_following_steps_in_funnel = 4 THEN "Different window or tab"
+    WHEN following_user_requests[SAFE_ORDINAL(4)].request_path_grouped IS NOT NULL THEN "Left site"
+  ELSE
+  NULL
+END
+  AS following_request_path_grouped_5
 FROM
-  web_request_referral_aware
+  web_request_with_unbroken_funnels_only
 `).preOps(ctx => `
     DECLARE event_date_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(),`SELECT MAX(DATE(occurred_at)) FROM ${ctx.self()}`,`SELECT DATE("2000-01-01")`)});
 /* Referer URLs in events include URI-formatted codes for some characters e.g. '%20' for ' '. This UDF parses them. */
-CREATE TEMP FUNCTION DECODE_URI_COMPONENT(url STRING) AS ((
-  SELECT STRING_AGG(
-    IF(REGEXP_CONTAINS(y, r'^%[0-9a-fA-F]{2}'), 
-      SAFE_CONVERT_BYTES_TO_STRING(FROM_HEX(REPLACE(y, '%', ''))), y), '' 
-    ORDER BY i
-    )
-  FROM UNNEST(REGEXP_EXTRACT_ALL(url, r"%[0-9a-fA-F]{2}(?:%[0-9a-fA-F]{2})*|[^%]+")) y
-  WITH OFFSET AS i 
-));`
+CREATE TEMP FUNCTION
+  DECODE_URI_COMPONENT(url STRING) AS ((
+    SELECT
+      STRING_AGG(
+      IF
+        (REGEXP_CONTAINS(y, r'^%[0-9a-fA-F]{2}'),
+          SAFE_CONVERT_BYTES_TO_STRING(FROM_HEX(REPLACE(y, '%', ''))),
+          y), ''
+      ORDER BY
+        i )
+    FROM
+      UNNEST(REGEXP_EXTRACT_ALL(url, r"%[0-9a-fA-F]{2}(?:%[0-9a-fA-F]{2})*|[^%]+")) y
+    WITH
+    OFFSET
+      AS i ));`
       )
 }
