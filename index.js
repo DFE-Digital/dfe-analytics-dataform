@@ -18,7 +18,8 @@ module.exports = (params) => {
     bqProjectName: null, // name of the BigQuery project that dfe-analytics streams event data into
     bqDatasetName: null, // name of the BigQuery dataset that dfe-analytics streams event data into
     bqEventsTableName: 'events', // name of the BigQuery table that dfe-analytics streams event data into
-    transformEntityEvents: true, // whether to generate tables that transform entity CRUD events into flattened tables,
+    transformEntityEvents: true, // whether to generate tables that transform entity CRUD events into flattened tables
+    funnelDepth: 10, // Number of steps forwards/backwards to analyse in funnels - higher allows deeper analysis, lower reduces CPU usage
     dataSchema: [],
     ...params
   };
@@ -30,7 +31,8 @@ module.exports = (params) => {
     bqDatasetName,
     bqEventsTableName,
     transformEntityEvents,
-    dataSchema
+    dataSchema,
+    funnelDepth
   } = params;
 
   // Declare the source table
