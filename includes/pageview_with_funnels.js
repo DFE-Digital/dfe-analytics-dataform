@@ -21,11 +21,11 @@ module.exports = (params) => {
     ELSE NULL
   END AS following_request_path_grouped_${i},
   CASE
-    WHEN preceding_user_requests[SAFE_ORDINAL(${i-1})].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(${i-1})].seconds_since_previous_step
+    WHEN preceding_user_requests[SAFE_ORDINAL(${i})].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(${i-1})].seconds_since_previous_step
     ELSE NULL
   END AS seconds_between_preceding_steps_${i-1}_and_${i},
   CASE
-    WHEN following_user_requests[SAFE_ORDINAL(${i-1})].request_path_grouped IS NOT NULL THEN following_user_requests[SAFE_ORDINAL(${i-1})].seconds_until_next_step
+    WHEN following_user_requests[SAFE_ORDINAL(${i})].request_path_grouped IS NOT NULL THEN following_user_requests[SAFE_ORDINAL(${i-1})].seconds_until_next_step
     ELSE NULL
   END AS seconds_between_following_steps_${i-1}_and_${i},\n`;
     }
