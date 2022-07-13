@@ -42,7 +42,7 @@ module.exports = (params) => {
         sourcedataset: params.bqDatasetName.toLowerCase()
       }
     },
-    description: "Pageview events from the events table streamed from " + params.eventSourceName + " into the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project, with ARRAY fields added containing the previous and following " + params.funnelDepth + " pageview events in strict time AND referer order, numbered to allow funnel analysis.",
+    description: "Pageview events from the events table streamed from " + params.eventSourceName + " into the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project, with fields added containing the paths for the previous and following " + params.funnelDepth + " pageview events in strict time AND referer order, numbered to allow funnel analysis. Fields containing the time between each step are also included.",
     columns: {
       occurred_at: "The timestamp at which the event occurred in the application.",
       event_type: "The type of the event, for example web_request. This determines the schema of the data which will be included in the data field.",
