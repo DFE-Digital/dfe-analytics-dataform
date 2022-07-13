@@ -9,14 +9,14 @@ module.exports = (params) => {
   CASE
     WHEN preceding_user_requests[SAFE_ORDINAL(${i})].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(${i})].request_path_grouped
     WHEN preceding_user_requests[SAFE_ORDINAL(${i-1})].request_path_grouped IS NOT NULL
-  AND preceding_user_requests[SAFE_ORDINAL(${i})].total_number_of_unbroken_preceding_steps_in_funnel = ${i-1} THEN "Different window or tab"
+  AND total_number_of_preceding_steps_in_funnel = ${i} THEN "Different window or tab"
     WHEN preceding_user_requests[SAFE_ORDINAL(${i-1})].request_path_grouped IS NOT NULL THEN "Arrived on site"
     ELSE NULL
   END AS preceding_request_path_grouped_${i},
   CASE
     WHEN following_user_requests[SAFE_ORDINAL(${i})].request_path_grouped IS NOT NULL THEN following_user_requests[SAFE_ORDINAL(${i})].request_path_grouped
     WHEN following_user_requests[SAFE_ORDINAL(${i-1})].request_path_grouped IS NOT NULL
-  AND following_user_requests[SAFE_ORDINAL(${i})].total_number_of_unbroken_following_steps_in_funnel = ${i-1} THEN "Different window or tab"
+  AND total_number_of_following_steps_in_funnel = ${i} THEN "Different window or tab"
     WHEN following_user_requests[SAFE_ORDINAL(${i-1})].request_path_grouped IS NOT NULL THEN "Left site"
     ELSE NULL
   END AS following_request_path_grouped_${i},
@@ -96,7 +96,8 @@ WITH
     AND device_category != "bot"
     AND CONTAINS_SUBSTR(response_content_type,
       "text/html")
-    AND DATE(occurred_at) < CURRENT_DATE),
+    AND DATE(occurred_at) < CURRENT_DATE
+    AND DATE(occurred_at) > event_date_timestamp),
   web_request_with_processed_referer AS (
   SELECT
     *,
