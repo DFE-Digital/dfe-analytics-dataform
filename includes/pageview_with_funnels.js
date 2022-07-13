@@ -97,7 +97,7 @@ WITH
     AND CONTAINS_SUBSTR(response_content_type,
       "text/html")
     AND DATE(occurred_at) < CURRENT_DATE
-    AND DATE(occurred_at) > event_date_timestamp),
+    AND DATE(occurred_at) > event_date_checkpoint),
   web_request_with_processed_referer AS (
   SELECT
     *,
