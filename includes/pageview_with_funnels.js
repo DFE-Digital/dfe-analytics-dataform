@@ -20,8 +20,8 @@ module.exports = (params) => {
     WHEN following_user_requests[SAFE_ORDINAL(${i-1})].request_path_grouped IS NOT NULL THEN "Left site"
     ELSE NULL
   END AS following_request_path_grouped_${i},
-  preceding_user_requests[SAFE_ORDINAL(${i-1})].interval_since_previous_step AS interval_between_preceding_steps_${i-1}_and_${i},
-  following_user_requests[SAFE_ORDINAL(${i-1})].interval_until_next_step AS interval_between_following_steps_${i-1}_and_${i},\n`;
+  preceding_user_requests[SAFE_ORDINAL(${i-1})].seconds_since_previous_step AS seconds_between_preceding_steps_${i-1}_and_${i},
+  following_user_requests[SAFE_ORDINAL(${i-1})].seconds_until_next_step AS seconds_between_following_steps_${i-1}_and_${i},\n`;
     }
   return sqlToReturn;
   }
@@ -61,10 +61,10 @@ module.exports = (params) => {
       operating_system_version: "The version of the operating system used to cause this event.",
       preceding_request_path_grouped_1: "The request_path_grouped for the pageview that took place 1 step before this pageview (and so on for further steps in other fields with names following this pattern). If this was the first pageview for that day, this will be the string 'Arrived on site' rather than NULL. If there was a pageview that took place 1 step before this pageview, but the referer did not match (so it wasn't a click) then this will be the string 'Different window or tab' rather than NULL.",
       following_request_path_grouped_2: "The request_path_grouped for the pageview that took place 1 step after this pageview (and so on for further steps in other fields with names following this pattern).  If this was the last pageview for that day, this will be the string 'Left site' rather than NULL. If there was a pageview that took place 1 step after this pageview, but the referer did not match (so it wasn't a click) then this will be the string 'Different window or tab' rather than NULL.",
-      interval_since_preceding_step_1: "The amount of time that elapsed between this pageview and the pageview that took place 1 step before this pageview.",
-      interval_until_following_step_1: "The amount of time that elapsed between this pageview and the pageview that took place 1 step after this pageview.",
-      interval_between_preceding_steps_1_and_2: "The amount of time that elapsed between the pageview that took place 1 step before this pageview and the pageview that took place 2 steps before this pageview (and so on for further steps in other fields with names that follow this pattern).",
-      interval_between_following_steps_1_and_2: "The amount of time that elapsed between the pageview that took place 1 step after this pageview and the pageview that took place 2 steps after this pageview (and so on for further steps in other fields with names that follow this pattern)."
+      seconds_since_preceding_step_1: "The number of seconds (to microsecond precision) that elapsed between this pageview and the pageview that took place 1 step before this pageview.",
+      seconds_until_following_step_1: "The number of seconds (to microsecond precision) that elapsed between this pageview and the pageview that took place 1 step after this pageview.",
+      seconds_between_preceding_steps_1_and_2: "The number of seconds (to microsecond precision) that elapsed between the pageview that took place 1 step before this pageview and the pageview that took place 2 steps before this pageview (and so on for further steps in other fields with names that follow this pattern).",
+      seconds_between_following_steps_1_and_2: "The number of seconds (to microsecond precision) that elapsed between the pageview that took place 1 step after this pageview and the pageview that took place 2 steps after this pageview (and so on for further steps in other fields with names that follow this pattern)."
     }
   }).query(ctx => `
 WITH
@@ -149,8 +149,8 @@ WITH
       ROW_NUMBER() OVER all_preceding_requests_in_reverse_time_order AS step_number_backwards,
       FIRST_VALUE(preceding_request.request_referer_path) OVER next_request AS next_referer_path,
       FIRST_VALUE(preceding_request.request_referer_query) OVER next_request AS next_referer_query,
-      LAG(preceding_request.occurred_at) OVER all_preceding_requests_in_reverse_time_order - preceding_request.occurred_at AS interval_until_next_step,
-      preceding_request.occurred_at - LEAD(preceding_request.occurred_at) OVER all_preceding_requests_in_reverse_time_order AS interval_since_previous_step
+      SAFE_DIVIDE(TIMESTAMP_DIFF(LAG(preceding_request.occurred_at) OVER all_preceding_requests_in_reverse_time_order,preceding_request.occurred_at, MICROSECOND), 1000000) AS seconds_until_next_step,
+      SAFE_DIVIDE(TIMESTAMP_DIFF(preceding_request.occurred_at, LEAD(preceding_request.occurred_at) OVER all_preceding_requests_in_reverse_time_order, MICROSECOND), 1000000) AS seconds_since_previous_step
     FROM
       UNNEST(preceding_user_requests) AS preceding_request
     WINDOW
@@ -167,8 +167,8 @@ WITH
       ROW_NUMBER() OVER all_following_requests_in_increasing_time_order AS step_number_forwards,
       FIRST_VALUE(following_request.request_path) OVER previous_request AS previous_request_path,
       FIRST_VALUE(following_request.request_query) OVER previous_request AS previous_request_query,
-      following_request.occurred_at - LAG(following_request.occurred_at) OVER all_following_requests_in_increasing_time_order AS interval_since_previous_step,
-      LEAD(following_request.occurred_at) OVER all_following_requests_in_increasing_time_order - following_request.occurred_at AS interval_until_next_step
+      SAFE_DIVIDE(TIMESTAMP_DIFF(following_request.occurred_at, LAG(following_request.occurred_at) OVER all_following_requests_in_increasing_time_order, MICROSECOND), 1000000) AS seconds_since_previous_step,
+      SAFE_DIVIDE(TIMESTAMP_DIFF(LEAD(following_request.occurred_at) OVER all_following_requests_in_increasing_time_order, following_request.occurred_at, MICROSECOND), 1000000) AS seconds_until_next_step
     FROM
       UNNEST(following_user_requests) AS following_request
     WINDOW
@@ -314,8 +314,8 @@ SELECT
     WHEN total_number_of_following_steps_in_funnel = 0 THEN "Left site"
     ELSE NULL
   END AS following_request_path_grouped_1,
-  occurred_at - preceding_user_requests[SAFE_ORDINAL(1)].occurred_at AS interval_since_preceding_step_1,
-  following_user_requests[SAFE_ORDINAL(1)].occurred_at - occurred_at AS interval_until_following_step_1,
+  SAFE_DIVIDE(TIMESTAMP_DIFF(occurred_at,preceding_user_requests[SAFE_ORDINAL(1)].occurred_at, MICROSECOND), 1000000) AS seconds_since_preceding_step_1,
+  SAFE_DIVIDE(TIMESTAMP_DIFF(following_user_requests[SAFE_ORDINAL(1)].occurred_at, occurred_at, MICROSECOND), 1000000) AS seconds_until_following_step_1,
 ${stepFields(params.funnelDepth)}
 FROM
   web_request_with_unbroken_funnels_only
