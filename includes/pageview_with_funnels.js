@@ -76,9 +76,7 @@ module.exports = (params) => {
       operating_system_vendor: "The vendor of the operating system used to cause this event.",
       operating_system_version: "The version of the operating system used to cause this event.",
       seconds_since_preceding_step_1: "The number of seconds (to microsecond precision) that elapsed between this pageview and the pageview that took place 1 step before this pageview.",
-      seconds_until_following_step_1: "The number of seconds (to microsecond precision) that elapsed between this pageview and the pageview that took place 1 step after this pageview.",
-      seconds_between_preceding_steps_1_and_2: "The number of seconds (to microsecond precision) that elapsed between the pageview that took place 1 step before this pageview and the pageview that took place 2 steps before this pageview (and so on for further steps in other fields with names that follow this pattern).",
-      seconds_between_following_steps_1_and_2: "The number of seconds (to microsecond precision) that elapsed between the pageview that took place 1 step after this pageview and the pageview that took place 2 steps after this pageview (and so on for further steps in other fields with names that follow this pattern)."
+      seconds_until_following_step_1: "The number of seconds (to microsecond precision) that elapsed between this pageview and the pageview that took place 1 step after this pageview."
     }, ...stepFieldMetadata)
   }).query(ctx => `
 WITH
