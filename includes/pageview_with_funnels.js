@@ -1,4 +1,12 @@
 module.exports = (params) => {
+  const stepNumbers = Array.from({length: params.funnelDepth}, (_, i) => i + 1);
+  const stepFieldMetadata = stepNumbers.map(stepNumber => ({
+        ["preceding_request_path_grouped_" + stepNumber]: `The request_path_grouped for the pageview that took place ${stepNumber} step(s) before this pageview . If this was the first pageview for that day, this will be the string 'Arrived on site' rather than NULL. If there was a pageview that took place ${stepNumber+1} steps before this pageview, but the referer of this pageview did not match the path for that pageview (so it wasn't a click) then this will be the string 'Different window or tab' rather than NULL.`,
+        ["following_request_path_grouped_" + stepNumber]: `The request_path_grouped for the pageview that took place ${stepNumber} step(s) after this pageview . If this was the last pageview for that day, this will be the string 'Left site' rather than NULL. If there was a pageview that took place ${stepNumber+1} steps after this pageview, but the referer of this pageview did not match the path for that pageview (so it wasn't a click) then this will be the string 'Different window or tab' rather than NULL.`,
+      ["seconds_between_preceding_steps_" + (stepNumber - 1) + "_and_" + stepNumber]: `The number of seconds (to microsecond precision) that elapsed between the pageview that took place ${stepNumber - 1} step before this pageview and the pageview that took place ${stepNumber} steps before this pageview (and so on for further steps in other fields with names that follow this pattern).`,
+      ["seconds_between_following_steps_" + (stepNumber - 1) + "_and_" + stepNumber]: `The number of seconds (to microsecond precision) that elapsed between the pageview that took place ${stepNumber - 1} step after this pageview and the pageview that took place ${stepNumber} steps after this pageview (and so on for further steps in other fields with names that follow this pattern).`
+      })
+    );
   function stepFields() {
   var sqlToReturn = '';
   if((!(Number.isInteger(params.funnelDepth))) || params.funnelDepth < 1) {
@@ -43,7 +51,7 @@ module.exports = (params) => {
       }
     },
     description: "Pageview events from the events table streamed from " + params.eventSourceName + " into the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project, with fields added containing the paths for the previous and following " + params.funnelDepth + " pageview events in strict time AND referer order, numbered to allow funnel analysis. Fields containing the time between each step are also included.",
-    columns: {
+    columns: Object.assign({
       occurred_at: "The timestamp at which the event occurred in the application.",
       event_type: "The type of the event, for example web_request. This determines the schema of the data which will be included in the data field.",
       environment: "The application environment that the event was streamed from.",
@@ -65,13 +73,11 @@ module.exports = (params) => {
       operating_system_name: "The name of the operating system used to cause this event.",
       operating_system_vendor: "The vendor of the operating system used to cause this event.",
       operating_system_version: "The version of the operating system used to cause this event.",
-      preceding_request_path_grouped_1: "The request_path_grouped for the pageview that took place 1 step before this pageview (and so on for further steps in other fields with names following this pattern). If this was the first pageview for that day, this will be the string 'Arrived on site' rather than NULL. If there was a pageview that took place 1 step before this pageview, but the referer did not match (so it wasn't a click) then this will be the string 'Different window or tab' rather than NULL.",
-      following_request_path_grouped_2: "The request_path_grouped for the pageview that took place 1 step after this pageview (and so on for further steps in other fields with names following this pattern).  If this was the last pageview for that day, this will be the string 'Left site' rather than NULL. If there was a pageview that took place 1 step after this pageview, but the referer did not match (so it wasn't a click) then this will be the string 'Different window or tab' rather than NULL.",
       seconds_since_preceding_step_1: "The number of seconds (to microsecond precision) that elapsed between this pageview and the pageview that took place 1 step before this pageview.",
       seconds_until_following_step_1: "The number of seconds (to microsecond precision) that elapsed between this pageview and the pageview that took place 1 step after this pageview.",
       seconds_between_preceding_steps_1_and_2: "The number of seconds (to microsecond precision) that elapsed between the pageview that took place 1 step before this pageview and the pageview that took place 2 steps before this pageview (and so on for further steps in other fields with names that follow this pattern).",
       seconds_between_following_steps_1_and_2: "The number of seconds (to microsecond precision) that elapsed between the pageview that took place 1 step after this pageview and the pageview that took place 2 steps after this pageview (and so on for further steps in other fields with names that follow this pattern)."
-    }
+    }, ...stepFieldMetadata)
   }).query(ctx => `
 WITH
   web_request AS (
