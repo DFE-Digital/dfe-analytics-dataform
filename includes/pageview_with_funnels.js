@@ -63,7 +63,9 @@ module.exports = (params) => {
       request_path_grouped: "request_path, except with any string between two forward slashes (/) that contains a digit (0-9) replaced with the string 'UID'. Useful for grouping pages in funnel analysis.",
       request_user_agent: "The user agent of the web request that either is this event or caused this event. Allows a user's browser and operating system to be identified.",
       request_referer: "The URL of any page the user was viewing when they initiated the web request that either is this event or caused this event. This is the full URL, including protocol (https://) and any query parameters, if the browser shared these with our application as part of the web request. It is very common for this referer to be truncated for referrals from external sites.",
+      request_referer_path: "The path part of request_referer, starting with a / and excluding any query parameters.",
       request_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters that were sent to the application as part of the web request that was this event or caused this event.",
+      request_referer_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters present in request_referer.",
       response_content_type: "Content type of any data that was returned to the browser following the web request that either was this event or caused this event. For example, 'text/html; charset=utf-8'. Image views, for example, may have a non-text/html content type.",
       response_status: "HTTP response code returned by the application in response to the web request that either was this event or caused this event. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status.",
       anonymised_user_agent_and_ip: "One way hash of a combination of the user's IP address and user agent. Can be used to identify the user anonymously, even when user_id is not set. Cannot be used to identify the user over a time period of longer than about a month, because of IP address changes and browser updates.",
@@ -314,7 +316,9 @@ WITH
     web_request_referral_aware)
 SELECT
   * EXCEPT(preceding_user_requests,
-    following_user_requests),
+    following_user_requests,
+    total_number_of_preceding_steps_in_funnel,
+    total_number_of_following_steps_in_funnel),
   CASE
     WHEN preceding_user_requests[SAFE_ORDINAL(1)].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(1)].request_path_grouped
     WHEN total_number_of_preceding_steps_in_funnel > 0 THEN "Different window or tab"
