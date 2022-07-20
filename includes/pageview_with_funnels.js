@@ -125,7 +125,7 @@ WITH
   FROM
     web_request),
   web_request_with_funnels AS (
-  /* Give each web request two ARRAYs of STRUCTs containing its 10 preceding and following web requests for the user who made it. Limited to 10 to ensure the query is able to run within BQ limits */
+  /* Give each web request two ARRAYs of STRUCTs containing its ${params.funnelDepth} preceding and following web requests for the user who made it. Limited to ${params.funnelDepth} to ensure the query is able to run within BQ limits */
   SELECT
     *,
     ARRAY_AGG(STRUCT(occurred_at,
@@ -137,7 +137,7 @@ WITH
         request_referer_path,
         request_referer_query)) OVER (PARTITION BY anonymised_user_agent_and_ip, DATE(occurred_at)
     ORDER BY
-      occurred_at ASC ROWS BETWEEN 10 PRECEDING
+      occurred_at ASC ROWS BETWEEN ${params.funnelDepth} PRECEDING
       AND 1 PRECEDING) AS preceding_user_requests,
     ARRAY_AGG(STRUCT(occurred_at,
         request_uuid,
@@ -149,7 +149,7 @@ WITH
         request_referer_query)) OVER (PARTITION BY anonymised_user_agent_and_ip, DATE(occurred_at)
     ORDER BY
       occurred_at ASC ROWS BETWEEN 1 FOLLOWING
-      AND 10 FOLLOWING) AS following_user_requests
+      AND ${params.funnelDepth} FOLLOWING) AS following_user_requests
   FROM
     web_request_with_processed_referer),
   web_request_with_numbered_funnels AS (
