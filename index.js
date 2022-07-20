@@ -20,6 +20,7 @@ module.exports = (params) => {
     bqEventsTableName: 'events', // name of the BigQuery table that dfe-analytics streams event data into
     transformEntityEvents: true, // whether to generate tables that transform entity CRUD events into flattened tables
     funnelDepth: 10, // Number of steps forwards/backwards to analyse in funnels - higher allows deeper analysis, lower reduces CPU usage
+    requestPathGroupingRegex: '[0-9a-zA-Z]*[0-9][0-9a-zA-Z]*', // re2-formatted regular expression to replace with the string 'UID' when grouping request paths
     dataSchema: [],
     ...params
   };
@@ -31,8 +32,9 @@ module.exports = (params) => {
     bqDatasetName,
     bqEventsTableName,
     transformEntityEvents,
-    dataSchema,
-    funnelDepth
+    funnelDepth,
+    requestPathGroupingRegex,
+    dataSchema
   } = params;
 
   // Declare the source table

@@ -114,14 +114,7 @@ WITH
       REGEXP_EXTRACT(string, r"=([^=]+)$") AS value
     FROM
       UNNEST(REGEXP_EXTRACT_ALL(request_referer, r"[?&]([^&]+)(?:&|$)")) AS string) AS request_referer_query,
-    ARRAY_TO_STRING( ARRAY(
-      SELECT
-      IF
-        ( REGEXP_CONTAINS(path_part, "[0-9]"),
-          "UID",
-          path_part )
-      FROM
-        UNNEST(SPLIT(request_path, "/")) AS path_part ), "/" ) AS request_path_grouped
+    REGEXP_REPLACE(request_path, r"${params.requestPathGroupingRegex}", "UID") AS request_path_grouped
   FROM
     web_request),
   web_request_with_funnels AS (
