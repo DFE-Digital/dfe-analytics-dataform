@@ -1,5 +1,6 @@
 const dataFunctions = require("./includes/data_functions");
 const events = require("./includes/events");
+const pageviewWithFunnel = require("./includes/pageview_with_funnels");
 const entityVersion = require("./includes/entity_version");
 const entityFieldUpdates = require("./includes/entity_field_updates");
 const flattenedEntityVersion = require("./includes/flattened_entity_version");
@@ -17,7 +18,9 @@ module.exports = (params) => {
     bqProjectName: null, // name of the BigQuery project that dfe-analytics streams event data into
     bqDatasetName: null, // name of the BigQuery dataset that dfe-analytics streams event data into
     bqEventsTableName: 'events', // name of the BigQuery table that dfe-analytics streams event data into
-    transformEntityEvents: true, // whether to generate tables that transform entity CRUD events into flattened tables,
+    transformEntityEvents: true, // whether to generate tables that transform entity CRUD events into flattened tables
+    funnelDepth: 10, // Number of steps forwards/backwards to analyse in funnels - higher allows deeper analysis, lower reduces CPU usage
+    requestPathGroupingRegex: '[0-9a-zA-Z]*[0-9][0-9a-zA-Z]*', // re2-formatted regular expression to replace with the string 'UID' when grouping request paths
     dataSchema: [],
     ...params
   };
@@ -29,6 +32,8 @@ module.exports = (params) => {
     bqDatasetName,
     bqEventsTableName,
     transformEntityEvents,
+    funnelDepth,
+    requestPathGroupingRegex,
     dataSchema
   } = params;
 
@@ -46,6 +51,7 @@ module.exports = (params) => {
     return {
       eventsRaw,
       events: events(params),
+      pageviewWithFunnel: pageviewWithFunnel(params),
       entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
       unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
       entityVersion: entityVersion(params),
@@ -60,7 +66,8 @@ module.exports = (params) => {
   } else {
     return {
       eventsRaw,
-      events: events(params)
+      events: events(params),
+      pageviewWithFunnel: pageviewWithFunnel(params)
     }
   }
 }
