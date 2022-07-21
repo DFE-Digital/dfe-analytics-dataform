@@ -116,8 +116,8 @@ FROM (
     FROM (
       SELECT
         AS STRUCT key,
-        NULLIF(ARRAY_TO_STRING(ARRAY_CONCAT_AGG(value), ""),
-          ",") AS value
+        NULLIF(ARRAY_TO_STRING(ARRAY_CONCAT_AGG(value), ","),
+          "") AS value
       FROM
         UNNEST(DATA)
       GROUP BY
