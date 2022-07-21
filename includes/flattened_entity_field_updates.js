@@ -57,7 +57,7 @@ module.exports = (params) => {
       operating_system_version: "The version of the operating system that caused this update."
       }, ...getNewColumnDescriptions(tableSchema.keys), ...getPreviousColumnDescriptions(tableSchema.keys))
   }).query(ctx => `SELECT
-  * EXCEPT(new_DATA_struct, previous_DATA_struct, original_DATA, entity_table_name, updated_at),
+  * EXCEPT(new_DATA_struct, previous_DATA_struct, entity_table_name, updated_at),
   ${tableSchema.keys.map(key => {
         if(key.dataType == 'boolean') {
           return `SAFE_CAST(new_DATA_struct.${key.alias || key.keyName} AS BOOL) AS new_${key.alias || key.keyName},\n
