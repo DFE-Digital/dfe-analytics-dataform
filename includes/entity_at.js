@@ -26,7 +26,7 @@ module.exports = (params) => {
     ${ctx.ref(tableSchema.entityTableName + "_version_" + params.eventSourceName)}
   WHERE
     (valid_to IS NULL
-      OR valid_to > CURRENT_TIMESTAMP)
-    AND valid_from <= CURRENT_TIMESTAMP
+      OR valid_to > timestamp_at)
+    AND valid_from <= timestamp_at
   `))
 }
