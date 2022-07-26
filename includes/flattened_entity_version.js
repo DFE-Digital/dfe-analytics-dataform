@@ -86,10 +86,12 @@ module.exports = (params) => {
           return `${data_functions.stringToIntegerArray(`DATA_struct.${key.alias || key.keyName}`)} AS ${key.alias || key.keyName},`;
         } else if (key.dataType == 'float') {
           return `SAFE_CAST(DATA_struct.${key.alias || key.keyName} AS FLOAT64) AS ${key.alias || key.keyName},`;
+        } else if (key.dataType == 'json') {
+          return `SAFE.PARSE_JSON(DATA_struct.${key.alias || key.keyName}) AS ${key.alias || key.keyName},`;
         } else if (key.dataType == 'string' || key.dataType == undefined) {
           return `DATA_struct.${key.alias || key.keyName} AS ${key.alias || key.keyName},`;
         } else {
-          throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array, float or string or not set.`);
+          throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array, float, json or string or not set.`);
         }
       }
     ).join('\n')

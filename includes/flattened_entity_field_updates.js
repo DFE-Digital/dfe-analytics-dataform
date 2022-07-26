@@ -77,11 +77,14 @@ module.exports = (params) => {
         } else if (key.dataType == 'float') {
           return `SAFE_CAST(new_DATA_struct.${key.alias || key.keyName} AS FLOAT64) AS new_${key.alias || key.keyName},\n
           SAFE_CAST(previous_DATA_struct.${key.alias || key.keyName} AS FLOAT64) AS previous_${key.alias || key.keyName},`;
+        } else if (key.dataType == 'json') {
+          return `SAFE.PARSE_JSON(new_DATA_struct.${key.alias || key.keyName}) AS new_${key.alias || key.keyName},\n
+          SAFE.PARSE_JSON(previous_DATA_struct.${key.alias || key.keyName}) AS previous_${key.alias || key.keyName},`;
         } else if (key.dataType == 'string' || key.dataType == undefined) {
           return `new_DATA_struct.${key.alias || key.keyName} AS new_${key.alias || key.keyName},\n
           previous_DATA_struct.${key.alias || key.keyName} AS previous_${key.alias || key.keyName},`;
         } else {
-          throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array, float or string or not set.`);
+          throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array, float, json or string or not set.`);
         }
       }
     ).join('\n')
