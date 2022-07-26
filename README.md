@@ -7,14 +7,14 @@ Dataform package containing commonly used SQL functions and table definitions, f
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.8.16"
+"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.9.0"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
         "@dataform/core": "1.22.0",
-        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.8.16"
+        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.9.0"
     }
 }
 ```
@@ -71,6 +71,7 @@ The names of these will vary depending on the ```eventSourceName``` you have spe
 - A table called ```foo_analytics_yml_latest```, which is a table version of the ```dataSchema``` you specified.
 - A table called ```foo_data_schema_json_latest```, which is a default dataSchema JSON you could use to get started specifying this in dfe_analytics_dataform.js
 - For each ```entityTableName``` you specified in ```dataSchema``` like ```bar```, tables called something like ```bar_version_foo``` and ```bar_latest_foo```. ```bar_version_foo``` is a denormalised ('flattened') version of ```foo_version```, flattened according to the schema for ```foo``` you specified in ```dataSchema```. ```bar_latest_foo``` is the same as ```bar_version_foo``` except that it only includes the latest version of each entity (i.e. with ```valid_to IS NULL```). Both tables and fields within them will have metadata set to match the descriptions set in ```dataSchema```.
+- Table valued functions called something like ```bar_at_foo``` which can be used to generate a past version of a table at a specified timestamp.
 - Assertions to help spot when your ```dataSchema``` has become out of date or has a problem. These will tell you if ```foo_entities_are_missing_expected_fields``` or if ```foo_unhandled_field_or_entity_is_being_streamed```. The former will halt your pipeline from executing, while the latter will just alert you to the assertion failure.
 - A table called ```foo_entity_field_updates```, which contains one row for each time a field was updated for any entity that is streamed as events from the database, setting out the name of the field, the previous value of the field and the new value of the field. Entity deletions and updates to any ```updated_at``` fields are not included, but ```NULL``` values are.
 - For each ```entityTableName``` you specified in ```dataSchema``` like ```bar```, a table called something like ```bar_field_updates_foo```. ```bar_field_updates_foo``` is a denormalised ('flattened') version of ```foo_entity_field_updates```, filtered down to the entity ```bar```, and with the new and previous values of that entity flattened according to the schema for ```foo``` you specified in ```dataSchema```. Fields will have metadata set to match the descriptions set in ```dataSchema```.

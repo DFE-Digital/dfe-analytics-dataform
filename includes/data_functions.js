@@ -71,26 +71,26 @@ function keyIsInEventData(dataField, keyToLookFor, dynamic = false) {
 
 /* Shortcut to run eventDataExtract and then parse the string extracted as a timestamp, attempting multiple formats. If timezone is not present, assumes timezone is Europe/London. If unable to parse the string as a timestamp in any of the formats, returns NULL (not an error). */
 
-function eventDataExtractTimestamp(dataField, keyToExtract, dynamic = false) {
-  return `COALESCE(
+function stringToTimestamp(string) {
+    return `COALESCE(
     SAFE.PARSE_TIMESTAMP(
       '%FT%H:%M:%E*S%Ez',
       TRIM(
-        ${eventDataExtract(dataField, keyToExtract, dynamic)},
+        ${string},
         "\\""
       )
     ),
     SAFE.PARSE_TIMESTAMP(
       '%FT%T%Ez',
       TRIM(
-        ${eventDataExtract(dataField, keyToExtract, dynamic)},
+        ${string},
         "\\""
       )
     ),
     SAFE.PARSE_TIMESTAMP(
       '%e %B %Y %R',
       TRIM(
-        ${eventDataExtract(dataField, keyToExtract, dynamic)},
+        ${string},
         "\\""
       ),
       "Europe/London"
@@ -100,7 +100,7 @@ function eventDataExtractTimestamp(dataField, keyToExtract, dynamic = false) {
       REPLACE(
         REPLACE(
           TRIM(
-            ${eventDataExtract(dataField, keyToExtract, dynamic)},
+            ${string},
             "\\""
           ),
           "pm",
@@ -114,25 +114,33 @@ function eventDataExtractTimestamp(dataField, keyToExtract, dynamic = false) {
   )`
 };
 
+function eventDataExtractTimestamp(dataField, keyToExtract, dynamic = false) {
+  return stringToTimestamp(eventDataExtract(dataField, keyToExtract, dynamic))
+};
+
 /* Shortcut to run eventDataExtract and then parse the string extracted as a date, attempting multiple formats (including a timestamp cast to a date). If unable to parse the string as a date in any of the formats, returns NULL (not an error). */
 
-function eventDataExtractDate(dataField, keyToExtract, dynamic = false) {
+function stringToDate(string) {
   return `COALESCE(
     SAFE.PARSE_DATE(
       '%F',
-      ${eventDataExtract(dataField, keyToExtract, dynamic)}
+      ${string}
     ),
     SAFE.PARSE_DATE(
       '%e %B %Y',
-      ${eventDataExtract(dataField, keyToExtract, dynamic)}
+      ${string}
     ),
-    CAST(${eventDataExtractTimestamp(dataField, keyToExtract, dynamic)} AS DATE)
+    CAST(${stringToTimestamp(string)} AS DATE)
   )`
+};
+
+function eventDataExtractDate(dataField, keyToExtract, dynamic = false) {
+  return stringToDate(eventDataExtract(dataField, keyToExtract, dynamic))
 };
 
 /* Shortcut to extract a string like [3,75,2,1] from a DATA struct using eventDataExtract and then convert it into an ARRAY of integers. */
 
-function eventDataExtractIntegerArray(dataField, keyToExtract, dynamic = false) {
+function stringToIntegerArray(string) {
   return `ARRAY(
     SELECT
       step_int
@@ -144,7 +152,7 @@ function eventDataExtractIntegerArray(dataField, keyToExtract, dynamic = false) 
           UNNEST(
             SPLIT(
               TRIM(
-                ${eventDataExtract(dataField, keyToExtract, dynamic)},
+                ${string},
                 "[]"
               ),
               ","
@@ -154,6 +162,10 @@ function eventDataExtractIntegerArray(dataField, keyToExtract, dynamic = false) 
     WHERE
       step_int IS NOT NULL
   )`
+};
+
+function eventDataExtractIntegerArray(dataField, keyToExtract, dynamic = false) {
+  return stringToIntegerArray(eventDataExtract(dataField, keyToExtract, dynamic))
 };
 
 /* Sets the value of key to value within a DATA struct in a streamed event. */
@@ -183,6 +195,9 @@ module.exports = {
   eventDataExtract,
   eventDataExtractListOfStringsBeginning,
   keyIsInEventData,
+  stringToTimestamp,
+  stringToDate,
+  stringToIntegerArray,
   eventDataExtractTimestamp,
   eventDataExtractDate,
   eventDataExtractIntegerArray,
