@@ -115,6 +115,7 @@ WITH
     OR NOT request_queries_are_equal(request_query, previous_request_query)
   WINDOW
     previous_request AS (
+    PARTITION BY anonymised_user_agent_and_ip, DATE(occurred_at)
     ORDER BY
       occurred_at ASC ROWS BETWEEN 1 PRECEDING
       AND 1 PRECEDING) ),
