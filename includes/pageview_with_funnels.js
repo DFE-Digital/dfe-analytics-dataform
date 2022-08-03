@@ -104,9 +104,24 @@ WITH
       "text/html")
     AND DATE(occurred_at) < CURRENT_DATE
     AND DATE(occurred_at) > event_date_checkpoint),
-  web_request_with_processed_referer AS (
+  /* Remove web requests where neither the request path or query have changed since the previous one */
+  web_request_without_duplicates AS (
   SELECT
     *,
+    FIRST_VALUE(request_path) OVER previous_request AS previous_request_path,
+    FIRST_VALUE(request_query) OVER previous_request AS previous_request_query
+  FROM
+    web_request QUALIFY request_path != previous_request_path
+    OR NOT request_queries_are_equal(request_query, previous_request_query)
+  WINDOW
+    previous_request AS (
+    PARTITION BY anonymised_user_agent_and_ip, DATE(occurred_at)
+    ORDER BY
+      occurred_at ASC ROWS BETWEEN 1 PRECEDING
+      AND 1 PRECEDING) ),
+  web_request_with_processed_referer AS (
+  SELECT
+    * EXCEPT(previous_request_path, previous_request_query),
     REGEXP_EXTRACT(request_referer, r"[^\\/](\\/[^\\/][^?]*)(?:\\?|$)") AS request_referer_path,
     ARRAY(
     SELECT
@@ -116,7 +131,7 @@ WITH
       UNNEST(REGEXP_EXTRACT_ALL(request_referer, r"[?&]([^&]+)(?:&|$)")) AS string) AS request_referer_query,
     REGEXP_REPLACE(request_path, r"${params.requestPathGroupingRegex}", "UID") AS request_path_grouped
   FROM
-    web_request),
+    web_request_without_duplicates),
   web_request_with_funnels AS (
   /* Give each web request two ARRAYs of STRUCTs containing its ${params.funnelDepth} preceding and following web requests for the user who made it. Limited to ${params.funnelDepth} to ensure the query is able to run within BQ limits */
   SELECT
@@ -196,34 +211,10 @@ WITH
     SELECT
       AS STRUCT *,
       IFNULL(preceding_request.next_referer_path = preceding_request.request_path
-        AND (NOT EXISTS (
-          SELECT
-            *
-          FROM
-            UNNEST(preceding_request.next_referer_query) AS next_ref_query
-          INNER JOIN
-            UNNEST(preceding_request.request_query) AS this_query
-          USING
-            (key)
-          WHERE
-            (next_ref_query.key IS NULL
-              OR this_query.key IS NULL
-              OR next_ref_query.value != this_query.value)))
+        AND request_queries_are_equal(preceding_request.request_query, preceding_request.next_referer_query)
         OR (step_number_backwards = 1
           AND web_request_with_numbered_funnels.request_referer_path = preceding_request.request_path
-          AND (NOT EXISTS (
-            SELECT
-              *
-            FROM
-              UNNEST(web_request_with_numbered_funnels.request_referer_query) AS next_ref_query
-            INNER JOIN
-              UNNEST(preceding_request.request_query) AS this_query
-            USING
-              (key)
-            WHERE
-              (next_ref_query.key IS NULL
-                OR this_query.key IS NULL
-                OR next_ref_query.value != this_query.value)))),
+          AND request_queries_are_equal(preceding_request.request_query, web_request_with_numbered_funnels.request_referer_query)),
         FALSE) AS referred_to_next_request
     FROM
       UNNEST(preceding_user_requests) AS preceding_request ) AS preceding_user_requests,
@@ -231,34 +222,10 @@ WITH
     SELECT
       AS STRUCT *,
       IFNULL(following_request.previous_request_path = following_request.request_referer_path
-        AND (NOT EXISTS (
-          SELECT
-            *
-          FROM
-            UNNEST(following_request.previous_request_query) AS prev_query
-          INNER JOIN
-            UNNEST(following_request.request_referer_query) AS this_query
-          USING
-            (key)
-          WHERE
-            (prev_query.key IS NULL
-              OR this_query.key IS NULL
-              OR prev_query.value != this_query.value)))
+        AND request_queries_are_equal(following_request.previous_request_query, following_request.request_referer_query)
         OR (step_number_forwards = 1
           AND following_request.request_referer_path = web_request_with_numbered_funnels.request_path
-          AND (NOT EXISTS (
-            SELECT
-              *
-            FROM
-              UNNEST(web_request_with_numbered_funnels.request_query) AS prev_query
-            INNER JOIN
-              UNNEST(following_request.request_referer_query) AS this_query
-            USING
-              (key)
-            WHERE
-              (prev_query.key IS NULL
-                OR this_query.key IS NULL
-                OR prev_query.value != this_query.value)))),
+          AND request_queries_are_equal(web_request_with_numbered_funnels.request_query, following_request.request_referer_query)),
         FALSE) AS referred_from_previous_request
     FROM
       UNNEST(following_user_requests) AS following_request ) AS following_user_requests
@@ -345,6 +312,39 @@ CREATE TEMP FUNCTION
       UNNEST(REGEXP_EXTRACT_ALL(url, r"%[0-9a-fA-F]{2}(?:%[0-9a-fA-F]{2})*|[^%]+")) y
     WITH
     OFFSET
-      AS i ));`
+      AS i ));
+/* Works out whether the sets of key-value pairs in two ARRAYs of STRUCTs are identical. Returns a BOOL. */
+CREATE TEMP FUNCTION
+  request_queries_are_equal(query1 ARRAY<STRUCT<key STRING,value STRING>>,query2 ARRAY<STRUCT<key STRING,value STRING>>) AS (
+    CASE
+    WHEN ARRAY_LENGTH(query1) = 0 AND ARRAY_LENGTH(query2) = 0 THEN TRUE /* Two empty request queries are equal */
+    ELSE
+      /* Look for non-identical values or keys which appear in one query but not the other - if none exist then the two request queries are equal */
+      NOT(
+        EXISTS (
+      SELECT
+        query1.key
+      FROM
+        UNNEST(query1) AS query1
+      LEFT JOIN /* BigQuery does not support a FULL JOIN between two UNNESTs, so doing this as two LEFT JOINs instead */
+        UNNEST(query2) AS query2
+      USING
+        (key)
+      WHERE
+        (query1.value != query2.value
+          OR query2 IS NULL))
+      OR EXISTS (
+      SELECT
+        query2.key
+      FROM
+        UNNEST(query2) AS query2
+      LEFT JOIN
+        UNNEST(query1) AS query1
+      USING
+        (key)
+      WHERE
+        (query1.value != query2.value
+          OR query1 IS NULL)) )
+        END);`
       )
 }
