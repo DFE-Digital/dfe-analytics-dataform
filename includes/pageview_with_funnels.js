@@ -128,7 +128,7 @@ WITH
       AS STRUCT REGEXP_EXTRACT(string, r"^([^=]+)=") AS key,
       REGEXP_EXTRACT(string, r"=([^=]+)$") AS value
     FROM
-      UNNEST(REGEXP_EXTRACT_ALL(request_referer, r"[?&]([^&]+)(?:&|$)")) AS string) AS request_referer_query,
+      UNNEST(REGEXP_EXTRACT_ALL(request_referer, r"[?&]([^&]+)")) AS string) AS request_referer_query,
     REGEXP_REPLACE(request_path, r"${params.requestPathGroupingRegex}", "UID") AS request_path_grouped
   FROM
     web_request_without_duplicates),
@@ -315,24 +315,35 @@ CREATE TEMP FUNCTION
       AS i ));
 /* Works out whether the sets of key-value pairs in two ARRAYs of STRUCTs are identical. Returns a BOOL. */
 CREATE TEMP FUNCTION
-  request_queries_are_equal(query1 ARRAY<STRUCT<key STRING,value STRING>>,query2 ARRAY<STRUCT<key STRING,value STRING>>) AS (
+  request_queries_are_equal(query1 ARRAY<STRUCT<key STRING,
+    value STRING>>,
+    query2 ARRAY<STRUCT<key STRING,
+    value STRING>>) AS (
     CASE
-    WHEN ARRAY_LENGTH(query1) = 0 AND ARRAY_LENGTH(query2) = 0 THEN TRUE /* Two empty request queries are equal */
+      WHEN ARRAY_LENGTH(query1) = 0 AND ARRAY_LENGTH(query2) = 0 THEN TRUE /* Two empty request queries are equal */
     ELSE
-      /* Look for non-identical values or keys which appear in one query but not the other - if none exist then the two request queries are equal */
-      NOT(
-        EXISTS (
+    /* Look for non-identical values or keys which appear in one query but not the other - if none exist then the two request queries are equal */ NOT( EXISTS (
       SELECT
-        query1.key
+        query1.key,
+        query2.key,
+        /* Handle cases where the same key appears multiple times in the array with different values */ STRING_AGG(query1.value, " and "
+        ORDER BY
+          query1.value ASC) AS q1_values,
+        STRING_AGG(query2.value, " and "
+        ORDER BY
+          query2.value ASC) AS q2_values
       FROM
         UNNEST(query1) AS query1
-      LEFT JOIN /* BigQuery does not support a FULL JOIN between two UNNESTs, so doing this as two LEFT JOINs instead */
-        UNNEST(query2) AS query2
+      LEFT JOIN
+        /* BigQuery does not support a FULL JOIN between two UNNESTs, so doing this as two LEFT JOINs instead */ UNNEST(query2) AS query2
       USING
         (key)
-      WHERE
-        (query1.value != query2.value
-          OR query2 IS NULL))
+      GROUP BY
+        query1.key,
+        query2.key
+      HAVING
+        (q1_values != q2_values
+          OR query2.key IS NULL) )
       OR EXISTS (
       SELECT
         query2.key
@@ -343,8 +354,8 @@ CREATE TEMP FUNCTION
       USING
         (key)
       WHERE
-        (query1.value != query2.value
-          OR query1 IS NULL)) )
-        END);`
+        query1.key IS NULL) )
+  END
+    ) ;`
       )
 }
