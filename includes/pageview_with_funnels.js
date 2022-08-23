@@ -112,6 +112,7 @@ WITH
     FIRST_VALUE(request_query) OVER previous_request AS previous_request_query
   FROM
     web_request QUALIFY request_path != previous_request_path
+    OR (previous_request_path IS NULL AND request_path IS NOT NULL)
     OR NOT request_queries_are_equal(request_query, previous_request_query)
   WINDOW
     previous_request AS (
@@ -122,7 +123,7 @@ WITH
   web_request_with_processed_referer AS (
   SELECT
     * EXCEPT(previous_request_path, previous_request_query),
-    REGEXP_EXTRACT(request_referer, r"[^\\/](\\/[^\\/][^?]*)(?:\\?|$)") AS request_referer_path,
+    REGEXP_EXTRACT(request_referer, r"[^:\\/](\\/[^\\?]*)(?:\\?|$)") AS request_referer_path,
     ARRAY(
     SELECT
       AS STRUCT REGEXP_EXTRACT(string, r"^([^=]+)=") AS key,
