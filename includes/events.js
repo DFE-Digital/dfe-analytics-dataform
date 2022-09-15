@@ -12,6 +12,7 @@ module.exports = (params) => {
       }
     },
     description: "Initial transformation of the events table streamed from " + params.eventSourceName + " into the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project.",
+    dependencies: params.dependencies,
     columns: {
       occurred_at: "The timestamp at which the event occurred in the application.",
       event_type: "The type of the event, for example web_request. This determines the schema of the data which will be included in the data field.",
