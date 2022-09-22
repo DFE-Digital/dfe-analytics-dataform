@@ -8,6 +8,7 @@ module.exports = (params) => {
       })
     );
   function stepFields() {
+  /* Generates SQL that creates fields which require a separate field for each step in the funnel - iterating from step 2 to the step number configured in the funnelDepth parameter */
   var sqlToReturn = '';
   if((!(Number.isInteger(params.funnelDepth))) || params.funnelDepth < 1) {
     throw new Error(`${params.funnelDepth} is not valid. funnelDepth must be a positive integer.`);
@@ -40,6 +41,7 @@ module.exports = (params) => {
   return sqlToReturn;
   }
   function attributionParamFields(attributionParameters) {
+  /* Generates SQL that creates fields which extract the value of each URL query parameter from the request_query ARRAY of STRUCTs, as long as that parameter's key is in the configuration parameter attributionParameters */
     var sqlToReturn = '';
     attributionParameters.forEach(param => {
       if(['occurred_at','event_type','environment','namespace','request_user_id','request_uuid','request_method','request_path','request_path_grouped','request_user_agent','request_referer','request_query','request_referer_query','response_content_type','response_status','anonymised_user_agent_and_ip','device_category','browser_name','browser_version','operating_system_name','operating_system_vendor','operating_system_version','newly_arrived','next_step'].includes(param)) {
@@ -57,6 +59,7 @@ module.exports = (params) => {
       })
     )
   };
+  /* Check the contents of the urlRegex configuration parameter and generate a compilation error if it is not valid */
   if(!params.urlRegex) {
     throw new Error(`urlRegex is missing or empty. Please specify urlRegex.`);
   }
@@ -69,7 +72,7 @@ module.exports = (params) => {
     protected: false,
     bigquery: {
       partitionBy: "DATE(occurred_at)",
-      clusterBy: ["newly_arrived"],
+      clusterBy: ["newly_arrived"], /* This table includes certain fields which are only non-null for newly arrived traffic. Clustering by newly_arrived allows only newly arrived traffic to be queried in this table without having to process all the other traffic at the same time */
       labels: {
         eventsource: params.eventSourceName.toLowerCase(),
         sourcedataset: params.bqDatasetName.toLowerCase()
