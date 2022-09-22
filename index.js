@@ -21,7 +21,7 @@ module.exports = (params) => {
     bqEventsTableName: 'events', // name of the BigQuery table that dfe-analytics streams event data into
     transformEntityEvents: true, // whether to generate tables that transform entity CRUD events into flattened tables
     urlRegex: null, // re-2 formatted regular expression to use to identify whether a URL is this service's own URL or an external one. If your service only has one domain name set this to 'www.yourdomainname.gov.uk' (without the protocol). If you have more than one use something like '(?i)(www.domain1.gov.uk|www.domain2.gov.uk|www.domain3.gov.uk)'
-    socialRefererDomainRegex: "(?i)(facebook|twitter|t.co|linkedin|youtube|pinterest|whatsapp|tumblr|reddit)", // re-2 formatted regular expression to use to work out whether an HTTP referer is a social media site
+    socialRefererDomainRegex: "(?i)(facebook|twitter|^t.co|linkedin|youtube|pinterest|whatsapp|tumblr|reddit)", // re-2 formatted regular expression to use to work out whether an HTTP referer is a social media site
     searchEngineRefererDomainRegex: "(?i)(google|bing|yahoo|aol|ask.co|baidu|duckduckgo|dogpile|ecosia|exalead|gigablast|hotbot|lycos|metacrawler|mojeek|qwant|searx|swisscows|webcrawler|yandex|yippy)", // re-2 formatted regular expression to use to work out whether an HTTP referer is a search enginer (regardless of whether paid or organic)
     funnelDepth: 10, // Number of steps forwards/backwards to analyse in funnels - higher allows deeper analysis, lower reduces CPU usage
     requestPathGroupingRegex: '[0-9a-zA-Z]*[0-9][0-9a-zA-Z]*', // re2-formatted regular expression to replace with the string 'UID' when grouping request paths
