@@ -69,6 +69,7 @@ module.exports = (params) => {
     protected: false,
     bigquery: {
       partitionBy: "DATE(occurred_at)",
+      clusterBy: ["newly_arrived"],
       labels: {
         eventsource: params.eventSourceName.toLowerCase(),
         sourcedataset: params.bqDatasetName.toLowerCase()
@@ -340,7 +341,7 @@ ${stepFields(params.funnelDepth)}
     ${ctx.when(params.attributionParameters.includes('utm_medium'),`OR utm_medium = "organic"`,``)} THEN "Organic"
     ELSE "Direct or unknown"
   END AS medium,
-  IF(total_number_of_preceding_steps_in_funnel = 0,SPLIT(request_referer, "/")[OFFSET(2)],NULL) AS referer_domain
+  IF(total_number_of_preceding_steps_in_funnel = 0,SPLIT(request_referer, "/")[SAFE_OFFSET(2)],NULL) AS referer_domain
 FROM
   web_request_with_unbroken_funnels_only
 `).preOps(ctx => `
