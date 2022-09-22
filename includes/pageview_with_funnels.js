@@ -333,9 +333,9 @@ ${stepFields(params.funnelDepth)}
     ${ctx.when(params.attributionParameters.includes('utm_medium'),`WHEN utm_medium = "cpc" THEN "PPC"`,``)}
     ${ctx.when(params.attributionParameters.includes('gclid'),`WHEN gclid IS NOT NULL THEN "PPC"`,``)}
     ${ctx.when(params.attributionParameters.includes('utm_medium'),`WHEN REGEXP_CONTAINS(utm_medium, "(?i)(email)") THEN "Email"`,``)}
-    WHEN REGEXP_CONTAINS(request_referer, "${params.socialRefererRegex}") THEN "Social"
+    WHEN REGEXP_CONTAINS(SPLIT(request_referer, "/")[SAFE_OFFSET(2)], "${params.socialRefererDomainRegex}") THEN "Social"
     ${ctx.when(params.attributionParameters.includes('utm_medium'),`WHEN REGEXP_CONTAINS(utm_medium, "(?i)(social)") THEN "Social"`,``)}
-    WHEN REGEXP_CONTAINS(request_referer, "${params.searchEngineRefererRegex}") THEN "Organic"
+    WHEN REGEXP_CONTAINS(SPLIT(request_referer, "/")[SAFE_OFFSET(2)], "${params.searchEngineRefererDomainRegex}") THEN "Organic"
     ${ctx.when(params.attributionParameters.includes('utm_medium'),`WHEN REGEXP_CONTAINS(utm_medium, "(?i)(organic)") THEN "Organic"`,``)}
     WHEN request_referer IS NOT NULL THEN "Referral"
     ${ctx.when(params.attributionParameters.includes('utm_medium'),`WHEN REGEXP_CONTAINS(utm_medium, "(?i)(referral)") THEN "Referral"`,``)}
