@@ -342,7 +342,7 @@ ${stepFields(params.funnelDepth)}
     ${ctx.when(params.attributionParameters.includes('utm_medium'),`WHEN REGEXP_CONTAINS(utm_medium, "(?i)(referral)") THEN "Referral"`,``)}
     ELSE "Direct or unknown"
   END AS medium,
-  IF(NOT REGEXP_CONTAINS(request_referer, "${params.urlRegex}") AND NOT REGEXP_CONTAINS(referer_domain, "${params.attributionDomainExclusionRegex}"),SPLIT(request_referer, "/")[SAFE_OFFSET(2)],NULL) AS referer_domain
+  IF(NOT REGEXP_CONTAINS(request_referer, "${params.urlRegex}") AND NOT REGEXP_CONTAINS(request_referer, "${params.attributionDomainExclusionRegex}"),SPLIT(request_referer, "/")[SAFE_OFFSET(2)],NULL) AS referer_domain
 FROM
   web_request_with_unbroken_funnels_only
 `).preOps(ctx => `
