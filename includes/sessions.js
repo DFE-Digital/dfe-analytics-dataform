@@ -2,12 +2,12 @@ module.exports = (params) => {
   const attributionParamFieldMetadata = (params) => {
     return params.map(param => ({
       [param]: `Value of the ${param} URL parameter included in the first pageview in this session.`
-    }))
+    })
+    )
   };
   return publish("sessions_" + params.eventSourceName, {
     ...params.defaultConfig,
     type: "table",
-    protected: false,
     bigquery: {
       partitionBy: "DATE(session_started_at)",
       clusterBy: ["user_ids", "anonymised_user_agent_and_ip"],
@@ -17,8 +17,7 @@ module.exports = (params) => {
       }
     },
     description: "User sessions from " + params.eventSourceName + ", with attribution fields (e.g. medium, referer_domain) for each session. Includes the session_started_at and next_session_started_at timestamps to allow attribution modelling of a goal conversion that occurred between those timestamps.",
-    dependencies: params.dependencies,
-    columns: {
+    columns: Object.assign({
       session_started_at: "The timestamp at which the first pageview in this session occurred.",
       next_session_started_at: "The timestamp at which the first pageview in the next session happened, for any user with the same user_id or anonymised_user_agent_and_ip linked to any of these user_ids.",
       anonymised_user_agent_and_ip: "One way hash of a combination of the user's IP address and user agent. Can be used to identify the user anonymously, even when user_id is not set. Cannot be used to identify the user over a time period of longer than about a month, because of IP address changes and browser updates.",
@@ -34,9 +33,9 @@ module.exports = (params) => {
       operating_system_version: "The version of the operating system used for this session.",
       next_step: "String indicating whether, at the end of this funnel, the user 'Left site immediately after this' or 'Visited subsequent pages'",
       medium: "Categorises where the traffic came from outside the site. NULL for traffic that was not newly arrived traffic. Possible values are PPC, Social, Email, Referral, Organic, or 'Direct or unknown'.",
-      referer_domain: "Domain of the site the traffic came from outside the site. NULL for traffic that was not newly arrived traffic. Note that channels other than Referral may still have a referer_domain - for example, the domain name of the search engine that PPC/Organic traffic came from, or the social media site that Social traffic came from."
-    },
-    ...attributionParamFieldMetadata(params.attributionParameters)
+      referer_domain: "Domain of the site the traffic came from outside the site. NULL for traffic that was not newly arrived traffic. Note that channels other than Referral may still have a referer_domain - for example, the domain name of the search engine that PPC/Organic traffic came from, or the social media site that Social traffic came from."},
+      ...attributionParamFieldMetadata(params.attributionParameters))
+      
   }).query(ctx => `WITH
   user_link AS (
   SELECT
