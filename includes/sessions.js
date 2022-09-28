@@ -9,7 +9,7 @@ module.exports = (params) => {
     ...params.defaultConfig,
     type: "table",
     bigquery: {
-      partitionBy: "DATE(session_started_at)",
+      partitionBy: "DATE(next_session_started_at)",
       clusterBy: ["user_ids", "anonymised_user_agent_and_ip"],
       labels: {
         eventsource: params.eventSourceName.toLowerCase(),
