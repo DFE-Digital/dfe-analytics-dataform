@@ -80,7 +80,7 @@ IF
   operating_system_name,
   operating_system_vendor,
   operating_system_version,
-  ${params.attributionParameters.toString()}
+  ${params.attributionParameters.toString()},
   medium,
   referer_domain,
   next_step
