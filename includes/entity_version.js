@@ -110,7 +110,7 @@ module.exports = (params) => {
           "import_entity"
         )
         AND entity_table_name IS NOT NULL
-        AND ${data_functions.eventDataExtract("data", "id")} IS NOT NULL
+        AND ${idField(params.dataSchema)} IS NOT NULL
     )
     ${
       ctx.when(ctx.incremental(),
