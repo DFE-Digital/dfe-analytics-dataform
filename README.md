@@ -58,9 +58,11 @@ dfeAnalyticsDataform({
 
 9. Replace the parameters in this file with the parameters you need - including specifying the full schema from your ```analytics.yml``` file with data types and any aliases you need. Don't include the ```id```, ```created_at``` and ```updated_at``` fields - they are included automatically. At this stage compilation errors like ```Error: Not found: Dataset your-project-name:output-dataset-name was not found in location europe-west2 at [1:44]``` are normal because you haven't yet run the pipeline for the first time, which creates the output dataset.
 
-10. Commit your changes and merge to ```master```.
+10. In the unlikely event that one or more of your tables has a primary key that is not ```id```, add the line ```primary_key: 'name_of_primary_key_for_this_table'``` to the element of the dataSchema that represents this table, alongside the ```entityTableName```.
 
-11. Run a 'full refresh' on your entire pipeline, and resolve any errors this flags (e.g. omissions made when specifying a ```dataSchema```).
+11. Commit your changes and merge to ```master```.
+
+12. Run a 'full refresh' on your entire pipeline, and resolve any errors this flags (e.g. omissions made when specifying a ```dataSchema```).
 
 ## Additional configuration options
 You may in addition to step 7 of the setup instructions wish to configure the following options by adding them to the JSON passed to the dfeAnalyticsDataform
@@ -94,12 +96,14 @@ The output from the assertions in the run logs for the failed run in Dataform wi
 
 In either case, you should update your ```dataSchema``` configuration in ```dfe_analytics_dataform.js``` in Dataform to add or remove configuration for that field, following the JSON format below:
 - ```dataSchema``` is an array of objects: ```dataSchema: [{}, {}, {}]```
-- Each of these objects represents a table in your schema. It must have the attributes ```entityTableName``` (the name of the table in your database, a string), ```description``` (a meta description of the table, which can be a blank string: ```''```) and ```keys```.
+- Each of these objects represents a table in your schema. It must have the attributes ```entityTableName``` (the name of the table in your database, a string), ```description``` (a meta description of the table, which can be a blank string: ```''```) and ```keys```. If the table has a primary key that is not ```id```, then this object may optionally have the attribute ```primary_key``` (containing the name of the field that is the primary key, if it is not ```'id'```.)
 - ```keys``` is an array of objects. Each table listed within ```dataSchema``` has its own ```keys``` i.e. : ```dataSchema: [{entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}]```.
-- Each object within each set of ```keys``` represents a field within a table in your schema. Each field must have the attribute ```keyName``` (name of the field in your database). It may also have the attributes ```dataType``` (determines the output data type for this field, which can be ```string```, ```boolean```, ```integer```, ```float```, ```date```, ```timestamp``` or ```integer_array```, but defaults to ```string``` if not present), ```description``` (a meta description of the field) and ```alias``` (a name to give the field in outputs instead of ```entityTableName```).
+- Each object within each set of ```keys``` represents a field within a table in your schema. Each field must have the attribute ```keyName``` (name of the field in your database). It may also have the attributes ```dataType``` (determines the output data type for this field, which can be ```string```, ```boolean```, ```integer```, ```float```, ```date```, ```timestamp``` or ```integer_array```, but defaults to ```string``` if not present), ```description``` (a meta description of the field) and/or ```alias``` (a name to give the field in outputs instead of ```entityTableName```).
 - An example of a ```dataSchema``` is included in the installation instructions above and in [example.js](https://github.com/DFE-Digital/dfe-analytics-dataform/blob/master/definitions/example.js).
 
-Once you have updated your dataSchema, commit your changes, merge to main/master and then re-run your pipeline in Dataform. You should not need to run a full refresh in this scenario.
+Once you have updated your dataSchema, commit your changes, merge to main/master and then re-run your pipeline in Dataform.
+
+You should not usually need to run a full refresh in this scenario. The only exception to this is if you have added, removed or updated the ```primary_key``` attribute for a table in the ```dataSchema```. If you have done this then you will need to run a full refresh on the ```entity_version``` table in Dataform.
 
 ## Tables, assertions, and declarations this will create
 For each occurrence of ```dfeAnalyticsDataform()``` in ```definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the UI by opening ```definitions/dfe_analytics_dataform.js```.
