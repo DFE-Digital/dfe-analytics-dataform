@@ -11,7 +11,7 @@ module.exports = (params) => {
         throw new Error(`primary_key for the ${tableSchema.entityTableName} table is set to 'id', which is the default value for primary_key. If id is the primary key for this table in the database, remove the primary_key configuration for this table in your dataSchema. If id is not the primary key for this table in the database, set primary_key to the correct primary key.`);
       }
       else {
-        sqlToReturn += `WHEN entity_table_name = '${tableSchema.primary_key}' THEN ${data_functions.eventDataExtract("data", tableSchema.primary_key)}\n`;
+        sqlToReturn += `WHEN entity_table_name = '${tableSchema.entityTableName}' THEN ${data_functions.eventDataExtract("data", tableSchema.primary_key)}\n`;
         allPrimaryKeysAreId = false;
       }
       })
