@@ -59,35 +59,39 @@ module.exports = (params) => {
   }).query(ctx => `SELECT
   * EXCEPT(new_DATA_struct, previous_DATA_struct, entity_table_name, updated_at),
   ${tableSchema.keys.map(key => {
+        var newFieldCoalesceSql;
+        var previousFieldCoalesceSql;
+        if (!key.pastKeyNamesToCoalesce) {
+          newFieldCoalesceSql = `new_DATA_struct.${key.keyName}`;
+          previousFieldCoalesceSql = `previous_DATA_struct.${key.keyName}`;
+        }
+        else {
+          newFieldCoalesceSql = `COALESCE(new_DATA_struct.${key.keyName}, new_DATA_struct.${key.pastKeyNamesToCoalesce.join(', new_DATA_struct.')})`;
+          previousFieldCoalesceSql = `COALESCE(previous_DATA_struct.${key.keyName}, previous_DATA_struct.${key.pastKeyNamesToCoalesce.join(', previous_DATA_struct.')})`;
+        }
+        var fieldSql;
         if(key.dataType == 'boolean') {
-          return `SAFE_CAST(new_DATA_struct.${key.alias || key.keyName} AS BOOL) AS new_${key.alias || key.keyName},\n
-          SAFE_CAST(previous_DATA_struct.${key.alias || key.keyName} AS BOOL) AS previous_${key.alias || key.keyName},`;
+          fieldSql = `SAFE_CAST(${newFieldCoalesceSql} AS BOOL) AS new_${key.alias || key.keyName},\nSAFE_CAST(${previousFieldCoalesceSql} AS BOOL) AS previous_${key.alias || key.keyName}`;
         } else if (key.dataType == 'timestamp') {
-          return `${data_functions.stringToTimestamp(`new_DATA_struct.${key.alias || key.keyName}`)} AS new_${key.alias || key.keyName},\n
-          ${data_functions.stringToTimestamp(`previous_DATA_struct.${key.alias || key.keyName}`)} AS previous_${key.alias || key.keyName},`;
+          fieldSql = `${data_functions.stringToTimestamp(newFieldCoalesceSql)} AS new_${key.alias || key.keyName},\n${data_functions.stringToTimestamp(previousFieldCoalesceSql)} AS previous_${key.alias || key.keyName}`;
         } else if (key.dataType == 'date') {
-          return `${data_functions.stringToDate(`new_DATA_struct.${key.alias || key.keyName}`)} AS new_${key.alias || key.keyName},\n
-          ${data_functions.stringToDate(`previous_DATA_struct.${key.alias || key.keyName}`)} AS previous_${key.alias || key.keyName},`;
+          fieldSql = `${data_functions.stringToDate(newFieldCoalesceSql)} AS new_${key.alias || key.keyName},\n${data_functions.stringToDate(previousFieldCoalesceSql)} AS previous_${key.alias || key.keyName}`;
         } else if (key.dataType == 'integer') {
-          return `SAFE_CAST(new_DATA_struct.${key.alias || key.keyName} AS INT64) AS new_${key.alias || key.keyName},\n
-          SAFE_CAST(previous_DATA_struct.${key.alias || key.keyName} AS INT64) AS previous_${key.alias || key.keyName},`;
+          fieldSql = `SAFE_CAST(${newFieldCoalesceSql} AS INT64) AS new_${key.alias || key.keyName},\nSAFE_CAST(${previousFieldCoalesceSql} AS INT64) AS previous_${key.alias || key.keyName}`;
         } else if (key.dataType == 'integer_array') {
-          return `${data_functions.stringToIntegerArray(`new_DATA_struct.${key.alias || key.keyName}`)} AS new_${key.alias || key.keyName},\n
-          ${data_functions.stringToIntegerArray(`previous_DATA_struct.${key.alias || key.keyName}`)} AS previous_${key.alias || key.keyName},`;
+          fieldSql = `${data_functions.stringToIntegerArray(newFieldCoalesceSql)} AS new_${key.alias || key.keyName},\n${data_functions.stringToIntegerArray(previousFieldCoalesceSql)} AS previous_${key.alias || key.keyName}`;
         } else if (key.dataType == 'float') {
-          return `SAFE_CAST(new_DATA_struct.${key.alias || key.keyName} AS FLOAT64) AS new_${key.alias || key.keyName},\n
-          SAFE_CAST(previous_DATA_struct.${key.alias || key.keyName} AS FLOAT64) AS previous_${key.alias || key.keyName},`;
+          fieldSql = `SAFE_CAST(${newFieldCoalesceSql} AS FLOAT64) AS new_${key.alias || key.keyName},\nSAFE_CAST(${previousFieldCoalesceSql} AS FLOAT64) AS previous_${key.alias || key.keyName}`;
         } else if (key.dataType == 'json') {
-          return `SAFE.PARSE_JSON(new_DATA_struct.${key.alias || key.keyName}) AS new_${key.alias || key.keyName},\n
-          SAFE.PARSE_JSON(previous_DATA_struct.${key.alias || key.keyName}) AS previous_${key.alias || key.keyName},`;
+          fieldSql = `SAFE.PARSE_JSON(${newFieldCoalesceSql}) AS new_${key.alias || key.keyName},\nSAFE.PARSE_JSON(${previousFieldCoalesceSql}) AS previous_${key.alias || key.keyName}`;
         } else if (key.dataType == 'string' || key.dataType == undefined) {
-          return `new_DATA_struct.${key.alias || key.keyName} AS new_${key.alias || key.keyName},\n
-          previous_DATA_struct.${key.alias || key.keyName} AS previous_${key.alias || key.keyName},`;
+          fieldSql = `${newFieldCoalesceSql} AS new_${key.alias || key.keyName},\n${previousFieldCoalesceSql} AS previous_${key.alias || key.keyName}`;
         } else {
           throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array, float, json or string or not set.`);
         }
+        return fieldSql;
       }
-    ).join('\n')
+    ).join(',\n')
   }
 FROM
   (
