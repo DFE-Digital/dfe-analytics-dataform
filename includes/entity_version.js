@@ -1,4 +1,26 @@
 module.exports = (params) => {
+  function idField(dataSchema) {
+  /* Generates SQL that extracts the primary key from the 'data' array of structs, defaulting to 'id', but using the primary_key configured for each entity_table_name if specified. */
+    var sqlToReturn = 'CASE\n';
+    var allPrimaryKeysAreId = true;
+    dataSchema.forEach(tableSchema => {
+      if(!tableSchema.primary_key) {
+        
+      }
+      else if (tableSchema.primary_key == "id") {
+        throw new Error(`primary_key for the ${tableSchema.entityTableName} table is set to 'id', which is the default value for primary_key. If id is the primary key for this table in the database, remove the primary_key configuration for this table in your dataSchema. If id is not the primary key for this table in the database, set primary_key to the correct primary key.`);
+      }
+      else {
+        sqlToReturn += `WHEN entity_table_name = '${tableSchema.entityTableName}' THEN ${data_functions.eventDataExtract("data", tableSchema.primary_key)}\n`;
+        allPrimaryKeysAreId = false;
+      }
+      })
+    sqlToReturn += `ELSE ${data_functions.eventDataExtract("data", "id")}\nEND\n`;
+    if(allPrimaryKeysAreId) {
+      sqlToReturn = data_functions.eventDataExtract("data", "id");
+    }
+    return sqlToReturn;
+  }
   return publish(params.eventSourceName + "_entity_version", {
     ...params.defaultConfig,
     type: "incremental",
@@ -57,7 +79,7 @@ module.exports = (params) => {
         event_type,
         occurred_at,
         entity_table_name,
-        ${data_functions.eventDataExtract("data", "id")} AS entity_id,
+        ${idField(params.dataSchema)} AS entity_id,
         ${data_functions.eventDataExtractTimestamp("data", "created_at")} AS created_at,
         ${data_functions.eventDataExtractTimestamp("data", "updated_at")} AS updated_at,
         DATA,
@@ -88,7 +110,7 @@ module.exports = (params) => {
           "import_entity"
         )
         AND entity_table_name IS NOT NULL
-        AND ${data_functions.eventDataExtract("data", "id")} IS NOT NULL
+        AND ${idField(params.dataSchema)} IS NOT NULL
     )
     ${
       ctx.when(ctx.incremental(),

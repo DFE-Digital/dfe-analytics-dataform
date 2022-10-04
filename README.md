@@ -7,14 +7,14 @@ Dataform package containing commonly used SQL functions and table definitions, f
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.10.1"
+"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.0.0"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
         "@dataform/core": "1.22.0",
-        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v0.10.1"
+        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.0.0"
     }
 }
 ```
@@ -33,6 +33,7 @@ dfeAnalyticsDataform({
   bqProjectName: "Your BigQuery project name here",
   bqDatasetName: "Your BigQuery dataset name here",
   bqEventsTableName: "Your BigQuery events table name here - usually just 'events'",
+  urlRegex: "www.yourdomainname.gov.uk", // re-2 formatted regular expression to use to identify whether a URL is this service's own URL or an external one. If your service only has one domain name set this to 'www.yourdomainname.gov.uk' (without the protocol). If you have more than one use something like '(?i)(www.domain1.gov.uk|www.domain2.gov.uk|www.domain3.gov.uk)'
   dataSchema: [{
     entityTableName: "Your entity table name here from your production database analytics.yml",
     description: "Description of this entity to include in metadata of denormalised tables produced for this entity.",
@@ -53,28 +54,79 @@ dfeAnalyticsDataform({
   }]
 });
 ```
-8. Optionally, to save time if you're starting from scratch, generate a blank ```dataSchema``` JSON to paste in to this file by running the query in Dataform to create the ```data_schema_json_latest``` table. You can do this from the right hand sidebar when you open ```dfe_analytics_dataform``` in the Dataform web client, and then copying and pasting the output from the table this produces in BigQuery (don't copy and paste from Dataform as it doesn't handle newlines well). This will automatically attempt to work out table names, field names and data types for each field using data streamed the previous day and today - although you might need to add in any tables that didn't have entity events streamed yesterday/today manually, or tweak some data types.
 
-9. Replace the parameters in this file with the parameters you need - including specifying the full schema from your ```analytics.yml``` file with data types and any aliases you need. Don't include the ```id```, ```created_at``` and ```updated_at``` fields - they are included automatically. At this stage compilation errors like ```Error: Not found: Dataset your-project-name:output-dataset-name was not found in location europe-west2 at [1:44]``` are normal because you haven't yet run the pipeline for the first time, which creates the output dataset.
+8. Replace the values of the ```eventSourceName```, ```bqProjectName```, ```bqDatasetName```, ```bqEventsTableName``` and ```urlRegex``` parameters in this file with the values you need. At this stage compilation errors like ```Error: Not found: Dataset your-project-name:output-dataset-name was not found in location europe-west2 at [1:44]``` are normal because you haven't yet run the pipeline for the first time, which creates the output dataset.
 
-10. Commit your changes and merge to ```master```.
+9. Do the same for the ```dataSchema``` parameter - a JSON value which specifies the schema of the tables and field names and types in your database which are being streamed to BigQuery. Don't include the ```id```, ```created_at``` and ```updated_at``` fields - they are included automatically. If you're starting from scratch, *don't* type this out. Instead, to save time, generate a blank ```dataSchema``` JSON to paste in to this file by running the query in Dataform to create the ```data_schema_json_latest``` table. You can do this from the right hand sidebar when you open ```dfe_analytics_dataform``` in the Dataform web client, and then copying and pasting the output from the table this produces in BigQuery (don't copy and paste from Dataform as it doesn't handle newlines well). This will automatically attempt to work out table names, field names and data types for each field using data streamed the previous day and today - although you might need to add in any tables that didn't have entity events streamed yesterday/today manually, or tweak some data types.
 
-11. Run a 'full refresh' on your entire pipeline, and resolve any errors this flags (e.g. omissions made when specifying a ```dataSchema```).
+10. In the unlikely event that one or more of the tables in your database being streamed by ```dfe-analytics``` has a primary key that is not ```id```, add the line ```primary_key: 'name_of_primary_key_for_this_table'``` to the element of the dataSchema that represents this table, alongside the ```entityTableName```.
+
+11. Commit your changes and merge to the ```main```/```master``` branch of your Dataform project.
+
+12. Run a 'full refresh' on your entire pipeline, and resolve any configuration errors this flags (e.g. omissions made when specifying a ```dataSchema```).
 
 ## Additional configuration options
-You may in addition to step 7 of the setup instructions wish to configure the following options by adding them to the JSON passed to the dfeAnalyticsDataform
+You may in addition to step 8 of the setup instructions wish to configure the following options by adding them to the JSON passed to the ```dfeAnalyticsDataform()``` JavaScript function.
 
-- ```transformEntityEvents``` - whether to generate queries that transform entity CRUD events into flattened tables. Boolean (true or false, without quotes). Defaults to ```true``` if not specified.
+- ```transformEntityEvents``` - whether to generate queries that transform entity CRUD events into flattened tables. Boolean (```true``` or ```false```, without quotes). Defaults to ```true``` if not specified.
 - ```funnelDepth``` - number of steps forwards/backwards to analyse in pageview funnels - higher allows deeper analysis, lower reduces CPU usage and cost. Defaults to ```10``` if not specified.
 - ```requestPathGroupingRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to replace with the string 'UID' when grouping web request paths in funnel analysis. Defaults to ```'[0-9a-zA-Z]*[0-9][0-9a-zA-Z]*'``` if not specified (i.e. replaces unbroken strings of alphanumeric characters that include one or more numeric characters with 'UID')
-- ```dependencies``` - array of strings listing the names of Dataform datasets generated outside dfe-analytics-dataform which should be materialised before datasets generated by dfe-analytics-dataform. Defaults to `[]` (an empty array) if not specified.
+- ```dependencies``` - array of strings listing the names of Dataform datasets generated outside dfe-analytics-dataform which should be materialised before datasets generated by dfe-analytics-dataform. Defaults to ```[]``` (an empty array) if not specified.
+- ```attributionParameters``` - list of parameters to extract from the request query as individual fields in funnel analysis (for funnels which are new traffic to the site only). Defaults to ```['utm_source','utm_campaign','utm_medium','utm_content','gclid','gcsrc']``` if not specified.
+- ```attributionDomainExclusionRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to detect domain names which should be excluded from attribution modelling - for example, the domain name of an authentication service which never constitutes an external referral to your service. Defaults to ```"(?i)(signin.education.gov.uk)"``` if not specified.
+- ```socialRefererDomainRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to work out whether an HTTP referer's domain name is a social media site. Defaults to ```'(?i)(facebook|twitter|^t.co|linkedin|youtube|pinterest|whatsapp|tumblr|reddit)'``` if not specified.
+- ```searchEngineRefererDomainRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to work out whether an HTTP referer's domain name is a search engine (regardless of whether paid or organic). Defaults to ```'(?i)(google|bing|yahoo|aol|ask.co|baidu|duckduckgo|dogpile|ecosia|exalead|gigablast|hotbot|lycos|metacrawler|mojeek|qwant|searx|swisscows|webcrawler|yandex|yippy)'``` if not specified.
+
+## Updating to a new version
+Users are notified through internal channels when a new version of dfe-analytics-dataform is released. To update:
+1. In your Dataform project, modify your ```package.json``` file to change the version number in this line from the version number you are currently using to the version number you wish to update to:
+```
+"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#vX.Y.Z"
+```
+2. Click on 'Install packages' on the right hand side of this screen in Dataform.
+3. Commit and merge your changes to your main/master branch.
+4. Read the [release notes](https://github.com/DFE-Digital/dfe-analytics-dataform/releases) provided for each new release between the release you were using and the release you are updating to. These may include additional instructions to follow to update to this version - for example, running a full refresh on particular tables. Follow these instructions for all these releases, in the order that they were released.
+5. If you haven't already run the whole pipeline in the previous step, run the whole pipeline now in Dataform. A full refresh should not be required unless specified in the release notes. 
+
+## Updating your ```dataSchema``` configuration
+Update your ```dataSchema``` configuration whenever you wish to change the form that data is transformed into in any of the flattened entity tables generated by dfe-analytics-dataform.
+
+Once you have updated your dataSchema, commit your changes, merge to main/master and then re-run your pipeline in Dataform.
+
+### Format
+```dataSchema``` is a JSON array of objects: ```dataSchema: [{}, {}, {}...]```:
+- Each of these objects represents a table in your schema. It must have the attributes ```entityTableName``` (the name of the table in your database, a string), ```description``` (a meta description of the table, which can be a blank string: ```''```) and ```keys```. If the table has a primary key that is not ```id```, then this object may optionally have the attribute ```primary_key``` (containing the name of the field that is the primary key, if it is not ```'id'```.)
+- ```keys``` is an array of objects. Each table listed within ```dataSchema``` has its own ```keys``` i.e. : ```dataSchema: [{entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}...]```.
+- Each object within each set of ```keys``` determines how dfe-analytics-dataform will transform a field within a table in your schema. Each field object must have within it the attribute ```keyName``` (name of the field in your database). It *may* also have the attributes ```dataType``` (determines the output data type for this field, which can be ```string```, ```boolean```, ```integer```, ```float```, ```date```, ```timestamp``` or ```integer_array```, but defaults to ```string``` if not present), ```description``` (a meta description of the field), ```alias``` (a name to give the field in outputs instead of ```entityTableName```), ```pastKeyNames``` (an array of strings, see below) and/or ```historic``` (a boolean, see below).
+- An example of a ```dataSchema``` is included in the installation instructions above and in [example.js](https://github.com/DFE-Digital/dfe-analytics-dataform/blob/master/definitions/example.js).
+
+### Detecting times when you *must* update the ```dataSchema``
+You must update ```dataSchema``` whenever a field or table is added or removed from your dfe-analytics ```analytics.yml``` file (often because it has been added or removed from your database), changes data type (for example, from ```timestamp``` to ```date```), or changes name.
+
+dfe-analytics-dataform contains 2 [assertions](https://docs.dataform.co/guides/assertions) which will cause your scheduled pipeline runs in Dataform to fail if:
+- Data has been received about an entity in the database that is missing a field it was expecting. This failure will generate an error and prevent further queries in your pipeline from running.
+- Data has been received about an entity in the database that contains a field (or entire table) it was not expecting. This failure will generate an error but will *not* prevent further queries in your pipeline from running. However, the new field(s) or table will not be included in dfe-analytics-dataform output until you update your configuration, and the error will continue to reoccur. 
+
+The output from the assertions in the run logs for the failed run in Dataform will list which field(s) and/or tables are missing or new. You may also wish to check with the rest of your team that the fields you are adding or removing are fields that they were expecting to start or stop streaming, rather than being unexpected behaviour.
+
+In either case, you should update your ```dataSchema``` configuration in ```dfe_analytics_dataform.js``` in Dataform to add or remove configuration for that field, following the JSON format above.
+
+You should not usually need to run a full refresh in this scenario. The only exception to this is if you have added, removed or updated the ```primary_key``` attribute for a table in the ```dataSchema```. If you have done this then you will need to run a full refresh on the ```entity_version``` table in Dataform.
+
+### Retaining access to data in renamed fields
+If a field in your database has been renamed one or more times, and if the data type of that field has not changed, you may merge data from that field stored under its previous names by adding the configuration ```pastKeyNames: ['past_key_name_1','past_key_name_2']``` to the key configuration for that field. The value of that field will be handled as if it were called ```keyName``` if a field with that name is present. If it is not present then the value will be set to the first value in ```pastKeyNames```. If no field with that name is present then the value will be set to the second value in ```pastKeyNames```, and so on. (Behind the scenes, this functions as a SQL ```COALESCE()```.)
+
+### Retaining access to historic fields
+If a field used to be included in streamed entity event data for a particular table, but is no longer streamed, you may retain access to that data in historic versions of entities in that table by adding the configuration ```historic: true``` to the key configuration for that field.
+
+This may be useful if a field has been deleted from a table in the database, but you wish to continue to analyse past versions of that table which do contain that field, or changes between past versions of that table. The field will contain a ```NULL``` value for the latest version of the table.
 
 ## Tables, assertions, and declarations this will create
-For each occurrence of ```dfeAnalyticsDataform()``` in ```definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the UI by opening ```definitions/dfe_analytics_dataform.js```.
+For each occurrence of ```dfeAnalyticsDataform()``` in ```definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the Dataform UI by opening ```definitions/dfe_analytics_dataform.js```.
 
 The names of these will vary depending on the ```eventSourceName``` you have specified. For example if your ```eventSourceName``` was ```foo``` then the following will be created:
-- A declaration of your events table, which you can access via ```${ref("bqDatasetName","bqEventsTableName")}``` (replacing those values with your own).
-- An incremental table called ```events_foo```, which you can access via ```${ref("events_foo")}```. This table will include all the events dfe-analytics streamed into the raw events table. It will also include details of the browser and operating system of the user who caused these events to be streamed, and will attach web request data (like the request path) to all events in the table, not just the web requests.
+- A declaration of your events table, which you can use within a Dataform declaration using something like ```SELECT * FROM ${ref("bqDatasetName","bqEventsTableName")}``` (replacing those values with your own).
+- An incremental table called ```events_foo```, which you can access within a Dataform declaration using something like ```SELECT * FROM ${ref("events_foo")}```. This table will include all the events dfe-analytics streamed into the raw events table. It will also include details of the browser and operating system of the user who caused these events to be streamed, and will attach web request data (like the request path) to all events in the table, not just the web requests.
 - An incremental table called ```foo_entity_version```, containing each version of every entity in the database over time, with a ```valid_from``` and ```valid_to``` timestamp.
 - A table called ```foo_analytics_yml_latest```, which is a table version of the ```dataSchema``` you specified.
 - A table called ```foo_data_schema_json_latest```, which is a default dataSchema JSON you could use to get started specifying this in dfe_analytics_dataform.js
@@ -84,37 +136,4 @@ The names of these will vary depending on the ```eventSourceName``` you have spe
 - A table called ```foo_entity_field_updates```, which contains one row for each time a field was updated for any entity that is streamed as events from the database, setting out the name of the field, the previous value of the field and the new value of the field. Entity deletions and updates to any ```updated_at``` fields are not included, but ```NULL``` values are.
 - For each ```entityTableName``` you specified in ```dataSchema``` like ```bar```, a table called something like ```bar_field_updates_foo```. ```bar_field_updates_foo``` is a denormalised ('flattened') version of ```foo_entity_field_updates```, filtered down to the entity ```bar```, and with the new and previous values of that entity flattened according to the schema for ```foo``` you specified in ```dataSchema```. Fields will have metadata set to match the descriptions set in ```dataSchema```.
 - An incremental table called ```pageview_with_funnels_foo```, which contains pageview events from the events table, along with two ARRAYs of STRUCTs containing a number of pageviews in either direction for use in funnel analysis. This number of pageviews is determined by the ```funnelDepth``` parameter you may optionally call ```dfeAnalyticsDataform()``` with. By default ```funnelDepth``` is 10.
-
-## Using the functions in your queries
-Dataform allows you to break into Javascript within a SQLX file using the syntax ```${Your Javascript goes here.}```. If you created includes/data_functions.js then this means that you can use the functions in the data_functions module provided by this package within SQL queries in the rest of your Dataform project.
-
-The examples below assume that you have an events table created by the dfe-analytics gem which contains a field called ```DATA``` which is an ARRAY of STRUCTs named ```DATA.key``` and ```DATA.value```:
-- Extract the value of a given ```key``` from within ```DATA```. If more than one value is present for ```key``` or in the unlikely event that the same ```key``` occurs multiple times, returns a comma-separated list of all values for this key. If the only values are empty strings or not present, returns ```NULL```.
-
-> ```${data_functions.eventDataExtract("DATA","key")}```
-
-- Extract the value of all ```key```s beginning with the string ```key_to_extract_begins``` from DATA and return them as a comma-separated list of all ```value```s for this ```key```. If the only ```value```s are empty strings or no keys begin ```key_to_extract_begins```, returns ```NULL```.
-
-> ```${data_functions.eventDataExtractListOfStringsBeginning("DATA","key_to_extract_begins")}```
-
-- Return ```TRUE``` if a given ```key``` is present in ```DATA```, and ```FALSE``` otherwise
-
-> ```${data_functions.keyIsInEventData("DATA","key")}```
-
-- Shortcut to run ```eventDataExtract``` and then parse the string extracted as a timestamp, attempting multiple formats. If timezone is not present, assumes timezone is Europe/London. If unable to parse the string as a timestamp in any of the formats, returns ```NULL``` (not an error).
-
-> ```${data_functions.eventDataExtractTimestamp("DATA","key")}```
-
-- Shortcut to run ```eventDataExtract``` and then parse the string extracted as a date, attempting multiple formats (including a timestamp cast to a date). If unable to parse the string as a date in any of the formats, returns ```NULL``` (not an error).
-
-> ```${data_functions.eventDataExtractDate("DATA","key")}```
-
-- Shortcut to extract a string like ```[3,75,2,1]``` from ```DATA``` using ```event_data_extract``` and then convert it into an array of integers.
-
-> ```${data_functions.eventDataExtractIntegerArray("DATA","your_key_name_here")}```
-
-- Sets or replaces the ```value``` of ```key``` to/with ```value``` and returns the entirety of a new version of ```DATA```, having done this
-
-> ```${data_functions.eventDataCreateOrReplace("DATA","key","value")}```
-
-If you want to use one of the functions to extract a field whose name is set dynamically from another SQL field, add an additional ```true``` parameter to the end of the function e.g. ```${data_functions.eventDataExtract("DATA", "key", true)}```.
+- A table called ```sessions_foo```, which contains rows representing user sessions with attribution fields (e.g. medium, referer_domain) for each session. Includes the session_started_at and next_session_started_at timestamps to allow attribution modelling of a goal conversion that occurred between those timestamps.

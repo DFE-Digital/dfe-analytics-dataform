@@ -15,12 +15,12 @@ module.exports = (params) => {
         sourcedataset: params.bqDatasetName.toLowerCase()
       }
     }
-  }).query(ctx => `SELECT * FROM UNNEST([
+  }).query(ctx => `SELECT * FROM UNNEST([\n
       ${params.dataSchema.map(tableSchema => {
-        return `STRUCT("${tableSchema.entityTableName}" AS entity_name, "${tableSchema.description}" AS description, [${tableSchema.keys.map(key => {
+        return `STRUCT("${tableSchema.entityTableName}" AS entity_name,\n"${tableSchema.description}" AS description,\n[${tableSchema.keys.filter(key => !key.historic).map(key => {
           return `"${key.keyName}"`;
           }
-        ).join(',')}] AS keys)`;
+        ).join(',\n')}] AS keys)`;
       }
     ).join(',')}  
   ])`)

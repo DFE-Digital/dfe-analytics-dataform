@@ -6,6 +6,7 @@ dfeAnalyticsDataform({
   bqProjectName: "Your BigQuery project name here",
   bqDatasetName: "Your BigQuery dataset name here",
   bqEventsTableName: "Your BigQuery events table name here - usually just 'events'",
+  urlRegex: "www.yourdomainname.gov.uk", // re-2 formatted regular expression to use to identify whether a URL is this service's own URL or an external one. If your service only has one domain name set this to 'www.yourdomainname.gov.uk' (without the protocol). If you have more than one use something like '(?i)(www.domain1.gov.uk|www.domain2.gov.uk|www.domain3.gov.uk)'
   dataSchema: [{
     entityTableName: "Your entity table name here from your production database analytics.yml",
     description: "Description of this entity to include in metadata of denormalised tables produced for this entity.",
