@@ -62,12 +62,12 @@ module.exports = (params) => {
         var newFieldCoalesceSql;
         var previousFieldCoalesceSql;
         if (!key.pastKeyNamesToCoalesce) {
-          newFieldCoalesceSql = `new_DATA_struct.${key.keyName}`;
-          previousFieldCoalesceSql = `previous_DATA_struct.${key.keyName}`;
+          newFieldCoalesceSql = `new_DATA_struct.${key.alias || key.keyName}`;
+          previousFieldCoalesceSql = `previous_DATA_struct.${key.alias || key.keyName}`;
         }
         else {
-          newFieldCoalesceSql = `COALESCE(new_DATA_struct.${key.keyName}, new_DATA_struct.${key.pastKeyNamesToCoalesce.join(', new_DATA_struct.')})`;
-          previousFieldCoalesceSql = `COALESCE(previous_DATA_struct.${key.keyName}, previous_DATA_struct.${key.pastKeyNamesToCoalesce.join(', previous_DATA_struct.')})`;
+          newFieldCoalesceSql = `COALESCE(new_DATA_struct.${key.alias || key.keyName}, new_DATA_struct.${key.pastKeyNamesToCoalesce.join(', new_DATA_struct.')})`;
+          previousFieldCoalesceSql = `COALESCE(previous_DATA_struct.${key.alias || key.keyName}, previous_DATA_struct.${key.pastKeyNamesToCoalesce.join(', previous_DATA_struct.')})`;
         }
         var fieldSql;
         if(key.dataType == 'boolean') {

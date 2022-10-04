@@ -82,10 +82,10 @@ module.exports = (params) => {
       else {
         var coalesceSql;
         if (!key.pastKeyNames) {
-          coalesceSql = `DATA_struct.${key.keyName}`;
+          coalesceSql = `DATA_struct.${key.alias || key.keyName}`;
         }
         else {
-          coalesceSql = `COALESCE(DATA_struct.${key.keyName}, DATA_struct.${key.pastKeyNames.join(', DATA_struct.')})`;
+          coalesceSql = `COALESCE(DATA_struct.${key.alias || key.keyName}, DATA_struct.${key.pastKeyNames.join(', DATA_struct.')})`;
         }
         var fieldSql;
         if(key.dataType == 'boolean') {
