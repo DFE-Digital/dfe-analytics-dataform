@@ -7,14 +7,14 @@ Dataform package containing commonly used SQL functions and table definitions, f
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.0.1"
+"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.0.2"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
         "@dataform/core": "1.22.0",
-        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.0.1"
+        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.0.2"
     }
 }
 ```
@@ -128,7 +128,6 @@ The names of these will vary depending on the ```eventSourceName``` you have spe
 - A declaration of your events table, which you can use within a Dataform declaration using something like ```SELECT * FROM ${ref("bqDatasetName","bqEventsTableName")}``` (replacing those values with your own).
 - An incremental table called ```events_foo```, which you can access within a Dataform declaration using something like ```SELECT * FROM ${ref("events_foo")}```. This table will include all the events dfe-analytics streamed into the raw events table. It will also include details of the browser and operating system of the user who caused these events to be streamed, and will attach web request data (like the request path) to all events in the table, not just the web requests.
 - An incremental table called ```foo_entity_version```, containing each version of every entity in the database over time, with a ```valid_from``` and ```valid_to``` timestamp.
-- A table called ```foo_analytics_yml_latest```, which is a table version of the ```dataSchema``` you specified.
 - A table called ```foo_data_schema_json_latest```, which is a default dataSchema JSON you could use to get started specifying this in dfe_analytics_dataform.js
 - For each ```entityTableName``` you specified in ```dataSchema``` like ```bar```, tables called something like ```bar_version_foo``` and ```bar_latest_foo```. ```bar_version_foo``` is a denormalised ('flattened') version of ```foo_version```, flattened according to the schema for ```foo``` you specified in ```dataSchema```. ```bar_latest_foo``` is the same as ```bar_version_foo``` except that it only includes the latest version of each entity (i.e. with ```valid_to IS NULL```). Both tables and fields within them will have metadata set to match the descriptions set in ```dataSchema```.
 - Table valued functions called something like ```bar_at_foo``` which can be used to generate a past version of a table at a specified timestamp.

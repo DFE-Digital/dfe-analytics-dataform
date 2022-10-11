@@ -3,7 +3,22 @@ module.exports = (params) => {
     ...params.defaultConfig,
     type: "assertion",
     description: "Identifies any entities or field names that are being streamed which don't exist in the dataSchema parameter passed to dfe-analytics-dataform. If this assertion fails as a minimum it means that we either need to (a) if a whole entity is missing, add it to dataSchema or (b) if just a field is missing, add the missing field(s) to dataSchema. Depending on what the additional data identified is, we may also want to update other parts of the pipeline to make this data available."
-  }).query(ctx => `SELECT
+  }).query(ctx => `
+WITH expected_entity_fields AS (
+  SELECT
+    entity_name,
+    keys
+  FROM
+  UNNEST([
+      ${params.dataSchema.map(tableSchema => {
+        return `STRUCT("${tableSchema.entityTableName}" AS entity_name,
+        [${tableSchema.keys.filter(key => !key.historic).map(key => {return `"${key.keyName}"`;}).join(', ')}] AS keys
+        )`;
+      }
+    ).join(',')}  
+  ])
+)
+SELECT
   entity_table_name,
   key AS key_missing_from_pipeline,
   updates_made_yesterday_with_this_key
@@ -22,11 +37,11 @@ FROM
       entity_table_name,
       key
   )
-  LEFT JOIN ${ctx.ref(params.eventSourceName + "_analytics_yml_latest")} AS analytics_yml_latest 
-  ON  entity_table_name = entity_name
+  LEFT JOIN expected_entity_fields
+  ON entity_table_name = entity_name
 
 WHERE
-  key NOT IN UNNEST(analytics_yml_latest.keys)
+  key NOT IN UNNEST(expected_entity_fields.keys)
   AND key NOT IN ("entity_name","id","created_at","updated_at")
 ORDER BY
   entity_table_name,
