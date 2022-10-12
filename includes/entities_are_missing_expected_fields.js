@@ -9,8 +9,14 @@ WITH expected_entity_fields AS (
     entity_name,
     key AS expected_key
   FROM
-    ${ctx.ref(params.eventSourceName + "_analytics_yml_latest")},
-    UNNEST(keys) AS key
+  UNNEST([
+      ${params.dataSchema.map(tableSchema => {
+        return `STRUCT("${tableSchema.entityTableName}" AS entity_name,
+        [${tableSchema.keys.filter(key => !key.historic).map(key => {return `"${key.keyName}"`;}).join(', ')}] AS keys
+        )`;
+      }
+    ).join(',')}  
+  ]), UNNEST(keys) AS key
 )
 SELECT
   entity_name,
