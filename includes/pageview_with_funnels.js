@@ -113,7 +113,7 @@ module.exports = (params) => {
   }).query(ctx => `
 WITH
   web_request AS (
-  /* Filter out non-web request events, non-HTML pages and bot events, remove URI formatted characters from the referer and flatten repeated parameter values in the query string into separate parameters */
+  /* Filter out non-web request events & non-HTML pages, remove URI formatted characters from the referer and flatten repeated parameter values in the query string into separate parameters */
   SELECT
     * EXCEPT(request_query,
       request_referer,
@@ -131,7 +131,6 @@ WITH
     ${ctx.ref("events_" + params.eventSourceName)}
   WHERE
     event_type="web_request"
-    AND device_category != "bot"
     AND CONTAINS_SUBSTR(response_content_type,
       "text/html")
     AND DATE(occurred_at) < CURRENT_DATE
