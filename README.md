@@ -7,14 +7,14 @@ Dataform package containing commonly used SQL functions and table definitions, f
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.0.3"
+"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.1.0"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
         "@dataform/core": "1.22.0",
-        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.0.3"
+        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.1.0"
     }
 }
 ```
@@ -61,13 +61,16 @@ dfeAnalyticsDataform({
 
 10. In the unlikely event that one or more of the tables in your database being streamed by ```dfe-analytics``` has a primary key that is not ```id```, add the line ```primary_key: 'name_of_primary_key_for_this_table'``` to the element of the dataSchema that represents this table, alongside the ```entityTableName```.
 
-11. Commit your changes and merge to the ```main```/```master``` branch of your Dataform project.
+11. If your dfe-analytics implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table, add the line ```bqEventsTableNameSpace: 'your_namespace_here'``` after the line that sets the ```bqEventsTableName``` parameter. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per value of ```namespace``` - this allows configuration options to differ between namespaces.
 
-12. Run a 'full refresh' on your entire pipeline, and resolve any configuration errors this flags (e.g. omissions made when specifying a ```dataSchema```).
+12. Commit your changes and merge to the ```main```/```master``` branch of your Dataform project.
+
+13. Run a 'full refresh' on your entire pipeline, and resolve any configuration errors this flags (e.g. omissions made when specifying a ```dataSchema```).
 
 ## Additional configuration options
 You may in addition to step 8 of the setup instructions wish to configure the following options by adding them to the JSON passed to the ```dfeAnalyticsDataform()``` JavaScript function.
 
+- ```bqEventsTableNameSpace``` - value of the ```namespace``` field in the ```events``` table to filter all data being transformed by before it enters the pipeline. Use this if your dfe-analytics implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table in BigQuery. ```null``` by default. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per possible value of ```namespace``` - this allows configuration options to differ between namespaces.
 - ```transformEntityEvents``` - whether to generate queries that transform entity CRUD events into flattened tables. Boolean (```true``` or ```false```, without quotes). Defaults to ```true``` if not specified.
 - ```funnelDepth``` - number of steps forwards/backwards to analyse in pageview funnels - higher allows deeper analysis, lower reduces CPU usage and cost. Defaults to ```10``` if not specified.
 - ```requestPathGroupingRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to replace with the string 'UID' when grouping web request paths in funnel analysis. Defaults to ```'[0-9a-zA-Z]*[0-9][0-9a-zA-Z]*'``` if not specified (i.e. replaces unbroken strings of alphanumeric characters that include one or more numeric characters with 'UID')
@@ -126,7 +129,7 @@ For each occurrence of ```dfeAnalyticsDataform()``` in ```definitions/dfe_analyt
 
 The names of these will vary depending on the ```eventSourceName``` you have specified. For example if your ```eventSourceName``` was ```foo``` then the following will be created:
 - A declaration of your events table, which you can use within a Dataform declaration using something like ```SELECT * FROM ${ref("bqDatasetName","bqEventsTableName")}``` (replacing those values with your own).
-- An incremental table called ```events_foo```, which you can access within a Dataform declaration using something like ```SELECT * FROM ${ref("events_foo")}```. This table will include all the events dfe-analytics streamed into the raw events table. It will also include details of the browser and operating system of the user who caused these events to be streamed, and will attach web request data (like the request path) to all events in the table, not just the web requests.
+- An incremental table called ```events_foo```, which you can access within a Dataform declaration using something like ```SELECT * FROM ${ref("events_foo")}```. This table will include all the events dfe-analytics streamed into the raw events table, filtered by namespace (if you configured this). It will also include details of the browser and operating system of the user who caused these events to be streamed, and will attach web request data (like the request path) to all events in the table, not just the web requests.
 - An incremental table called ```foo_entity_version```, containing each version of every entity in the database over time, with a ```valid_from``` and ```valid_to``` timestamp.
 - A table called ```foo_data_schema_json_latest```, which is a default dataSchema JSON you could use to get started specifying this in dfe_analytics_dataform.js
 - For each ```entityTableName``` you specified in ```dataSchema``` like ```bar```, tables called something like ```bar_version_foo``` and ```bar_latest_foo```. ```bar_version_foo``` is a denormalised ('flattened') version of ```foo_version```, flattened according to the schema for ```foo``` you specified in ```dataSchema```. ```bar_latest_foo``` is the same as ```bar_version_foo``` except that it only includes the latest version of each entity (i.e. with ```valid_to IS NULL```). Both tables and fields within them will have metadata set to match the descriptions set in ```dataSchema```.
