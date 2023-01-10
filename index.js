@@ -19,6 +19,7 @@ module.exports = (params) => {
     bqProjectName: null, // name of the BigQuery project that dfe-analytics streams event data into
     bqDatasetName: null, // name of the BigQuery dataset that dfe-analytics streams event data into
     bqEventsTableName: 'events', // name of the BigQuery table that dfe-analytics streams event data into
+    bqEventsTableNameSpace: null, // optional - value of the namespace field in the events table to filter by. Use this to distinguish between multiple applications or interfaces which stream events to the same events table.
     transformEntityEvents: true, // whether to generate tables that transform entity CRUD events into flattened tables
     urlRegex: null, // re-2 formatted regular expression to use to identify whether a URL is this service's own URL or an external one. If your service only has one domain name set this to 'www.yourdomainname.gov.uk' (without the protocol). If you have more than one use something like '(?i)(www.domain1.gov.uk|www.domain2.gov.uk|www.domain3.gov.uk)'
     socialRefererDomainRegex: "(?i)(facebook|twitter|^t.co|linkedin|youtube|pinterest|whatsapp|tumblr|reddit)", // re-2 formatted regular expression to use to work out whether an HTTP referer is a social media site
@@ -38,6 +39,7 @@ module.exports = (params) => {
     bqProjectName,
     bqDatasetName,
     bqEventsTableName,
+    bqEventsTableNameSpace,
     transformEntityEvents,
     urlRegex,
     socialRefererDomainRegex,

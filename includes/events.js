@@ -1,4 +1,8 @@
 module.exports = (params) => {
+  var namespaceFilterSql = '';
+  if(params.bqEventsTableNameSpace) {
+    namespaceFilterSql = `AND namespace = '${params.bqEventsTableNameSpace}'`;
+  }
   return publish("events_" + params.eventSourceName, {
     ...params.defaultConfig,
     type: "incremental",
@@ -74,6 +78,7 @@ module.exports = (params) => {
     /* Process web requests as far back as 1 day before the timestamp we're updating this table from, to ensure that we do find the web request for each non-web request event, even if the non-web request event occurred the other side of event_timestamp_checkpoint from the web request event that caused it */
     AND minimal_earliest_event_for_web_request.occurred_at > TIMESTAMP_SUB(event_timestamp_checkpoint, INTERVAL 1 DAY)
     AND web_request.occurred_at > TIMESTAMP_SUB(event_timestamp_checkpoint, INTERVAL 1 DAY)
+    ${namespaceFilterSql}
 ),
 event_with_web_request_data AS (
   SELECT
@@ -99,7 +104,7 @@ event_with_web_request_data AS (
     ON event.request_uuid = earliest_event_for_web_request.request_uuid
     AND event.event_type != "web_request"
   WHERE
-    event.occurred_at > event_timestamp_checkpoint)
+    event.occurred_at > event_timestamp_checkpoint ${namespaceFilterSql})
 SELECT
   event_with_web_request_data.*,
   IF(REGEXP_CONTAINS(request_user_agent, '(?i)(bot|http|python|scan|check|spider|curl|trend|ruby|bash|batch|verification|qwantify|nuclei|ai|crawler|perl|java|test|scoop|fetch|adreview|cortex|nessus|bitdiscovery|postplanner|faraday|restsharp|hootsuite|mattermost|shortlink|retriever|auto|scrper|alyzer|dispatch|traackr|fiddler|crowsnest|gigablast|wakelet|installatron|intently|openurl|anthill|curb|trello|inject|ahc|sleep|sysdate|=|cloudinary|statuscake|cloudfront|archive|sleuth|bingpreview|facebookexternalhit|newspaper|econtext|postmanruntime|probe)'),"bot",
