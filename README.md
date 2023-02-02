@@ -2,19 +2,19 @@
 Dataform package containing commonly used SQL functions and table definitions, for use with event data streamed to BigQuery using DfE-Digital/dfe-analytics: https://github.com/DFE-Digital/dfe-analytics.
 
 ## How to install
-1. Set up your Dataform project.
+1. Set up your Dataform project using the [legacy Dataform web interface](https://app.dataform.co). Do not use the version of Dataform which is included with GCP and BigQuery - this is still in development and not feature complete, so is not yet supported by dfe-analytics-dataform.
 2. Ensure that it is connected to your BigQuery project.
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.1.0"
+"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.2.0"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
-        "@dataform/core": "1.22.0",
-        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.1.0"
+        "@dataform/core": "2.3.0",
+        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.2.0"
     }
 }
 ```
@@ -30,7 +30,6 @@ const dfeAnalyticsDataform = require("dfe-analytics-dataform");
 // Repeat the lines below for each and every events table you want dfe-analytics-dataform to process in your Dataform project - distinguish between them by giving each one a different eventSourceName. This will cause all the tables produced automatically by dfe-analytics-dataform to have your suffix included in them to allow users to tell the difference between them.
 dfeAnalyticsDataform({
   eventSourceName: "Short name for your event source here - this might be a short name for your service, for example",
-  bqProjectName: "Your BigQuery project name here",
   bqDatasetName: "Your BigQuery dataset name here",
   bqEventsTableName: "Your BigQuery events table name here - usually just 'events'",
   urlRegex: "www.yourdomainname.gov.uk", // re-2 formatted regular expression to use to identify whether a URL is this service's own URL or an external one. If your service only has one domain name set this to 'www.yourdomainname.gov.uk' (without the protocol). If you have more than one use something like '(?i)(www.domain1.gov.uk|www.domain2.gov.uk|www.domain3.gov.uk)'
@@ -55,21 +54,24 @@ dfeAnalyticsDataform({
 });
 ```
 
-8. Replace the values of the ```eventSourceName```, ```bqProjectName```, ```bqDatasetName```, ```bqEventsTableName``` and ```urlRegex``` parameters in this file with the values you need. At this stage compilation errors like ```Error: Not found: Dataset your-project-name:output-dataset-name was not found in location europe-west2 at [1:44]``` are normal because you haven't yet run the pipeline for the first time, which creates the output dataset.
+8. Replace the values of the ```eventSourceName```, ```bqDatasetName```, ```bqEventsTableName``` and ```urlRegex``` parameters in this file with the values you need. At this stage compilation errors like ```Error: Not found: Dataset your-project-name:output-dataset-name was not found in location europe-west2 at [1:44]``` are normal because you haven't yet run the pipeline for the first time, which creates the output dataset.
 
 9. Do the same for the ```dataSchema``` parameter - a JSON value which specifies the schema of the tables and field names and types in your database which are being streamed to BigQuery. Don't include the ```id```, ```created_at``` and ```updated_at``` fields - they are included automatically. If you're starting from scratch, *don't* type this out. Instead, to save time, generate a blank ```dataSchema``` JSON to paste in to this file by running the query in Dataform to create the ```data_schema_json_latest``` table. You can do this from the right hand sidebar when you open ```dfe_analytics_dataform``` in the Dataform web client, and then copying and pasting the output from the table this produces in BigQuery (don't copy and paste from Dataform as it doesn't handle newlines well). This will automatically attempt to work out table names, field names and data types for each field using data streamed the previous day and today - although you might need to add in any tables that didn't have entity events streamed yesterday/today manually, or tweak some data types.
 
-10. In the unlikely event that one or more of the tables in your database being streamed by ```dfe-analytics``` has a primary key that is not ```id```, add the line ```primary_key: 'name_of_primary_key_for_this_table'``` to the element of the dataSchema that represents this table, alongside the ```entityTableName```.
+10. In the unlikely event that your ```events``` table is stored in a different BigQuery project to the project named in your ```defaultDatabase``` parameter in the ```dataform.json``` file in your Dataform project, add the line ```bqProjectName: 'name_of_the_bigquery_project_your_events_table_is_in',``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
 
-11. If your dfe-analytics implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table, add the line ```bqEventsTableNameSpace: 'your_namespace_here'``` after the line that sets the ```bqEventsTableName``` parameter. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per value of ```namespace``` - this allows configuration options to differ between namespaces.
+11. In the unlikely event that one or more of the tables in your database being streamed by ```dfe-analytics``` has a primary key that is not ```id```, add the line ```primary_key: 'name_of_primary_key_for_this_table'``` to the element of the dataSchema that represents this table, alongside the ```entityTableName```.
 
-12. Commit your changes and merge to the ```main```/```master``` branch of your Dataform project.
+12. If your dfe-analytics implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table, add the line ```bqEventsTableNameSpace: 'your_namespace_here'``` after the line that sets the ```bqEventsTableName``` parameter. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per value of ```namespace``` - this allows configuration options to differ between namespaces.
 
-13. Run a 'full refresh' on your entire pipeline, and resolve any configuration errors this flags (e.g. omissions made when specifying a ```dataSchema```).
+13. Commit your changes and merge to the ```main```/```master``` branch of your Dataform project.
+
+14. Run a 'full refresh' on your entire pipeline, and resolve any configuration errors this flags (e.g. omissions made when specifying a ```dataSchema```).
 
 ## Additional configuration options
 You may in addition to step 8 of the setup instructions wish to configure the following options by adding them to the JSON passed to the ```dfeAnalyticsDataform()``` JavaScript function.
 
+- ```bqProjectName``` - name of the BigQuery project that your events table is located in. Defaults to the same BigQuery project named in your ```defaultDatabase``` parameter in the ```dataform.json``` file in your Dataform project.
 - ```bqEventsTableNameSpace``` - value of the ```namespace``` field in the ```events``` table to filter all data being transformed by before it enters the pipeline. Use this if your dfe-analytics implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table in BigQuery. ```null``` by default. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per possible value of ```namespace``` - this allows configuration options to differ between namespaces.
 - ```transformEntityEvents``` - whether to generate queries that transform entity CRUD events into flattened tables. Boolean (```true``` or ```false```, without quotes). Defaults to ```true``` if not specified.
 - ```funnelDepth``` - number of steps forwards/backwards to analyse in pageview funnels - higher allows deeper analysis, lower reduces CPU usage and cost. Defaults to ```10``` if not specified.
