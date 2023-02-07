@@ -16,7 +16,7 @@ module.exports = (params) => {
 
   params = {
     eventSourceName: null, // suffix to append to table names to distinguish them if this package is run more than once
-    bqProjectName: null, // name of the BigQuery project that dfe-analytics streams event data into
+    bqProjectName: this.database, // name of the BigQuery project that dfe-analytics streams event data into. Defaults to the same project name as the default set in dataform.json.
     bqDatasetName: null, // name of the BigQuery dataset that dfe-analytics streams event data into
     bqEventsTableName: 'events', // name of the BigQuery table that dfe-analytics streams event data into
     bqEventsTableNameSpace: null, // optional - value of the namespace field in the events table to filter by. Use this to distinguish between multiple applications or interfaces which stream events to the same events table.
