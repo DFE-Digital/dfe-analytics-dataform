@@ -23,7 +23,7 @@ It should now look something like:
 ```
 module.exports = require("dfe-analytics-dataform/includes/data_functions");
 ```
-7. Create a second file called definitions/dfe_analytics_dataform.js that looks like the following:
+7. Create a second file called ```definitions/dfe_analytics_dataform.js``` that looks like the following:
 ```
 const dfeAnalyticsDataform = require("dfe-analytics-dataform");
 
