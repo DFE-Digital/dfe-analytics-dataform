@@ -10,6 +10,7 @@ const flattenedEntityFieldUpdates = require("./includes/flattened_entity_field_u
 const entityAt = require("./includes/entity_at");
 const entitiesAreMissingExpectedFields = require("./includes/entities_are_missing_expected_fields");
 const unhandledFieldOrEntityIsBeingStreamed = require("./includes/unhandled_field_or_entity_is_being_streamed");
+const referentialIntegrityCheck = require("./includes/referential_integrity_check");
 const dataSchemaJSONLatest = require("./includes/data_schema_json_latest");
 
 module.exports = (params) => {
@@ -71,6 +72,7 @@ module.exports = (params) => {
       sessions: sessions(params),
       entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
       unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
+      referentialIntegrityCheck: referentialIntegrityCheck(params),
       entityVersion: entityVersion(params),
       entityFieldUpdates: entityFieldUpdates(params),
       dataFunctions,

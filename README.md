@@ -7,14 +7,14 @@ Dataform package containing commonly used SQL functions and table definitions, f
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.2.0"
+"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.3.0"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
-        "@dataform/core": "2.3.0",
-        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.2.0"
+        "@dataform/core": "2.4.2",
+        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.3.0"
     }
 }
 ```
@@ -68,9 +68,11 @@ dfeAnalyticsDataform({
 
 14. If your dfe-analytics implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table, add the line ```bqEventsTableNameSpace: 'your_namespace_here'``` after the line that sets the ```bqEventsTableName``` parameter. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per value of ```namespace``` - this allows configuration options to differ between namespaces.
 
-15. Commit your changes and merge to the ```main```/```master``` branch of your Dataform project.
+15. Optionally, for each foreign key, configure referential integrity assertions following the instructions in the section below. These check that the value of each foreign key matches a valid primary key in another table.
 
-16. Run a 'full refresh' on your entire pipeline, and resolve any configuration errors this flags (e.g. omissions made when specifying a ```dataSchema```).
+16. Commit your changes and merge to the ```main```/```master``` branch of your Dataform project.
+
+17. Run a 'full refresh' on your entire pipeline, and resolve any configuration errors this flags (e.g. omissions made when specifying a ```dataSchema```).
 
 ## Additional configuration options
 You may in addition to step 8 of the setup instructions wish to configure the following options by adding them to the JSON passed to the ```dfeAnalyticsDataform()``` JavaScript function.
@@ -106,7 +108,7 @@ Once you have updated your dataSchema, commit your changes, merge to main/master
 ```dataSchema``` is a JSON array of objects: ```dataSchema: [{}, {}, {}...]```:
 - Each of these objects represents a table in your schema. It must have the attributes ```entityTableName``` (the name of the table in your database, a string), ```description``` (a meta description of the table, which can be a blank string: ```''```) and ```keys```. If the table has a primary key that is not ```id```, then this object may optionally have the attribute ```primary_key``` (containing the name of the field that is the primary key, if it is not ```'id'```.)
 - ```keys``` is an array of objects. Each table listed within ```dataSchema``` has its own ```keys``` i.e. : ```dataSchema: [{entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}...]```.
-- Each object within each set of ```keys``` determines how dfe-analytics-dataform will transform a field within a table in your schema. Each field object must have within it the attribute ```keyName``` (name of the field in your database). It *may* also have the attributes ```dataType``` (determines the output data type for this field, which can be ```string```, ```boolean```, ```integer```, ```float```, ```date```, ```timestamp``` or ```integer_array```, but defaults to ```string``` if not present), ```description``` (a meta description of the field), ```alias``` (a name to give the field in outputs instead of ```entityTableName```), ```pastKeyNames``` (an array of strings, see below) and/or ```historic``` (a boolean, see below).
+- Each object within each set of ```keys``` determines how dfe-analytics-dataform will transform a field within a table in your schema. Each field object must have within it the attribute ```keyName``` (name of the field in your database). It *may* also have the attributes ```dataType``` (determines the output data type for this field, which can be ```string```, ```boolean```, ```integer```, ```float```, ```date```, ```timestamp``` or ```integer_array```, but defaults to ```string``` if not present), ```description``` (a meta description of the field), ```alias``` (a name to give the field in outputs instead of ```entityTableName```), ```pastKeyNames``` (an array of strings, see below), ```historic``` (a boolean, see below), ```foreignKeyName``` (a string, see below) and/or ```foreignKeyTable``` (a string, see below).
 - An example of a ```dataSchema``` is included in the installation instructions above and in [example.js](https://github.com/DFE-Digital/dfe-analytics-dataform/blob/master/definitions/example.js).
 
 ### Detecting times when you *must* update the ```dataSchema``
@@ -130,6 +132,22 @@ If a field used to be included in streamed entity event data for a particular ta
 
 This may be useful if a field has been deleted from a table in the database, but you wish to continue to analyse past versions of that table which do contain that field, or changes between past versions of that table. The field will contain a ```NULL``` value for the latest version of the table.
 
+### Referential integrity assertions
+Referential integrity means that each value of a foreign key stored in a table matches a value of a primary key in a related table. dfe-analytics-dataform provides optional Dataform assertions which you may use to monitor referential integrity automatically. If a referential integrity assertion fails, the likely cause is that some data has not been streamed correctly to your ```events``` table by ```dfe-analytics```. A short term fix might be to run a ```dfe-analytics``` backfill on that table. Please report persistent referential integrity assertion failures, however, so that they can be investigated.
+
+To configure a referential integrity assertion for a particular field (key), add parameters to the configuration for that key in your dataSchema so that it looks like:
+```
+    {
+      keyName: "other_thing_id",
+      dataType: "string",
+      description: "Description of this field to include in metadata here.",
+      foreignKeyTable: "other_things", // The name of the table the other_thing_id foreign key in this table relates *to* in your application database
+      foreignKeyName: "other_thing_id" // The name of the primary key in the foreignKeyTable table the other_thing_id foreign key relates to.
+    }
+```
+
+If ```foreignKeyName``` is omitted, it defaults to ```id```.
+
 ## Tables, assertions, and declarations this will create
 For each occurrence of ```dfeAnalyticsDataform()``` in ```definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the Dataform UI by opening ```definitions/dfe_analytics_dataform.js```.
 
@@ -145,3 +163,4 @@ The names of these will vary depending on the ```eventSourceName``` you have spe
 - For each ```entityTableName``` you specified in ```dataSchema``` like ```bar```, a table called something like ```bar_field_updates_foo```. ```bar_field_updates_foo``` is a denormalised ('flattened') version of ```foo_entity_field_updates```, filtered down to the entity ```bar```, and with the new and previous values of that entity flattened according to the schema for ```foo``` you specified in ```dataSchema```. Fields will have metadata set to match the descriptions set in ```dataSchema```.
 - An incremental table called ```pageview_with_funnels_foo```, which contains pageview events from the events table, along with two ARRAYs of STRUCTs containing a number of pageviews in either direction for use in funnel analysis. This number of pageviews is determined by the ```funnelDepth``` parameter you may optionally call ```dfeAnalyticsDataform()``` with. By default ```funnelDepth``` is 10.
 - A table called ```sessions_foo```, which contains rows representing user sessions with attribution fields (e.g. medium, referer_domain) for each session. Includes the session_started_at and next_session_started_at timestamps to allow attribution modelling of a goal conversion that occurred between those timestamps.
+amps.

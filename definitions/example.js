@@ -22,6 +22,28 @@ dfeAnalyticsDataform({
       keyName: "Your date field name here",
       dataType: "date",
       description: "Description of this field to include in metadata here."
+    }, {
+      keyName: "related_thing_id",
+      dataType: "string",
+      description: "Description of this field to include in metadata here.",
+      // Example of how to configure a referential integrity check that all related_thing_ids in this table relate to an id in the related_thing_latest_eventsource table
+      foreignKeyTable: "related_thing"
+    }, {
+      keyName: "related_thing_other_id",
+      dataType: "string",
+      description: "Description of this field to include in metadata here.",
+      // Example of how to configure a referential integrity check that all related_thing_ids in this table relate to an other_id in the related_thing_latest_eventsource table
+      foreignKeyName: "other_id",
+      foreignKeyTable: "related_thing"
+    }]
+  },
+  {
+    entityTableName: "related_thing",
+    description: "Description of this field to include in metadata here.",
+    keys: [{
+      keyName: "other_id",
+      dataType: "string",
+      description: "Description of this field to include in metadata here."
     }]
   }]
 });
