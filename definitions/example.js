@@ -40,6 +40,7 @@ dfeAnalyticsDataform({
   {
     entityTableName: "related_thing",
     description: "Description of this field to include in metadata here.",
+    dataFreshnessDays: 7, // Example of how to configure an entity-level data freshness assertion
     keys: [{
       keyName: "other_id",
       dataType: "string",

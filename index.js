@@ -1,6 +1,7 @@
 const dataFunctions = require("./includes/data_functions");
 const events = require("./includes/events");
 const eventsDataNotFresh = require("./includes/events_data_not_fresh");
+const entityDataNotFresh = require("./includes/entity_data_not_fresh");
 const pageviewWithFunnel = require("./includes/pageview_with_funnels");
 const sessions = require("./includes/sessions");
 const entityVersion = require("./includes/entity_version");
@@ -72,6 +73,7 @@ module.exports = (params) => {
       eventsRaw,
       events: events(params),
       eventsDataNotFresh: eventsDataNotFresh(params),
+      entityDataNotFresh: entityDataNotFresh(params),
       pageviewWithFunnel: pageviewWithFunnel(params),
       sessions: sessions(params),
       entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
