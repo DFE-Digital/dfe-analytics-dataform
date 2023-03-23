@@ -119,9 +119,15 @@ FROM (
     SELECT
       AS STRUCT
       ${tableSchema.keys.map(key => {
-          return `ANY_VALUE(IF(key="${key.keyName}",value,NULL)) AS ${key.alias || key.keyName},`;
+          var pastKeyNamesSql = '';
+          if (key.pastKeyNames) {
+          key.pastKeyNames.forEach(pastKeyName => {
+            pastKeyNamesSql += `      ANY_VALUE(IF(key="${pastKeyName}",value,NULL)) AS ${pastKeyName},\n`;
+            });
+          }
+          return `ANY_VALUE(IF(key="${key.keyName}",value,NULL)) AS ${key.alias || key.keyName},\n` + pastKeyNamesSql;
       }
-    ).join('\n')
+    ).join('')
   }
     FROM (
       SELECT
