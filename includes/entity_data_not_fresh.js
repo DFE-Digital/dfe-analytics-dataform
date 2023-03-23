@@ -17,7 +17,7 @@ module.exports = (params) => {
           .query(ctx =>
             "SELECT MAX(last_streamed_event_occurred_at) AS event_last_streamed_at FROM " +
             ctx.ref(tableSchema.entityTableName + "_latest_" + params.eventSourceName) +
-            " HAVING event_last_streamed_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP, INTERVAL " +
+            " HAVING event_last_streamed_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP, INTERVAL " +
             tableSchema.dataFreshnessDays +
             " DAY)"
           )
