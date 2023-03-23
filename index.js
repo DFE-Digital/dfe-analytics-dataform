@@ -1,5 +1,7 @@
 const dataFunctions = require("./includes/data_functions");
 const events = require("./includes/events");
+const eventsDataNotFresh = require("./includes/events_data_not_fresh");
+const entityDataNotFresh = require("./includes/entity_data_not_fresh");
 const pageviewWithFunnel = require("./includes/pageview_with_funnels");
 const sessions = require("./includes/sessions");
 const entityVersion = require("./includes/entity_version");
@@ -10,6 +12,7 @@ const flattenedEntityFieldUpdates = require("./includes/flattened_entity_field_u
 const entityAt = require("./includes/entity_at");
 const entitiesAreMissingExpectedFields = require("./includes/entities_are_missing_expected_fields");
 const unhandledFieldOrEntityIsBeingStreamed = require("./includes/unhandled_field_or_entity_is_being_streamed");
+const referentialIntegrityCheck = require("./includes/referential_integrity_check");
 const dataSchemaJSONLatest = require("./includes/data_schema_json_latest");
 
 module.exports = (params) => {
@@ -20,6 +23,7 @@ module.exports = (params) => {
     bqDatasetName: null, // name of the BigQuery dataset that dfe-analytics streams event data into
     bqEventsTableName: 'events', // name of the BigQuery table that dfe-analytics streams event data into
     bqEventsTableNameSpace: null, // optional - value of the namespace field in the events table to filter by. Use this to distinguish between multiple applications or interfaces which stream events to the same events table.
+    eventsDataFreshnessDays: 1, // Number of days after which, if no new events have been received, the events_data_not_fresh assertion will fail to alert you to this
     transformEntityEvents: true, // whether to generate tables that transform entity CRUD events into flattened tables
     urlRegex: null, // re-2 formatted regular expression to use to identify whether a URL is this service's own URL or an external one. If your service only has one domain name set this to 'www.yourdomainname.gov.uk' (without the protocol). If you have more than one use something like '(?i)(www.domain1.gov.uk|www.domain2.gov.uk|www.domain3.gov.uk)'
     socialRefererDomainRegex: "(?i)(facebook|twitter|^t.co|linkedin|youtube|pinterest|whatsapp|tumblr|reddit)", // re-2 formatted regular expression to use to work out whether an HTTP referer is a social media site
@@ -40,6 +44,7 @@ module.exports = (params) => {
     bqDatasetName,
     bqEventsTableName,
     bqEventsTableNameSpace,
+    eventsDataFreshnessDays,
     transformEntityEvents,
     urlRegex,
     socialRefererDomainRegex,
@@ -67,10 +72,13 @@ module.exports = (params) => {
     return {
       eventsRaw,
       events: events(params),
+      eventsDataNotFresh: eventsDataNotFresh(params),
+      entityDataNotFresh: entityDataNotFresh(params),
       pageviewWithFunnel: pageviewWithFunnel(params),
       sessions: sessions(params),
       entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
       unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
+      referentialIntegrityCheck: referentialIntegrityCheck(params),
       entityVersion: entityVersion(params),
       entityFieldUpdates: entityFieldUpdates(params),
       dataFunctions,
@@ -84,6 +92,7 @@ module.exports = (params) => {
     return {
       eventsRaw,
       events: events(params),
+      eventsDataNotFresh: eventsDataNotFresh(params),
       pageviewWithFunnel: pageviewWithFunnel(params),
       sessions: sessions(params)
     }
