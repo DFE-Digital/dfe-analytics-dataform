@@ -82,10 +82,10 @@ module.exports = (params) => {
       else {
         var coalesceSql;
         if (!key.pastKeyNames) {
-          coalesceSql = `DATA_struct.${key.alias || key.keyName}`;
+          coalesceSql = `DATA_struct.${key.keyName}`;
         }
         else {
-          coalesceSql = `COALESCE(DATA_struct.${key.alias || key.keyName}, DATA_struct.${key.pastKeyNames.join(', DATA_struct.')})`;
+          coalesceSql = `COALESCE(DATA_struct.${key.keyName}, DATA_struct.${key.pastKeyNames.join(', DATA_struct.')})`;
         }
         var fieldSql;
         if(key.dataType == 'boolean') {
@@ -122,10 +122,10 @@ FROM (
           var pastKeyNamesSql = '';
           if (key.pastKeyNames) {
           key.pastKeyNames.forEach(pastKeyName => {
-            pastKeyNamesSql += `      ANY_VALUE(IF(key="${pastKeyName}",value,NULL)) AS ${pastKeyName},\n`;
+            pastKeyNamesSql += `  ANY_VALUE(IF(key="${pastKeyName}",value,NULL)) AS ${pastKeyName},\n`;
             });
           }
-          return `ANY_VALUE(IF(key="${key.keyName}",value,NULL)) AS ${key.alias || key.keyName},\n` + pastKeyNamesSql;
+          return `ANY_VALUE(IF(key="${key.keyName}",value,NULL)) AS ${key.keyName},\n` + pastKeyNamesSql;
       }
     ).join('')
   }
