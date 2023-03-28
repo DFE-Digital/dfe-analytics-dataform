@@ -122,7 +122,7 @@ FROM (
           var pastKeyNamesSql = '';
           if (key.pastKeyNames) {
           key.pastKeyNames.forEach(pastKeyName => {
-            pastKeyNamesSql += `      ANY_VALUE(IF(key="${pastKeyName}",value,NULL)) AS ${pastKeyName},\n`;
+            pastKeyNamesSql += `  ANY_VALUE(IF(key="${pastKeyName}",value,NULL)) AS ${pastKeyName},\n`;
             });
           }
           return `ANY_VALUE(IF(key="${key.keyName}",value,NULL)) AS ${key.keyName},\n` + pastKeyNamesSql;
