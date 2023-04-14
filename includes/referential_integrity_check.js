@@ -30,9 +30,15 @@ module.exports = (params) => {
             + key.foreignKeyTable
             + "_latest_"
             + params.eventSourceName
-            + "' AS issue_description, id, "
+            + "' AS issue_description, id AS "
+            + tableSchema.entityTableName
+            + "_id, created_at AS "
+            + tableSchema.entityTableName
+            + "_created_at, updated_at AS "
+            + tableSchema.entityTableName
+            + "_updated_at, "
             + (key.alias || key.keyName)
-            + " AS id_not_matched_to_foreign_key FROM "
+            + " AS missing_id_in_related_table FROM "
             + ctx.ref(tableSchema.entityTableName + "_latest_" + params.eventSourceName)
             + " WHERE "
             + (key.alias || key.keyName)
