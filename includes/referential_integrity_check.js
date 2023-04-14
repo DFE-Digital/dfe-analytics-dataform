@@ -13,14 +13,14 @@ module.exports = (params) => {
         }
       )
     .query(ctx =>
-      "SELECT * FROM"
+      "SELECT * FROM\n"
       // Generate a separate subquery for each foreign key in the table that a referential integrity check is configured for
       + tableSchema.keys
       // Only generate these subqueries for keys in the table that have the foreignKeyTable parameter set
         .filter(key => key.foreignKeyTable)
         .map(
           key =>
-            "(SELECT '"
+            "  (SELECT '"
             // Generate a human readable error message as the first column if the assertion fails
             + (key.alias || key.keyName)
             + " does not match any "
@@ -50,5 +50,8 @@ module.exports = (params) => {
         )
         // UNION ALL the collection of subqueries together - this will mean that if a single instance of an entity has referential integrity failures on more than one foreign key, one row will be generated per foreign key it has a failure for
         .join('\nUNION ALL\n')
+        + "\nORDER BY\n  issue_description ASC,\n  "
+        + tableSchema.entityTableName
+        + "_updated_at DESC"
   ))
 }
