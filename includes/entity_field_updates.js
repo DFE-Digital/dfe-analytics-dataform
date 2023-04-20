@@ -1,7 +1,7 @@
 module.exports = (params) => {
   return publish(params.eventSourceName + "_entity_field_updates", {
     ...params.defaultConfig,
-    type: "incremental",
+    type: "table",
     protected: false,
     assertions: {
       uniqueKey: ["entity_id", "occurred_at", "key_updated", "entity_table_name"],
@@ -9,7 +9,7 @@ module.exports = (params) => {
     },
     bigquery: {
       partitionBy: "DATE(occurred_at)",
-      clusterBy: ["entity_table_name"],
+      clusterBy: ["entity_table_name", "key_updated"],
       labels: {
         eventsource: params.eventSourceName.toLowerCase(),
         sourcedataset: params.bqDatasetName.toLowerCase()
@@ -116,7 +116,6 @@ instance_updates AS (
     )
   WHERE
     event_type IN ("update_entity", "create_entity")
-    AND occurred_at > event_timestamp_checkpoint
 )
 SELECT
   instance_updates.*
@@ -143,7 +142,5 @@ FROM
 WHERE
   new_data.key = previous_data.key
   AND ARRAY_TO_STRING(new_data.value,"","null") != ARRAY_TO_STRING(previous_data.value,"","null")
-  AND new_data.key != "updated_at"`).preOps(ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
-        ${ctx.when(ctx.incremental(),`SELECT MAX(occurred_at) FROM ${ctx.self()}`,`SELECT TIMESTAMP("2018-01-01")`)}
-      )`)
+  AND new_data.key != "updated_at"`)
 }
