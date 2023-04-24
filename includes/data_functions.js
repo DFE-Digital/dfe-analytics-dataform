@@ -77,21 +77,21 @@ function stringToTimestamp(string) {
       '%FT%H:%M:%E*S%Ez',
       TRIM(
         ${string},
-        "\\""
+        '\\"'
       )
     ),
     SAFE.PARSE_TIMESTAMP(
       '%FT%T%Ez',
       TRIM(
         ${string},
-        "\\""
+        '\\"'
       )
     ),
     SAFE.PARSE_TIMESTAMP(
       '%e %B %Y %R',
       TRIM(
         ${string},
-        "\\""
+        '\\"'
       ),
       "Europe/London"
     ),
@@ -101,7 +101,7 @@ function stringToTimestamp(string) {
         REPLACE(
           TRIM(
             ${string},
-            "\\""
+            '\\"'
           ),
           "pm",
           "PM"
