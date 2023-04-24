@@ -7,14 +7,14 @@ Dataform package containing commonly used SQL functions and table definitions, f
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.4.1"
+"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.4.1.tar.gz"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
         "@dataform/core": "2.4.2",
-        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.4.1"
+        "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.4.1.tar.gz"
     }
 }
 ```
@@ -93,7 +93,7 @@ You may in addition to step 8 of the setup instructions wish to configure the fo
 Users are notified through internal channels when a new version of dfe-analytics-dataform is released. To update:
 1. In your Dataform project, modify your ```package.json``` file to change the version number in this line from the version number you are currently using to the version number you wish to update to:
 ```
-"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#vX.Y.Z"
+"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/vX.Y.Z.tar.gz"
 ```
 2. Click on 'Install packages' on the right hand side of this screen in Dataform.
 3. Commit and merge your changes to your main/master branch.
@@ -115,7 +115,7 @@ Once you have updated your dataSchema, commit your changes, merge to main/master
 ### Detecting times when you *must* update the ```dataSchema``
 You must update ```dataSchema``` whenever a field or table is added or removed from your dfe-analytics ```analytics.yml``` file (often because it has been added or removed from your database), changes data type (for example, from ```timestamp``` to ```date```), or changes name.
 
-dfe-analytics-dataform contains 2 [assertions](https://docs.dataform.co/guides/assertions) which will cause your scheduled pipeline runs in Dataform to fail if:
+dfe-analytics-dataform contains 2 [assertions](https://cloud.google.com/dataform/docs/assertions) which will cause your scheduled pipeline runs in Dataform to fail if:
 - Data has been received about an entity in the database that is missing a field it was expecting. This failure will generate an error and prevent further queries in your pipeline from running.
 - Data has been received about an entity in the database that contains a field (or entire table) it was not expecting. This failure will generate an error but will *not* prevent further queries in your pipeline from running. However, the new field(s) or table will not be included in dfe-analytics-dataform output until you update your configuration, and the error will continue to reoccur. 
 
