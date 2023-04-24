@@ -2,19 +2,19 @@
 Dataform package containing commonly used SQL functions and table definitions, for use with event data streamed to BigQuery using DfE-Digital/dfe-analytics: https://github.com/DFE-Digital/dfe-analytics.
 
 ## How to install
-1. Set up your Dataform project using the [legacy Dataform web interface](https://app.dataform.co). Do not use the version of Dataform which is included with GCP and BigQuery - this is still in development and not feature complete, so is not yet supported by dfe-analytics-dataform.
+1. Set up your Dataform project using the [legacy Dataform web interface](https://app.dataform.co). It is not yet recommended to use the version of Dataform which is included with GCP and BigQuery - this is still in development and not feature complete.
 2. Ensure that it is connected to your BigQuery project.
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.4.0"
+"dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.4.1"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
         "@dataform/core": "2.4.2",
-        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.4.0"
+        "dfe-analytics-dataform": "git+https://github.com/DFE-Digital/dfe-analytics-dataform.git#v1.4.1"
     }
 }
 ```
