@@ -7,14 +7,14 @@ Dataform package containing commonly used SQL functions and table definitions, f
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.4.1.tar.gz"
+"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.4.2.tar.gz"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
         "@dataform/core": "2.4.2",
-        "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.4.1.tar.gz"
+        "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.4.2.tar.gz"
     }
 }
 ```
@@ -88,6 +88,7 @@ You may in addition to step 8 of the setup instructions wish to configure the fo
 - ```attributionDomainExclusionRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to detect domain names which should be excluded from attribution modelling - for example, the domain name of an authentication service which never constitutes an external referral to your service. Defaults to ```"(?i)(signin.education.gov.uk)"``` if not specified.
 - ```socialRefererDomainRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to work out whether an HTTP referer's domain name is a social media site. Defaults to ```'(?i)(facebook|twitter|^t.co|linkedin|youtube|pinterest|whatsapp|tumblr|reddit)'``` if not specified.
 - ```searchEngineRefererDomainRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to work out whether an HTTP referer's domain name is a search engine (regardless of whether paid or organic). Defaults to ```'(?i)(google|bing|yahoo|aol|ask.co|baidu|duckduckgo|dogpile|ecosia|exalead|gigablast|hotbot|lycos|metacrawler|mojeek|qwant|searx|swisscows|webcrawler|yandex|yippy)'``` if not specified.
+- ```disabled``` - ```true``` or ```false```. Defaults to ```false```. If set to ```true``` then calling the package will not do anything.
 
 ## Updating to a new version
 Users are notified through internal channels when a new version of dfe-analytics-dataform is released. To update:

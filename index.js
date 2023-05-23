@@ -18,6 +18,7 @@ const dataSchemaJSONLatest = require("./includes/data_schema_json_latest");
 module.exports = (params) => {
 
   params = {
+    disabled: false, // whether to disable dfe-analytics-dataform
     eventSourceName: null, // suffix to append to table names to distinguish them if this package is run more than once
     bqProjectName: this.database, // name of the BigQuery project that dfe-analytics streams event data into. Defaults to the same project name as the default set in dataform.json.
     bqDatasetName: null, // name of the BigQuery dataset that dfe-analytics streams event data into
@@ -56,6 +57,10 @@ module.exports = (params) => {
     dependencies,
     dataSchema
   } = params;
+
+  if (params.disabled) {
+    return true;
+  }
 
   // Declare the source table
   const eventsRaw = declare({

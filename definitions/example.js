@@ -2,6 +2,7 @@ const dfeAnalyticsDataform = require("../"); // change ../ to dfe-analytics-data
 
 // Repeat the lines below for each and every events table you want dfe-analytics-dataform to process in your Dataform project - distinguish between them by giving each one a different eventSourceName. This will cause all the tables produced automatically by dfe-analytics-dataform to have your suffix included in them to allow users to tell the difference between them.
 dfeAnalyticsDataform({
+  disabled: true, // remove this line in your project
   eventSourceName: "Short name for your event source here - this might be a short name for your service, for example",
   bqDatasetName: "The BigQuery dataset your events table is in",
   bqEventsTableName: "Your BigQuery events table name here - usually just 'events'",
