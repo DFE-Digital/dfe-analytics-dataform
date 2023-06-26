@@ -106,12 +106,7 @@ event_with_web_request_data AS (
   WHERE
     event.occurred_at > event_timestamp_checkpoint ${namespaceFilterSql})
 SELECT
-  event_with_web_request_data.* EXCEPT (request_user_id),
-  CASE
-    WHEN dfe_analytics_configuration.pseudonymise_web_request_user_id IS TRUE THEN request_user_id
-    ${ctx.when(params.forceRequestUserIdPseudonymisation, `WHEN dfe_analytics_configuration.pseudonymise_web_request_user_id IS FALSE THEN TO_HEX(SHA256(request_user_id))`,``)}
-    ELSE request_user_id
-  END AS request_user_id,
+  event_with_web_request_data.*,
   IF(REGEXP_CONTAINS(request_user_agent, '(?i)(bot|http|python|scan|check|spider|curl|trend|ruby|bash|batch|verification|qwantify|nuclei|ai|crawler|perl|java|test|scoop|fetch|adreview|cortex|nessus|bitdiscovery|postplanner|faraday|restsharp|hootsuite|mattermost|shortlink|retriever|auto|scrper|alyzer|dispatch|traackr|fiddler|crowsnest|gigablast|wakelet|installatron|intently|openurl|anthill|curb|trello|inject|ahc|sleep|sysdate|=|cloudinary|statuscake|cloudfront|archive|sleuth|bingpreview|facebookexternalhit|newspaper|econtext|postmanruntime|probe)'),"bot",
   CASE parseUserAgent(request_user_agent).category
     WHEN "smartphone" THEN "mobile"
@@ -128,10 +123,6 @@ SELECT
   REPLACE(parseUserAgent(request_user_agent).os_version,"UNKNOWN","unknown") AS operating_system_version
 FROM
   event_with_web_request_data
-${ctx.when(params.forceRequestUserIdPseudonymisation,
-  `LEFT JOIN
-    ${ctx.ref("dfe_analytics_configuration_" + params.eventSourceName)} AS dfe_analytics_configuration ON event_with_web_request_data.occurred_at > dfe_analytics_configuration.valid_from AND (event_with_web_request_data.occurred_at < dfe_analytics_configuration.valid_to OR dfe_analytics_configuration.valid_to IS NULL)`,
-    ``)}
   `).preOps(ctx => `
     DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(),`SELECT MAX(occurred_at) FROM ${ctx.self()}`,`SELECT TIMESTAMP("2000-01-01")`)});
