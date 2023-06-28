@@ -1,9 +1,7 @@
 module.exports = (params) => {
-  return operate(params.eventSourceName + "_pseudonymise_request_user_ids", {
-    ...params.defaultConfig
-}).query(ctx => `
+  return operate(params.eventSourceName + "_pseudonymise_request_user_ids", ctx => [`
 CREATE OR REPLACE PROCEDURE
-  \`${params.bqDatasetName}.${params.bqEventsTableName}.pseudonymise_request_user_ids\`(user_table STRING)
+  \`${params.bqProjectName}.${params.bqDatasetName}.pseudonymise_request_user_ids\`(user_table STRING)
 BEGIN
 BEGIN TRANSACTION;
 IF NOT EXISTS (
@@ -40,7 +38,7 @@ IF
   FROM
     ${ctx.ref("events_" + params.eventSourceName)} AS event
   LEFT JOIN
-    ${ctx.ref("dfe_analytics_configuration" + params.eventSourceName)} dad_config
+    ${ctx.ref("dfe_analytics_configuration_" + params.eventSourceName)} dad_config
   ON
     event.occurred_at >= dad_config.valid_from
     AND (event.occurred_at < dad_config.valid_to
@@ -55,7 +53,7 @@ IF NOT (
   SELECT
     pseudonymise_web_request_user_id
   FROM
-    ${ctx.ref("dfe_analytics_configuration" + params.eventSourceName)}
+    ${ctx.ref("dfe_analytics_configuration_" + params.eventSourceName)}
   WHERE
     valid_to IS NULL) THEN RAISE
 USING
@@ -67,11 +65,11 @@ UPDATE
 SET
   request_user_agent = TO_HEX(SHA256(request_user_agent))
 FROM
-  ${ctx.ref("dfe_analytics_configuration" + params.eventSourceName)} AS dad_config
+  ${ctx.ref("dfe_analytics_configuration_" + params.eventSourceName)} AS dad_config
 WHERE
   event_to_update.occurred_at >= dad_config.valid_from
   AND (event_to_update.occurred_at < dad_config.valid_to
     OR dad_config.valid_to IS NULL)
   AND NOT pseudonymise_web_request_user_id ;
 COMMIT TRANSACTION;
-END`)}
+END`]) }

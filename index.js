@@ -15,6 +15,7 @@ const unhandledFieldOrEntityIsBeingStreamed = require("./includes/unhandled_fiel
 const referentialIntegrityCheck = require("./includes/referential_integrity_check");
 const dataSchemaJSONLatest = require("./includes/data_schema_json_latest");
 const dfeAnalyticsConfiguration = require("./includes/dfe_analytics_configuration");
+const pseudonymiseRequestUserIds = require("./includes/pseudonymise_request_user_ids");
 
 module.exports = (params) => {
 
@@ -93,6 +94,7 @@ module.exports = (params) => {
       flattenedEntityVersion: flattenedEntityVersion(params),
       flattenedEntityLatest: flattenedEntityLatest(params),
       flattenedEntityFieldUpdates: flattenedEntityFieldUpdates(params),
+      pseudonymiseRequestUserIds: pseudonymiseRequestUserIds(params),
       entityAt: entityAt(params)
     }
   } else {
