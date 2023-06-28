@@ -43,6 +43,7 @@ IF
   LEFT JOIN
     ${ctx.ref("dfe_analytics_configuration_" + params.eventSourceName)} dad_config
   ON
+    /* Check whether dfe-analytics was configured to pseudonymise events at the time this particular event was streamed */
     event.occurred_at >= dad_config.valid_from
     AND (event.occurred_at < dad_config.valid_to
       OR dad_config.valid_to IS NULL)
