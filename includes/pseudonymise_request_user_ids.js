@@ -50,7 +50,7 @@ IF
   WHERE
     dad_config.pseudonymise_web_request_user_id) THEN RAISE
 USING
-  MESSAGE = "dfe-analytics configuration stated that pseudonymisation was enabled but one or more request_user_ids did not appear to be in SHA256 format";
+  MESSAGE = "dfe-analytics configuration stated that pseudonymisation was enabled but one or more user_ids did not appear to be in SHA256 format";
 END IF
   ;
 IF NOT (
@@ -61,14 +61,14 @@ IF NOT (
   WHERE
     valid_to IS NULL) THEN RAISE
 USING
-  MESSAGE = "request_user_id is not currently configured to be pseudonymised in your dfe-analytics configuration. Configure it before running this stored procedure.";
+  MESSAGE = "user_id is not currently configured to be pseudonymised in your dfe-analytics configuration. Configure it before running this stored procedure.";
 END IF
   ;
-/* Pseudonymise the request_user_id for events in the source events table that happened during a period when dfe-analytics was configured not to pseudonymise request_user_ids */
+/* Pseudonymise the user_id for events in the source events table that happened during a period when dfe-analytics was configured not to pseudonymise user_ids */
 UPDATE
   ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS event_to_update
 SET
-  request_user_id = TO_HEX(SHA256(request_user_id))
+  user_id = TO_HEX(SHA256(user_id))
 FROM
   ${ctx.ref("dfe_analytics_configuration_" + params.eventSourceName)} AS dad_config
 WHERE
@@ -76,7 +76,7 @@ WHERE
   AND (event_to_update.occurred_at < dad_config.valid_to
     OR dad_config.valid_to IS NULL)
   AND NOT pseudonymise_web_request_user_id ;
-/* Update initialise_analytics events such that it looks like dfe-analytics was configured to pseudonymise request_user_ids even though it wasn't - this is a failsafe to prevent this procedure accidentally being used to double-pseudonymise request_user_id if run a second time */
+/* Update initialise_analytics events such that it looks like dfe-analytics was configured to pseudonymise user_ids even though it wasn't - this is a failsafe to prevent this procedure accidentally being used to double-pseudonymise user_id if run a second time */
 UPDATE
   ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS event_to_update
 SET
