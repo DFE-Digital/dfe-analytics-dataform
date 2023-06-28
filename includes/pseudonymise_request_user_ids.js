@@ -64,7 +64,7 @@ USING
   MESSAGE = "request_user_id is not currently configured to be pseudonymised in your dfe-analytics configuration. Configure it before running this stored procedure.";
 END IF
   ;
-/* Pseudonymise the request_user_agent for events in the source events table that happened during a period when dfe-analytics was configured not to pseudonymise request_user_agents */
+/* Pseudonymise the request_user_id for events in the source events table that happened during a period when dfe-analytics was configured not to pseudonymise request_user_ids */
 UPDATE
   ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS event_to_update
 SET
@@ -76,7 +76,7 @@ WHERE
   AND (event_to_update.occurred_at < dad_config.valid_to
     OR dad_config.valid_to IS NULL)
   AND NOT pseudonymise_web_request_user_id ;
-/* Update initialise_analytics events such that it looks like dfe-analytics was configured to pseudonymise request_user_agents even though it wasn't - this is a failsafe to prevent this procedure accidentally being used to double-pseudonymise request_user_agent if run a second time */
+/* Update initialise_analytics events such that it looks like dfe-analytics was configured to pseudonymise request_user_ids even though it wasn't - this is a failsafe to prevent this procedure accidentally being used to double-pseudonymise request_user_id if run a second time */
 UPDATE
   ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS event_to_update
 SET
