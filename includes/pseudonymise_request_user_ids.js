@@ -1,7 +1,7 @@
 module.exports = (params) => {
   return operate(params.eventSourceName + "_pseudonymise_request_user_ids", ctx => [`
 CREATE OR REPLACE PROCEDURE
-  \`${params.bqProjectName}.${params.bqDatasetName}.pseudonymise_request_user_ids\`(user_table STRING)
+  \`${params.bqProjectName}.${params.bqDatasetName}.pseudonymise_request_user_ids\`(user_table STRING) OPTIONS(description="Pseudonymises the value of user_id in the events table in this dataset for all events that contain a raw user_id. Pre-requisites: (1) dfe-analytics has been configured to pseudonymise web request user IDs (see https://github.com/DFE-Digital/dfe-analytics#user-id-pseudonymisation) (2) these user IDs correspond to the id field for a table (user_table) in your database that is being streamed to dfe-analytics and is not empty (3) this id field in this table is configured to be treated by dfe-analytics as PII in analytics_pii.yml and thus pseudonymised (4) your Dataform pipeline has run at least once since enabling dfe-analytics user_id pseudonymisation")
 BEGIN
 BEGIN TRANSACTION;
 /* Series of IF... RAISE... statements that prevent the procedure running if it detects that certain unsupported scenarios are the case */

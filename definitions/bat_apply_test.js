@@ -6,7 +6,7 @@ dfeAnalyticsDataform({
   eventSourceName: "apply",
   bqProjectName: "rugged-abacus-218110",
   bqDatasetName: "apply_events_production",
-  bqEventsTableName: "events_dad_test",
+  bqEventsTableName: "events",
   urlRegex: "apply-for-teacher-training.service.gov.uk",
   dataSchema: [{
       entityTableName: "candidates",
