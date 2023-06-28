@@ -4,6 +4,7 @@ CREATE OR REPLACE PROCEDURE
   \`${params.bqProjectName}.${params.bqDatasetName}.pseudonymise_request_user_ids\`(user_table STRING)
 BEGIN
 BEGIN TRANSACTION;
+/* Series of IF... RAISE... statements that prevent the procedure running if it detects that certain unsupported scenarios are the case */
 IF NOT EXISTS (
   SELECT
     entity_id
@@ -17,6 +18,7 @@ END IF
   ;
 IF
   (
+  /* Detect whether entity_id appears to be SHA256-formatted (i.e. containing only digits and lower case letters, and at least one of each) */
   SELECT
     LOGICAL_AND((REGEXP_CONTAINS(entity_id, "[0-9]")
         AND REGEXP_CONTAINS(entity_id, "[a-z]")
@@ -31,6 +33,7 @@ END IF
   ;
 IF
   (
+  /* Detect whether request_user_id appears to be SHA256-formatted (i.e. containing only digits and lower case letters, and at least one of each) */
   SELECT
     LOGICAL_AND((REGEXP_CONTAINS(request_user_id, "[0-9]")
         AND REGEXP_CONTAINS(request_user_id, "[a-z]")
@@ -60,6 +63,7 @@ USING
   MESSAGE = "request_user_id is not currently configured to be pseudonymised in your dfe-analytics configuration. Configure it before running this stored procedure.";
 END IF
   ;
+/* Pseudonymise the request_user_agent for events in the source events table that happened during a period when dfe-analytics was configured not to pseudonymise request_user_agents */
 UPDATE
   ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS event_to_update
 SET
@@ -71,6 +75,7 @@ WHERE
   AND (event_to_update.occurred_at < dad_config.valid_to
     OR dad_config.valid_to IS NULL)
   AND NOT pseudonymise_web_request_user_id ;
+/* Update initialise_analytics events such that it looks like dfe-analytics was configured to pseudonymise request_user_agents even though it wasn't - this is a failsafe to prevent this procedure accidentally being used to double-pseudonymise request_user_agent if run a second time */
 UPDATE
   ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS event_to_update
 SET
