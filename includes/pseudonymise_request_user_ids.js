@@ -71,5 +71,12 @@ WHERE
   AND (event_to_update.occurred_at < dad_config.valid_to
     OR dad_config.valid_to IS NULL)
   AND NOT pseudonymise_web_request_user_id ;
+UPDATE
+  ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS event_to_update
+SET
+  DATA = ${data_functions.eventDataCreateOrReplace("DATA", "config", '{"pseudonymise_web_request_user_id":true}')}
+WHERE
+  event_type="initialise_analytics"
+  AND ${data_functions.eventDataExtract("DATA", "config")} = '{"pseudonymise_web_request_user_id":false}' ;
 COMMIT TRANSACTION;
 END`]) }
