@@ -68,7 +68,7 @@ END IF
 UPDATE
   ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS event_to_update
 SET
-  request_user_agent = TO_HEX(SHA256(request_user_agent))
+  request_user_id = TO_HEX(SHA256(request_user_id))
 FROM
   ${ctx.ref("dfe_analytics_configuration_" + params.eventSourceName)} AS dad_config
 WHERE
