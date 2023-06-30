@@ -32,9 +32,9 @@ IF
   (
   /* Detect whether entity_id appears to be SHA256-formatted (i.e. containing only digits and lower case letters, and at least one of each) */
   SELECT
-    LOGICAL_AND((REGEXP_CONTAINS(entity_id, "[0-9]")
+    LOGICAL_AND(REGEXP_CONTAINS(entity_id, "[0-9]")
         AND REGEXP_CONTAINS(entity_id, "[a-z]")
-        AND REGEXP_CONTAINS(entity_id, "^[0-9a-z]*$")))
+        AND REGEXP_CONTAINS(entity_id, "^[0-9a-z]*$"))
   FROM
     ${ctx.ref(params.eventSourceName + "_entity_version")} AS entity_version
   WHERE
