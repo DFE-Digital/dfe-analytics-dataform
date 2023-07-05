@@ -17,13 +17,15 @@ const dataSchemaJSONLatest = require("./includes/data_schema_json_latest");
 const dfeAnalyticsConfiguration = require("./includes/dfe_analytics_configuration");
 const pseudonymiseRequestUserIds = require("./includes/pseudonymise_request_user_ids");
 
+
+
 module.exports = (params) => {
 
   params = {
     disabled: false, // whether to disable dfe-analytics-dataform
     eventSourceName: null, // suffix to append to table names to distinguish them if this package is run more than once
-    bqProjectName: this.database, // name of the BigQuery project that dfe-analytics streams event data into. Defaults to the same project name as the default set in dataform.json.
-    bqDatasetName: null, // name of the BigQuery dataset that dfe-analytics streams event data into
+    bqProjectName: dataform.projectConfig.defaultDatabase, // name of the BigQuery project that dfe-analytics streams event data into. Defaults to the same project name set in your GCP Dataform release configuration, or as the default set in dataform.json (for legacy Dataform).
+    bqDatasetName: dataform.projectConfig.defaultSchema, // name of the BigQuery dataset that dfe-analytics streams event data into. Defaults to the same dataset name set in your GCP Dataform release configuration, or in dataform.json (for legacy Dataform).
     bqEventsTableName: 'events', // name of the BigQuery table that dfe-analytics streams event data into
     bqEventsTableNameSpace: null, // optional - value of the namespace field in the events table to filter by. Use this to distinguish between multiple applications or interfaces which stream events to the same events table.
     eventsDataFreshnessDays: 1, // Number of days after which, if no new events have been received, the events_data_not_fresh assertion will fail to alert you to this
