@@ -180,13 +180,13 @@ function eventDataCreateOrReplace(dataField, keyToSet, valueToSet) {
         FROM
           UNNEST(${dataField})
         WHERE
-          key != "${keyToSet}"
+          key != """${keyToSet}"""
       )
     ),
     [
       STRUCT(
-        "${keyToSet}" AS key,
-        ["${valueToSet}"] AS value
+        """${keyToSet}""" AS key,
+        ["""${valueToSet}"""] AS value
   ) ]
 )`
 };

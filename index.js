@@ -14,6 +14,8 @@ const entitiesAreMissingExpectedFields = require("./includes/entities_are_missin
 const unhandledFieldOrEntityIsBeingStreamed = require("./includes/unhandled_field_or_entity_is_being_streamed");
 const referentialIntegrityCheck = require("./includes/referential_integrity_check");
 const dataSchemaJSONLatest = require("./includes/data_schema_json_latest");
+const dfeAnalyticsConfiguration = require("./includes/dfe_analytics_configuration");
+const pseudonymiseRequestUserIds = require("./includes/pseudonymise_request_user_ids");
 
 module.exports = (params) => {
 
@@ -81,6 +83,7 @@ module.exports = (params) => {
       entityDataNotFresh: entityDataNotFresh(params),
       pageviewWithFunnel: pageviewWithFunnel(params),
       sessions: sessions(params),
+      dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
       entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
       unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
       referentialIntegrityCheck: referentialIntegrityCheck(params),
@@ -91,6 +94,7 @@ module.exports = (params) => {
       flattenedEntityVersion: flattenedEntityVersion(params),
       flattenedEntityLatest: flattenedEntityLatest(params),
       flattenedEntityFieldUpdates: flattenedEntityFieldUpdates(params),
+      pseudonymiseRequestUserIds: pseudonymiseRequestUserIds(params),
       entityAt: entityAt(params)
     }
   } else {
@@ -99,7 +103,8 @@ module.exports = (params) => {
       events: events(params),
       eventsDataNotFresh: eventsDataNotFresh(params),
       pageviewWithFunnel: pageviewWithFunnel(params),
-      sessions: sessions(params)
+      sessions: sessions(params),
+      dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params)
     }
   }
 }

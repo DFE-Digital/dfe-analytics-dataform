@@ -9,15 +9,32 @@ dfeAnalyticsDataform({
   bqEventsTableName: "events",
   urlRegex: "apply-for-teacher-training.service.gov.uk",
   dataSchema: [{
-      entityTableName: "subjects",
+      entityTableName: "candidates",
       description: "",
+      dataFreshnessDays: 3,
       keys: [{
-        keyName: "name",
+        keyName: "candidate_api_updated_at",
+        dataType: "timestamp",
+        description: ""
+      }, {
+        keyName: "course_from_find_id",
         dataType: "string",
         description: ""
       }, {
-        keyName: "code",
-        dataType: "string",
+        keyName: "hide_in_reporting",
+        dataType: "boolean",
+        description: ""
+      }, {
+        keyName: "last_signed_in_at",
+        dataType: "timestamp",
+        description: ""
+      }, {
+        keyName: "magic_link_token_sent_at",
+        dataType: "timestamp",
+        description: ""
+      }, {
+        keyName: "sign_up_email_bounced",
+        dataType: "boolean",
         description: ""
       }]
     }]
