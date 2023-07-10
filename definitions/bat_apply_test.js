@@ -4,7 +4,6 @@ const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
   eventSourceName: "apply",
-  bqProjectName: "rugged-abacus-218110",
   bqDatasetName: "apply_events_production",
   bqEventsTableName: "events",
   urlRegex: "apply-for-teacher-training.service.gov.uk",
