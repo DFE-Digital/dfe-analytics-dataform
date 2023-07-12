@@ -8,12 +8,12 @@ module.exports = (params) => {
         throw new Error(`dataFreshnessDays parameter for the ${tableSchema.entityTableName} entityTableName is not a positive integer.`);
       } else {
         return assert(
-            tableSchema.entityTableName +
-            "_data_not_fresh_" +
-            params.eventSourceName, {
-              ...params.defaultConfig
-            }
-          )
+          tableSchema.entityTableName +
+          "_data_not_fresh_" +
+          params.eventSourceName, {
+          ...params.defaultConfig
+        }
+        ).tags([params.eventSourceName.toLowerCase()])
           .query(ctx =>
             "SELECT MAX(last_streamed_event_occurred_at) AS event_last_streamed_at FROM " +
             ctx.ref(tableSchema.entityTableName + "_latest_" + params.eventSourceName) +

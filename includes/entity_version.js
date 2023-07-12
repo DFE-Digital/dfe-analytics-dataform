@@ -1,11 +1,11 @@
 module.exports = (params) => {
   function idField(dataSchema) {
-  /* Generates SQL that extracts the primary key from the 'data' array of structs, defaulting to 'id', but using the primary_key configured for each entity_table_name if specified. */
+    /* Generates SQL that extracts the primary key from the 'data' array of structs, defaulting to 'id', but using the primary_key configured for each entity_table_name if specified. */
     var sqlToReturn = 'CASE\n';
     var allPrimaryKeysAreId = true;
     dataSchema.forEach(tableSchema => {
-      if(!tableSchema.primary_key) {
-        
+      if (!tableSchema.primary_key) {
+
       }
       else if (tableSchema.primary_key == "id") {
         throw new Error(`primary_key for the ${tableSchema.entityTableName} table is set to 'id', which is the default value for primary_key. If id is the primary key for this table in the database, remove the primary_key configuration for this table in your dataSchema. If id is not the primary key for this table in the database, set primary_key to the correct primary key.`);
@@ -14,9 +14,9 @@ module.exports = (params) => {
         sqlToReturn += `WHEN entity_table_name = '${tableSchema.entityTableName}' THEN ${data_functions.eventDataExtract("data", tableSchema.primary_key)}\n`;
         allPrimaryKeysAreId = false;
       }
-      })
+    })
     sqlToReturn += `ELSE ${data_functions.eventDataExtract("data", "id")}\nEND\n`;
-    if(allPrimaryKeysAreId) {
+    if (allPrimaryKeysAreId) {
       sqlToReturn = data_functions.eventDataExtract("data", "id");
     }
     return sqlToReturn;
@@ -42,6 +42,7 @@ module.exports = (params) => {
         sourcedataset: params.bqDatasetName.toLowerCase()
       }
     },
+    tags: [params.eventSourceName.toLowerCase()],
     description: "Each row represents a version of an entity in the " + params.eventSourceName + " database that was been streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project. Versions are valid from valid_from until just before valid_to. If valid_to is NULL then this version is the latest version of this entity. If valid_to is not NULL, but no later version exists, then this entity has been deleted.",
     columns: {
       valid_from: "Timestamp from which this version of this entity started to be valid.",
@@ -112,9 +113,8 @@ module.exports = (params) => {
         AND entity_table_name IS NOT NULL
         AND ${idField(params.dataSchema)} IS NOT NULL
     )
-    ${
-      ctx.when(ctx.incremental(),
-        `UNION ALL (SELECT event_type, valid_from AS occurred_at, entity_table_name, entity_id, created_at, updated_at, DATA, request_uuid, request_path, request_user_id, request_method, request_user_agent, request_referer, request_query, response_content_type, response_status, anonymised_user_agent_and_ip, device_category, browser_name, browser_version, operating_system_name, operating_system_vendor, operating_system_version FROM ${ctx.self()} WHERE valid_to IS NULL AND valid_from <= event_timestamp_checkpoint)`)
+    ${ctx.when(ctx.incremental(),
+    `UNION ALL (SELECT event_type, valid_from AS occurred_at, entity_table_name, entity_id, created_at, updated_at, DATA, request_uuid, request_path, request_user_id, request_method, request_user_agent, request_referer, request_query, response_content_type, response_status, anonymised_user_agent_and_ip, device_category, browser_name, browser_version, operating_system_name, operating_system_vendor, operating_system_version FROM ${ctx.self()} WHERE valid_to IS NULL AND valid_from <= event_timestamp_checkpoint)`)
     }
 )
 SELECT
@@ -163,6 +163,6 @@ WHERE
     valid_from != valid_to
     OR valid_to IS NULL
   )`).preOps(ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
-        ${ctx.when(ctx.incremental(),`SELECT MAX(valid_to) FROM ${ctx.self()}`,`SELECT TIMESTAMP("2018-01-01")`)}
+        ${ctx.when(ctx.incremental(), `SELECT MAX(valid_to) FROM ${ctx.self()}`, `SELECT TIMESTAMP("2018-01-01")`)}
       )`)
 }

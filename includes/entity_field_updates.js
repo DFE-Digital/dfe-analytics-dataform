@@ -15,6 +15,7 @@ module.exports = (params) => {
         sourcedataset: params.bqDatasetName.toLowerCase()
       }
     },
+    tags: [params.eventSourceName.toLowerCase()],
     description: "One row for each time a field was updated for any entity that is streamed as events from the database, setting out the name of the field, the previous value of the field and the new value of the field. Entity deletions and updates to the updated_at field are not included, but NULL values are.",
     columns: {
       update_id: "UID for the collection of field updates that took place to this entity at this time. One-way hash of entity_id and occurred_at. Useful for COUNT DISTINCTs.",

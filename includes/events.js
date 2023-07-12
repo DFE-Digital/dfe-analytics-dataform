@@ -1,6 +1,6 @@
 module.exports = (params) => {
   var namespaceFilterSql = '';
-  if(params.bqEventsTableNameSpace) {
+  if (params.bqEventsTableNameSpace) {
     namespaceFilterSql = `AND namespace = '${params.bqEventsTableNameSpace}'`;
   }
   return publish("events_" + params.eventSourceName, {
@@ -15,6 +15,7 @@ module.exports = (params) => {
         sourcedataset: params.bqDatasetName.toLowerCase()
       }
     },
+    tags: [params.eventSourceName.toLowerCase()],
     description: "Initial transformation of the events table streamed from " + params.eventSourceName + " into the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project.",
     dependencies: params.dependencies,
     columns: {
@@ -47,7 +48,7 @@ module.exports = (params) => {
     request_uuid,
     MIN(occurred_at) AS occurred_at
   FROM
-    ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)}
+    ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)}
   WHERE
     event_type = "web_request"
     AND occurred_at > TIMESTAMP_SUB(event_timestamp_checkpoint, INTERVAL 1 DAY)
@@ -69,7 +70,7 @@ module.exports = (params) => {
   FROM
     minimal_earliest_event_for_web_request
   LEFT JOIN
-     ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS web_request
+     ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)} AS web_request
   ON
     minimal_earliest_event_for_web_request.request_uuid = web_request.request_uuid
     AND minimal_earliest_event_for_web_request.occurred_at = web_request.occurred_at
@@ -99,7 +100,7 @@ event_with_web_request_data AS (
     COALESCE(event.response_content_type,earliest_event_for_web_request.response_content_type) AS response_content_type,
     COALESCE(event.anonymised_user_agent_and_ip,earliest_event_for_web_request.anonymised_user_agent_and_ip) AS anonymised_user_agent_and_ip
   FROM
-    ${ctx.ref(params.bqDatasetName,params.bqEventsTableName)} AS event
+    ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)} AS event
     LEFT JOIN earliest_event_for_web_request
     ON event.request_uuid = earliest_event_for_web_request.request_uuid
     AND event.event_type != "web_request"
@@ -125,12 +126,12 @@ FROM
   event_with_web_request_data
   `).preOps(ctx => `
     DECLARE event_timestamp_checkpoint DEFAULT (
-        ${ctx.when(ctx.incremental(),`SELECT MAX(occurred_at) FROM ${ctx.self()}`,`SELECT TIMESTAMP("2000-01-01")`)});
+        ${ctx.when(ctx.incremental(), `SELECT MAX(occurred_at) FROM ${ctx.self()}`, `SELECT TIMESTAMP("2000-01-01")`)});
     /* Uses the Woothee Javascript library to categorise user agents by user category (PC i.e. desktop, smartphone, mobile phone, crawler, applicance, unknown or misc), browser name, browser version, operating system, browser vendor and operating system version. To function correctly this script needs to be stored in Google Cloud Storage at the public URL below. The latest version of this script can be found at https://github.com/woothee/woothee-js/blob/master/release/woothee.js .*/
     CREATE TEMP FUNCTION parseUserAgent(user_agent STRING)
     RETURNS STRUCT < category STRING, name STRING, version STRING, os STRING, vendor STRING, os_version STRING >
       LANGUAGE js
       AS "return {category:woothee.parse(user_agent).category,name:woothee.parse(user_agent).name,version:woothee.parse(user_agent).version,os:woothee.parse(user_agent).os,vendor:woothee.parse(user_agent).vendor,os_version:woothee.parse(user_agent).os_version};"
       OPTIONS(library = 'https://storage.googleapis.com/public-dfe-analytics-dataform-scripts/woothee.js')`
-      )
+  )
 }

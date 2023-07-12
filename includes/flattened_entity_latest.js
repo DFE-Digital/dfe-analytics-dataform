@@ -1,7 +1,7 @@
 const getKeys = (keys) => {
-    return keys.map(key => ({
-      [key.alias || key.keyName]: key.description
-    })
+  return keys.map(key => ({
+    [key.alias || key.keyName]: key.description
+  })
   )
 };
 module.exports = (params) => {
@@ -20,14 +20,15 @@ module.exports = (params) => {
         entitytabletype: "latest"
       }
     },
+    tags: [params.eventSourceName.toLowerCase()],
     description: "Latest version of " + tableSchema.entityTableName + ". Taken from entity Create, Update and Delete events streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project." + tableSchema.description,
     columns: Object.assign({
-        last_streamed_event_occurred_at: "Timestamp of the event that we think provided us with the latest version of this entity.",
-        last_streamed_event_type: "Event type of the event that we think provided us with the latest version of this entity. Either entity_created, entity_updated, entity_destroyed or entity_imported.",
-        id: "UID",
-        created_at: "Date this entity was created, according to the latest version of the data received from the database.",
-        updated_at: "Date this entity was last updated something in the database, according to the latest version of the data received from the database.",
-      }, ...getKeys(tableSchema.keys))
+      last_streamed_event_occurred_at: "Timestamp of the event that we think provided us with the latest version of this entity.",
+      last_streamed_event_type: "Event type of the event that we think provided us with the latest version of this entity. Either entity_created, entity_updated, entity_destroyed or entity_imported.",
+      id: "UID",
+      created_at: "Date this entity was created, according to the latest version of the data received from the database.",
+      updated_at: "Date this entity was last updated something in the database, according to the latest version of the data received from the database.",
+    }, ...getKeys(tableSchema.keys))
   }).query(ctx => `SELECT
   *
 EXCEPT
@@ -39,5 +40,5 @@ FROM
 WHERE
   valid_to IS NULL
 `)
-)
+  )
 }
