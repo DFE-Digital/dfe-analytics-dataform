@@ -9,7 +9,7 @@ module.exports = (params) => {
     protected: false,
     bigquery: {
       partitionBy: "DATE(occurred_at)",
-      clusterBy: ["event_type"],
+      clusterBy: ["event_type", "request_uuid"],
       labels: {
         eventsource: params.eventSourceName.toLowerCase(),
         sourcedataset: params.bqDatasetName.toLowerCase()
