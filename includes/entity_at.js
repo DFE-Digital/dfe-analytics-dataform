@@ -1,7 +1,6 @@
 module.exports = (params) => {
   return params.dataSchema.forEach(tableSchema => operate(tableSchema.entityTableName + '_at_' + params.eventSourceName.replace(/-/g, '_')).queries(ctx => `
-  CREATE OR REPLACE TABLE FUNCTION 
-  \`${ctx.database()}.${ctx.schema()}.${tableSchema.entityTableName}_at_${params.eventSourceName.replace(/-/g, '_')}\`(timestamp_at TIMESTAMP)
+  CREATE OR REPLACE TABLE FUNCTION \`${ctx.database()}.${ctx.schema()}.${tableSchema.entityTableName}_at_${params.eventSourceName.replace(/-/g, '_')}\`(timestamp_at TIMESTAMP)
   AS
   SELECT
     * EXCEPT (valid_from,
