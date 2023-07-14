@@ -3,7 +3,7 @@ module.exports = (params) => {
     ...params.defaultConfig,
     type: "assertion",
     description: "Identifies any entities or field names that are being streamed which don't exist in the dataSchema parameter passed to dfe-analytics-dataform. If this assertion fails as a minimum it means that we either need to (a) if a whole entity is missing, add it to dataSchema or (b) if just a field is missing, add the missing field(s) to dataSchema. Depending on what the additional data identified is, we may also want to update other parts of the pipeline to make this data available."
-  }).query(ctx => `
+  }).tags([params.eventSourceName.toLowerCase()]).query(ctx => `
 WITH expected_entity_fields AS (
   SELECT
     entity_name,
@@ -11,11 +11,11 @@ WITH expected_entity_fields AS (
   FROM
   UNNEST([
       ${params.dataSchema.map(tableSchema => {
-        return `STRUCT("${tableSchema.entityTableName}" AS entity_name,
-        [${tableSchema.keys.filter(key => !key.historic).map(key => {return `"${key.keyName}"`;}).join(', ')}] AS keys
+    return `STRUCT("${tableSchema.entityTableName}" AS entity_name,
+        [${tableSchema.keys.filter(key => !key.historic).map(key => { return `"${key.keyName}"`; }).join(', ')}] AS keys
         )`;
-      }
-    ).join(',')}  
+  }
+  ).join(',')}  
   ])
 )
 SELECT

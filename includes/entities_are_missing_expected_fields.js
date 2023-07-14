@@ -3,7 +3,7 @@ module.exports = (params) => {
     ...params.defaultConfig,
     type: "assertion",
     description: "Counts the number of entities updated yesterday which did not contain an expected field, excluding updates which were before a new field was introduced partway through the day. The list is taken from the dataSchema JSON parameter passed to dfe-analytics-dataform, but the assertion will fail if that file is updated but this assertion is not in order to alert us that we need to think through the implications for analytics of losing a field. If this assertion fails, we need to ask developers why, and ask them either to fix the bug, or if the field was intentionally removed, remove the field from dataSchema and any points where it used downstream in the pipeline."
-  }).query(ctx => `
+  }).tags([params.eventSourceName.toLowerCase()]).query(ctx => `
 WITH expected_entity_fields AS (
   SELECT
     entity_name,
@@ -11,11 +11,11 @@ WITH expected_entity_fields AS (
   FROM
   UNNEST([
       ${params.dataSchema.map(tableSchema => {
-        return `STRUCT("${tableSchema.entityTableName}" AS entity_name,
-        [${tableSchema.keys.filter(key => !key.historic).map(key => {return `"${key.keyName}"`;}).join(', ')}] AS keys
+    return `STRUCT("${tableSchema.entityTableName}" AS entity_name,
+        [${tableSchema.keys.filter(key => !key.historic).map(key => { return `"${key.keyName}"`; }).join(', ')}] AS keys
         )`;
-      }
-    ).join(',')}  
+  }
+  ).join(',')}  
   ]), UNNEST(keys) AS key
 )
 SELECT

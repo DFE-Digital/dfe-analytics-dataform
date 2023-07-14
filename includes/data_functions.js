@@ -11,7 +11,7 @@ function eventDataExtract(dataField, keyToExtract, dynamic = false) {
   return `NULLIF(
     (
       SELECT
-        ARRAY_TO_STRING(ARRAY_CONCAT_AGG(value), ",") as concat_value
+        IF(ARRAY_LENGTH(ARRAY_CONCAT_AGG(value)) = 0, NULL, ARRAY_TO_STRING(ARRAY_CONCAT_AGG(value), ",")) AS concat_value
       FROM
         UNNEST(${dataField})
       WHERE
@@ -34,7 +34,7 @@ function eventDataExtractListOfStringsBeginning(dataField, keyToExtractBegins, d
   return `NULLIF(
     (
       SELECT
-        ARRAY_TO_STRING(ARRAY_CONCAT_AGG(value), ",") as concat_value
+        IF(ARRAY_LENGTH(ARRAY_CONCAT_AGG(value)) = 0, NULL, ARRAY_TO_STRING(ARRAY_CONCAT_AGG(value), ",")) as concat_value
       FROM
         UNNEST(${dataField})
       WHERE

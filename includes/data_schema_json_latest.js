@@ -11,7 +11,8 @@ module.exports = (params) => {
         eventsource: params.eventSourceName.toLowerCase(),
         sourcedataset: params.bqDatasetName.toLowerCase()
       }
-    }
+    },
+    tags: [params.eventSourceName.toLowerCase()]
   }).query(ctx => `WITH keys_with_data_types AS
 (
   SELECT

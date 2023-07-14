@@ -1,66 +1,66 @@
 module.exports = (params) => {
-  const stepNumbers = Array.from({length: params.funnelDepth}, (_, i) => i + 1);
+  const stepNumbers = Array.from({ length: params.funnelDepth }, (_, i) => i + 1);
   const stepFieldMetadata = stepNumbers.map(stepNumber => ({
-        ["preceding_request_path_grouped_" + stepNumber]: `The request_path_grouped for the pageview that took place ${stepNumber} step(s) before this pageview . If this was the first pageview for that day, this will be the string 'Arrived on site' rather than NULL. If there was a pageview that took place ${stepNumber+1} steps before this pageview, but the referer of this pageview did not match the path for that pageview (so it wasn't a click) then this will be the string 'Other route' rather than NULL.`,
-        ["following_request_path_grouped_" + stepNumber]: `The request_path_grouped for the pageview that took place ${stepNumber} step(s) after this pageview . If this was the last pageview for that day, this will be the string 'Left site' rather than NULL. If there was a pageview that took place ${stepNumber+1} steps after this pageview, but the referer of this pageview did not match the path for that pageview (so it wasn't a click) then this will be the string 'Other route' rather than NULL.`,
-      ["seconds_between_preceding_steps_" + (stepNumber - 1) + "_and_" + stepNumber]: `The number of seconds (to microsecond precision) that elapsed between the pageview that took place ${stepNumber - 1} step before this pageview and the pageview that took place ${stepNumber} steps before this pageview (and so on for further steps in other fields with names that follow this pattern).`,
-      ["seconds_between_following_steps_" + (stepNumber - 1) + "_and_" + stepNumber]: `The number of seconds (to microsecond precision) that elapsed between the pageview that took place ${stepNumber - 1} step after this pageview and the pageview that took place ${stepNumber} steps after this pageview (and so on for further steps in other fields with names that follow this pattern).`
-      })
-    );
+    ["preceding_request_path_grouped_" + stepNumber]: `The request_path_grouped for the pageview that took place ${stepNumber} step(s) before this pageview . If this was the first pageview for that day, this will be the string 'Arrived on site' rather than NULL. If there was a pageview that took place ${stepNumber + 1} steps before this pageview, but the referer of this pageview did not match the path for that pageview (so it wasn't a click) then this will be the string 'Other route' rather than NULL.`,
+    ["following_request_path_grouped_" + stepNumber]: `The request_path_grouped for the pageview that took place ${stepNumber} step(s) after this pageview . If this was the last pageview for that day, this will be the string 'Left site' rather than NULL. If there was a pageview that took place ${stepNumber + 1} steps after this pageview, but the referer of this pageview did not match the path for that pageview (so it wasn't a click) then this will be the string 'Other route' rather than NULL.`,
+    ["seconds_between_preceding_steps_" + (stepNumber - 1) + "_and_" + stepNumber]: `The number of seconds (to microsecond precision) that elapsed between the pageview that took place ${stepNumber - 1} step before this pageview and the pageview that took place ${stepNumber} steps before this pageview (and so on for further steps in other fields with names that follow this pattern).`,
+    ["seconds_between_following_steps_" + (stepNumber - 1) + "_and_" + stepNumber]: `The number of seconds (to microsecond precision) that elapsed between the pageview that took place ${stepNumber - 1} step after this pageview and the pageview that took place ${stepNumber} steps after this pageview (and so on for further steps in other fields with names that follow this pattern).`
+  })
+  );
   function stepFields() {
-  /* Generates SQL that creates fields which require a separate field for each step in the funnel - iterating from step 2 to the step number configured in the funnelDepth parameter */
-  var sqlToReturn = '';
-  if((!(Number.isInteger(params.funnelDepth))) || params.funnelDepth < 1) {
-    throw new Error(`${params.funnelDepth} is not valid. funnelDepth must be a positive integer.`);
-  }
-  for (let i = 2; i <= params.funnelDepth; i++) {
-    sqlToReturn += `
+    /* Generates SQL that creates fields which require a separate field for each step in the funnel - iterating from step 2 to the step number configured in the funnelDepth parameter */
+    var sqlToReturn = '';
+    if ((!(Number.isInteger(params.funnelDepth))) || params.funnelDepth < 1) {
+      throw new Error(`${params.funnelDepth} is not valid. funnelDepth must be a positive integer.`);
+    }
+    for (let i = 2; i <= params.funnelDepth; i++) {
+      sqlToReturn += `
   CASE
     WHEN preceding_user_requests[SAFE_ORDINAL(${i})].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(${i})].request_path_grouped
-    WHEN preceding_user_requests[SAFE_ORDINAL(${i-1})].request_path_grouped IS NOT NULL
+    WHEN preceding_user_requests[SAFE_ORDINAL(${i - 1})].request_path_grouped IS NOT NULL
   AND total_number_of_preceding_steps_in_funnel = ${i} THEN "Other route"
-    WHEN preceding_user_requests[SAFE_ORDINAL(${i-1})].request_path_grouped IS NOT NULL THEN "Arrived on site"
+    WHEN preceding_user_requests[SAFE_ORDINAL(${i - 1})].request_path_grouped IS NOT NULL THEN "Arrived on site"
     ELSE NULL
   END AS preceding_request_path_grouped_${i},
   CASE
     WHEN following_user_requests[SAFE_ORDINAL(${i})].request_path_grouped IS NOT NULL THEN following_user_requests[SAFE_ORDINAL(${i})].request_path_grouped
-    WHEN following_user_requests[SAFE_ORDINAL(${i-1})].request_path_grouped IS NOT NULL
+    WHEN following_user_requests[SAFE_ORDINAL(${i - 1})].request_path_grouped IS NOT NULL
   AND total_number_of_following_steps_in_funnel = ${i} THEN "Other route"
-    WHEN following_user_requests[SAFE_ORDINAL(${i-1})].request_path_grouped IS NOT NULL THEN "Left site"
+    WHEN following_user_requests[SAFE_ORDINAL(${i - 1})].request_path_grouped IS NOT NULL THEN "Left site"
     ELSE NULL
   END AS following_request_path_grouped_${i},
   CASE
-    WHEN preceding_user_requests[SAFE_ORDINAL(${i})].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(${i-1})].seconds_since_previous_step
+    WHEN preceding_user_requests[SAFE_ORDINAL(${i})].request_path_grouped IS NOT NULL THEN preceding_user_requests[SAFE_ORDINAL(${i - 1})].seconds_since_previous_step
     ELSE NULL
-  END AS seconds_between_preceding_steps_${i-1}_and_${i},
+  END AS seconds_between_preceding_steps_${i - 1}_and_${i},
   CASE
-    WHEN following_user_requests[SAFE_ORDINAL(${i})].request_path_grouped IS NOT NULL THEN following_user_requests[SAFE_ORDINAL(${i-1})].seconds_until_next_step
+    WHEN following_user_requests[SAFE_ORDINAL(${i})].request_path_grouped IS NOT NULL THEN following_user_requests[SAFE_ORDINAL(${i - 1})].seconds_until_next_step
     ELSE NULL
-  END AS seconds_between_following_steps_${i-1}_and_${i},\n`;
+  END AS seconds_between_following_steps_${i - 1}_and_${i},\n`;
     }
-  return sqlToReturn;
+    return sqlToReturn;
   }
   function attributionParamFields(attributionParameters) {
-  /* Generates SQL that creates fields which extract the value of each URL query parameter from the request_query ARRAY of STRUCTs, as long as that parameter's key is in the configuration parameter attributionParameters */
+    /* Generates SQL that creates fields which extract the value of each URL query parameter from the request_query ARRAY of STRUCTs, as long as that parameter's key is in the configuration parameter attributionParameters */
     var sqlToReturn = '';
     attributionParameters.forEach(param => {
-      if(['occurred_at','event_type','environment','namespace','request_user_id','request_uuid','request_method','request_path','request_path_grouped','request_user_agent','request_referer','request_query','request_referer_query','response_content_type','response_status','anonymised_user_agent_and_ip','device_category','browser_name','browser_version','operating_system_name','operating_system_vendor','operating_system_version','newly_arrived','next_step'].includes(param)) {
+      if (['occurred_at', 'event_type', 'environment', 'namespace', 'request_user_id', 'request_uuid', 'request_method', 'request_path', 'request_path_grouped', 'request_user_agent', 'request_referer', 'request_query', 'request_referer_query', 'response_content_type', 'response_status', 'anonymised_user_agent_and_ip', 'device_category', 'browser_name', 'browser_version', 'operating_system_name', 'operating_system_vendor', 'operating_system_version', 'newly_arrived', 'next_step'].includes(param)) {
         throw new Error(`'${param}' is already the name of a field included in the pageview_with_funnels_${params.eventSourceName} table generated by dfe-analytics-dataform automatically, so would produce a table with more than one column with the same name. Remove this field from attributionParamFields to prevent this error.`);
       }
       else {
         sqlToReturn += `IF(request_referer IS NULL OR NOT REGEXP_CONTAINS(request_referer, "${params.urlRegex}"), NULLIF((SELECT STRING_AGG(value, ",") FROM UNNEST(request_query) WHERE key = "${param}"),""), NULL) AS ${param},\n`;
       }
-      })
+    })
     return sqlToReturn;
   }
   const attributionParamFieldMetadata = (params) => {
-      return params.map(param => ({
-        [param]: `Value of the ${param} URL parameter included in the web request at the beginning of this funnel (newly arrived traffic only)`
-      })
+    return params.map(param => ({
+      [param]: `Value of the ${param} URL parameter included in the web request at the beginning of this funnel (newly arrived traffic only)`
+    })
     )
   };
   /* Check the contents of the urlRegex configuration parameter and generate a compilation error if it is not valid */
-  if(!params.urlRegex) {
+  if (!params.urlRegex) {
     throw new Error(`urlRegex is missing or empty. Please specify urlRegex.`);
   }
   else if (params.urlRegex.includes(":") || params.urlRegex.includes("/")) {
@@ -78,6 +78,7 @@ module.exports = (params) => {
         sourcedataset: params.bqDatasetName.toLowerCase()
       }
     },
+    tags: [params.eventSourceName.toLowerCase()],
     description: "Pageview events from the events table streamed from " + params.eventSourceName + " into the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project, with fields added containing the paths for the previous and following " + params.funnelDepth + " pageview events in strict time AND referer order, numbered to allow funnel analysis. Fields containing the time between each step are also included.",
     columns: Object.assign({
       occurred_at: "The timestamp at which the event occurred in the application.",
@@ -329,16 +330,16 @@ ${stepFields(params.funnelDepth)}
   IF(total_number_of_following_steps_in_funnel = 0, "Left site immediately after this", "Visited subsequent pages") AS next_step,
   CASE
     WHEN REGEXP_CONTAINS(request_referer, "${params.urlRegex}") THEN NULL
-    ${ctx.when(params.attributionParameters.includes('utm_medium'),`WHEN utm_medium = "cpc" THEN "PPC"`,``)}
-    ${ctx.when(params.attributionParameters.includes('gclid'),`WHEN gclid IS NOT NULL THEN "PPC"`,``)}
-    ${ctx.when(params.attributionParameters.includes('utm_medium'),`WHEN REGEXP_CONTAINS(utm_medium, "(?i)(email)") THEN "Email"`,``)}
+    ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN utm_medium = "cpc" THEN "PPC"`, ``)}
+    ${ctx.when(params.attributionParameters.includes('gclid'), `WHEN gclid IS NOT NULL THEN "PPC"`, ``)}
+    ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN REGEXP_CONTAINS(utm_medium, "(?i)(email)") THEN "Email"`, ``)}
     WHEN REGEXP_CONTAINS(SPLIT(request_referer, "/")[SAFE_OFFSET(2)], "${params.socialRefererDomainRegex}") THEN "Social"
-    ${ctx.when(params.attributionParameters.includes('utm_medium'),`WHEN REGEXP_CONTAINS(utm_medium, "(?i)(social)") THEN "Social"`,``)}
+    ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN REGEXP_CONTAINS(utm_medium, "(?i)(social)") THEN "Social"`, ``)}
     WHEN REGEXP_CONTAINS(SPLIT(request_referer, "/")[SAFE_OFFSET(2)], "${params.searchEngineRefererDomainRegex}") THEN "Organic"
-    ${ctx.when(params.attributionParameters.includes('utm_medium'),`WHEN REGEXP_CONTAINS(utm_medium, "(?i)(organic)") THEN "Organic"`,``)}
+    ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN REGEXP_CONTAINS(utm_medium, "(?i)(organic)") THEN "Organic"`, ``)}
     WHEN REGEXP_CONTAINS(request_referer, "${params.attributionDomainExclusionRegex}") THEN "Direct or unknown"
     WHEN request_referer IS NOT NULL THEN "Referral"
-    ${ctx.when(params.attributionParameters.includes('utm_medium'),`WHEN REGEXP_CONTAINS(utm_medium, "(?i)(referral)") THEN "Referral"`,``)}
+    ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN REGEXP_CONTAINS(utm_medium, "(?i)(referral)") THEN "Referral"`, ``)}
     ELSE "Direct or unknown"
   END AS medium,
   IF(NOT REGEXP_CONTAINS(request_referer, "${params.urlRegex}") AND NOT REGEXP_CONTAINS(request_referer, "${params.attributionDomainExclusionRegex}"),SPLIT(request_referer, "/")[SAFE_OFFSET(2)],NULL) AS referer_domain
@@ -346,7 +347,7 @@ FROM
   web_request_with_unbroken_funnels_only
 `).preOps(ctx => `
     DECLARE event_date_checkpoint DEFAULT (
-        ${ctx.when(ctx.incremental(),`SELECT MAX(DATE(occurred_at)) FROM ${ctx.self()}`,`SELECT DATE("2000-01-01")`)});
+        ${ctx.when(ctx.incremental(), `SELECT MAX(DATE(occurred_at)) FROM ${ctx.self()}`, `SELECT DATE("2000-01-01")`)});
 /* Referer URLs in events include URI-formatted codes for some characters e.g. '%20' for ' '. This UDF parses them. */
 CREATE TEMP FUNCTION
   DECODE_URI_COMPONENT(url STRING) AS ((
@@ -407,5 +408,5 @@ CREATE TEMP FUNCTION
         query1.key IS NULL) )
   END
     ) ;`
-      )
+  )
 }

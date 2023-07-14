@@ -3,10 +3,10 @@ module.exports = (params) => {
     throw new Error(`eventsDataFreshnessDays parameter is not a positive integer.`);
   } else {
     return assert(
-        params.eventSourceName + "_events_data_is_not_fresh", {
-          ...params.defaultConfig
-        }
-      )
+      params.eventSourceName + "_events_data_is_not_fresh", {
+      ...params.defaultConfig
+    }
+    ).tags([params.eventSourceName.toLowerCase()])
       .query(ctx =>
         "SELECT MAX(occurred_at) AS event_last_streamed_at FROM " +
         ctx.ref(params.bqDatasetName, params.bqEventsTableName) +

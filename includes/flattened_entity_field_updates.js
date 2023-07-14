@@ -1,13 +1,13 @@
 const getNewColumnDescriptions = (keys) => {
-    return keys.map(key => ({
-      ["new_" + (key.alias || key.keyName)]: "Value immediately after this update of: " + key.description
-    })
+  return keys.map(key => ({
+    ["new_" + (key.alias || key.keyName)]: "Value immediately after this update of: " + key.description
+  })
   )
 };
 const getPreviousColumnDescriptions = (keys) => {
-    return keys.map(key => ({
-      ["previous_" + (key.alias || key.keyName)]: "Value immediately before this update of: " + key.description
-    })
+  return keys.map(key => ({
+    ["previous_" + (key.alias || key.keyName)]: "Value immediately before this update of: " + key.description
+  })
   )
 };
 module.exports = (params) => {
@@ -23,6 +23,7 @@ module.exports = (params) => {
         entitytabletype: "field_updates"
       }
     },
+    tags: [params.eventSourceName.toLowerCase()],
     description: "One row for each time a field was updated for each " + tableSchema.entityTableName + " that was/were streamed as events from the database, setting out the previous value of the field and the new value of the field. Entity deletions and updates to the updated_at field are not included, but NULL values are. Taken from entity Create, Update and Delete events streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project. Description of these entities is: " + tableSchema.description,
     columns: Object.assign({
       update_id: "UID for the collection of field updates that took place to this entity at this time. One-way hash of entity_id and occurred_at. Useful for COUNT DISTINCTs.",
@@ -55,44 +56,44 @@ module.exports = (params) => {
       operating_system_name: "The name of the operating system that caused this update.",
       operating_system_vendor: "The vendor of the operating system that caused this update.",
       operating_system_version: "The version of the operating system that caused this update."
-      }, ...getNewColumnDescriptions(tableSchema.keys), ...getPreviousColumnDescriptions(tableSchema.keys))
+    }, ...getNewColumnDescriptions(tableSchema.keys), ...getPreviousColumnDescriptions(tableSchema.keys))
   }).query(ctx => `SELECT
   * EXCEPT(new_DATA_struct, previous_DATA_struct, entity_table_name, updated_at),
   ${tableSchema.keys.map(key => {
-        var newFieldCoalesceSql;
-        var previousFieldCoalesceSql;
-        if (!key.pastKeyNamesToCoalesce) {
-          newFieldCoalesceSql = `new_DATA_struct.${key.alias || key.keyName}`;
-          previousFieldCoalesceSql = `previous_DATA_struct.${key.alias || key.keyName}`;
-        }
-        else {
-          newFieldCoalesceSql = `COALESCE(new_DATA_struct.${key.alias || key.keyName}, new_DATA_struct.${key.pastKeyNamesToCoalesce.join(', new_DATA_struct.')})`;
-          previousFieldCoalesceSql = `COALESCE(previous_DATA_struct.${key.alias || key.keyName}, previous_DATA_struct.${key.pastKeyNamesToCoalesce.join(', previous_DATA_struct.')})`;
-        }
-        var fieldSql;
-        if(key.dataType == 'boolean') {
-          fieldSql = `SAFE_CAST(${newFieldCoalesceSql} AS BOOL) AS new_${key.alias || key.keyName},\nSAFE_CAST(${previousFieldCoalesceSql} AS BOOL) AS previous_${key.alias || key.keyName}`;
-        } else if (key.dataType == 'timestamp') {
-          fieldSql = `${data_functions.stringToTimestamp(newFieldCoalesceSql)} AS new_${key.alias || key.keyName},\n${data_functions.stringToTimestamp(previousFieldCoalesceSql)} AS previous_${key.alias || key.keyName}`;
-        } else if (key.dataType == 'date') {
-          fieldSql = `${data_functions.stringToDate(newFieldCoalesceSql)} AS new_${key.alias || key.keyName},\n${data_functions.stringToDate(previousFieldCoalesceSql)} AS previous_${key.alias || key.keyName}`;
-        } else if (key.dataType == 'integer') {
-          fieldSql = `SAFE_CAST(${newFieldCoalesceSql} AS INT64) AS new_${key.alias || key.keyName},\nSAFE_CAST(${previousFieldCoalesceSql} AS INT64) AS previous_${key.alias || key.keyName}`;
-        } else if (key.dataType == 'integer_array') {
-          fieldSql = `${data_functions.stringToIntegerArray(newFieldCoalesceSql)} AS new_${key.alias || key.keyName},\n${data_functions.stringToIntegerArray(previousFieldCoalesceSql)} AS previous_${key.alias || key.keyName}`;
-        } else if (key.dataType == 'float') {
-          fieldSql = `SAFE_CAST(${newFieldCoalesceSql} AS FLOAT64) AS new_${key.alias || key.keyName},\nSAFE_CAST(${previousFieldCoalesceSql} AS FLOAT64) AS previous_${key.alias || key.keyName}`;
-        } else if (key.dataType == 'json') {
-          fieldSql = `SAFE.PARSE_JSON(${newFieldCoalesceSql}) AS new_${key.alias || key.keyName},\nSAFE.PARSE_JSON(${previousFieldCoalesceSql}) AS previous_${key.alias || key.keyName}`;
-        } else if (key.dataType == 'string' || key.dataType == undefined) {
-          fieldSql = `${newFieldCoalesceSql} AS new_${key.alias || key.keyName},\n${previousFieldCoalesceSql} AS previous_${key.alias || key.keyName}`;
-        } else {
-          throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array, float, json or string or not set.`);
-        }
-        return fieldSql;
-      }
-    ).join(',\n')
+    var newFieldCoalesceSql;
+    var previousFieldCoalesceSql;
+    if (!key.pastKeyNamesToCoalesce) {
+      newFieldCoalesceSql = `new_DATA_struct.${key.alias || key.keyName}`;
+      previousFieldCoalesceSql = `previous_DATA_struct.${key.alias || key.keyName}`;
+    }
+    else {
+      newFieldCoalesceSql = `COALESCE(new_DATA_struct.${key.alias || key.keyName}, new_DATA_struct.${key.pastKeyNamesToCoalesce.join(', new_DATA_struct.')})`;
+      previousFieldCoalesceSql = `COALESCE(previous_DATA_struct.${key.alias || key.keyName}, previous_DATA_struct.${key.pastKeyNamesToCoalesce.join(', previous_DATA_struct.')})`;
+    }
+    var fieldSql;
+    if (key.dataType == 'boolean') {
+      fieldSql = `SAFE_CAST(${newFieldCoalesceSql} AS BOOL) AS new_${key.alias || key.keyName},\nSAFE_CAST(${previousFieldCoalesceSql} AS BOOL) AS previous_${key.alias || key.keyName}`;
+    } else if (key.dataType == 'timestamp') {
+      fieldSql = `${data_functions.stringToTimestamp(newFieldCoalesceSql)} AS new_${key.alias || key.keyName},\n${data_functions.stringToTimestamp(previousFieldCoalesceSql)} AS previous_${key.alias || key.keyName}`;
+    } else if (key.dataType == 'date') {
+      fieldSql = `${data_functions.stringToDate(newFieldCoalesceSql)} AS new_${key.alias || key.keyName},\n${data_functions.stringToDate(previousFieldCoalesceSql)} AS previous_${key.alias || key.keyName}`;
+    } else if (key.dataType == 'integer') {
+      fieldSql = `SAFE_CAST(${newFieldCoalesceSql} AS INT64) AS new_${key.alias || key.keyName},\nSAFE_CAST(${previousFieldCoalesceSql} AS INT64) AS previous_${key.alias || key.keyName}`;
+    } else if (key.dataType == 'integer_array') {
+      fieldSql = `${data_functions.stringToIntegerArray(newFieldCoalesceSql)} AS new_${key.alias || key.keyName},\n${data_functions.stringToIntegerArray(previousFieldCoalesceSql)} AS previous_${key.alias || key.keyName}`;
+    } else if (key.dataType == 'float') {
+      fieldSql = `SAFE_CAST(${newFieldCoalesceSql} AS FLOAT64) AS new_${key.alias || key.keyName},\nSAFE_CAST(${previousFieldCoalesceSql} AS FLOAT64) AS previous_${key.alias || key.keyName}`;
+    } else if (key.dataType == 'json') {
+      fieldSql = `SAFE.PARSE_JSON(${newFieldCoalesceSql}) AS new_${key.alias || key.keyName},\nSAFE.PARSE_JSON(${previousFieldCoalesceSql}) AS previous_${key.alias || key.keyName}`;
+    } else if (key.dataType == 'string' || key.dataType == undefined) {
+      fieldSql = `${newFieldCoalesceSql} AS new_${key.alias || key.keyName},\n${previousFieldCoalesceSql} AS previous_${key.alias || key.keyName}`;
+    } else {
+      throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array, float, json or string or not set.`);
+    }
+    return fieldSql;
   }
+  ).join(',\n')
+    }
 FROM
   (
   SELECT
@@ -101,18 +102,18 @@ FROM
     SELECT
       AS STRUCT
       ${tableSchema.keys.map(key => {
-            if(['id','created_at','updated_at'].includes(key.alias || key.keyName)) {
-              throw new Error(`${key.keyName}' is included as a field in the ${tableSchema.entityTableName}_version_${params.eventSourceName} table generated by dfe-analytics-dataform automatically, so would produce a table with more than one column with the same name. Remove this field from your dataSchema to prevent this error. Or if you're sure that you want to include the same field more than once, use an alias by setting 'alias: "alternative_name_for_${key.keyName}"' for this field in your dataSchema.`);
-            }
-            else if(['valid_from','valid_to','event_type','request_uuid','request_path','request_user_id','request_method','request_user_agent','request_referer','request_query','response_content_type','response_status','anonymised_user_agent_and_ip','device_category','browser_name','browser_version','operating_system_name','operating_system_vendor','operating_system_version'].includes(key.alias || key.keyName)) {
-              throw new Error(`'${key.keyName}' is the same as a field name in the ${tableSchema.entityTableName}_version_${params.eventSourceName} table generated by dfe-analytics-dataform, so would produce a table with two columns with the same name. Set 'alias: "alternative_name_for_${key.keyName}"' for this field in your dataSchema to prevent this error.`);
-            } 
-            else {
-              return `ANY_VALUE(IF(key="${key.keyName}",value,NULL)) AS ${key.alias || key.keyName},`;
-            }
-          }
-        ).join('\n')
+      if (['id', 'created_at', 'updated_at'].includes(key.alias || key.keyName)) {
+        throw new Error(`${key.keyName}' is included as a field in the ${tableSchema.entityTableName}_version_${params.eventSourceName} table generated by dfe-analytics-dataform automatically, so would produce a table with more than one column with the same name. Remove this field from your dataSchema to prevent this error. Or if you're sure that you want to include the same field more than once, use an alias by setting 'alias: "alternative_name_for_${key.keyName}"' for this field in your dataSchema.`);
       }
+      else if (['valid_from', 'valid_to', 'event_type', 'request_uuid', 'request_path', 'request_user_id', 'request_method', 'request_user_agent', 'request_referer', 'request_query', 'response_content_type', 'response_status', 'anonymised_user_agent_and_ip', 'device_category', 'browser_name', 'browser_version', 'operating_system_name', 'operating_system_vendor', 'operating_system_version'].includes(key.alias || key.keyName)) {
+        throw new Error(`'${key.keyName}' is the same as a field name in the ${tableSchema.entityTableName}_version_${params.eventSourceName} table generated by dfe-analytics-dataform, so would produce a table with two columns with the same name. Set 'alias: "alternative_name_for_${key.keyName}"' for this field in your dataSchema to prevent this error.`);
+      }
+      else {
+        return `ANY_VALUE(IF(key="${key.keyName}",value,NULL)) AS ${key.alias || key.keyName},`;
+      }
+    }
+    ).join('\n')
+    }
     FROM (
       SELECT
         AS STRUCT key,
@@ -126,10 +127,10 @@ FROM
     SELECT
       AS STRUCT
       ${tableSchema.keys.map(key => {
-        return `ANY_VALUE(IF(key="${key.keyName}",value,NULL)) AS ${key.alias || key.keyName},`;
-          }
-        ).join('\n')
-      }
+      return `ANY_VALUE(IF(key="${key.keyName}",value,NULL)) AS ${key.alias || key.keyName},`;
+    }
+    ).join('\n')
+    }
     FROM (
       SELECT
         AS STRUCT key,
