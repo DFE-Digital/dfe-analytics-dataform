@@ -65,6 +65,9 @@ module.exports = (params) => {
   if (params.disabled) {
     return true;
   }
+  else if (!/^[A-Za-z0-9_]*$/.test(params.eventSourceName)) {
+    throw new Error(`eventSourceName ${params.eventSourceName} contains characters that are not alphanumeric or an underscore`);
+  }
 
   // Declare the source table
   const eventsRaw = declare({
