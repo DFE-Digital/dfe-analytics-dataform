@@ -118,8 +118,8 @@ Once you have updated your dataSchema, commit your changes, merge to main/master
 
 Each object within each table's set of ```keys``` determines how dfe-analytics-dataform will transform a field within a table in your schema. It has the following attributes:
 - ```keyName``` - name of the field in your database; mandatory
-- ```dataType``` - determines the output data type for this field, which can be ```string```, ```boolean```, ```integer```, ```float```, ```date```, ```timestamp``` or ```integer_array```, but defaults to ```string``` if not present)
-- ```isArray``` - ```true``` or ```false```; defaults to ```false```. If ```true``` then the data type will be a ```REPEATED``` field of data type ```dataType```. May not be used with ```dataType: integer_array```.),
+- ```dataType``` - determines the output data type for this field, which can be ```'string'```, ```'boolean'```, ```'integer'```, ```'float'```, ```'date'```, ```'timestamp'``` or ```'integer_array'```, but defaults to ```'string'``` if not present)
+- ```isArray``` - ```true``` or ```false```; defaults to ```false```. If ```true``` then the data type will be a ```REPEATED``` field of data type ```dataType```. May not be used with ```dataType: 'integer_array'```.),
 - ```description``` - a meta description of the field
 - ```alias``` - a name to give the field in outputs instead of ```entityTableName```
 - ```pastKeyNames``` - an array of strings, see section "Retaining access to data in renamed fields" below
@@ -129,7 +129,7 @@ Each object within each table's set of ```keys``` determines how dfe-analytics-d
 
 An example of a ```dataSchema``` is included in the installation instructions above and in [example.js](https://github.com/DFE-Digital/dfe-analytics-dataform/blob/master/definitions/example.js).
 
-### Detecting times when you *must* update the ```dataSchema``
+### Detecting times when you *must* update the ```dataSchema```
 You must update ```dataSchema``` whenever a field or table is added or removed from your dfe-analytics ```analytics.yml``` file (often because it has been added or removed from your database), changes data type (for example, from ```timestamp``` to ```date```), or changes name.
 
 dfe-analytics-dataform contains 2 [assertions](https://cloud.google.com/dataform/docs/assertions) which will cause your scheduled pipeline runs in Dataform to fail if:
