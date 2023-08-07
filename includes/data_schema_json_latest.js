@@ -13,25 +13,27 @@ module.exports = (params) => {
       }
     },
     tags: [params.eventSourceName.toLowerCase()]
-  }).query(ctx => `WITH keys_with_data_types AS
+  }).query(ctx => `WITH keys_with_data_type AS
 (
   SELECT
     DISTINCT entity_table_name,
     DATA.key AS key,
   CASE
     /* Attempt to work out the data type(s) of each field, in this priority order */
-    WHEN DATA.value[SAFE_OFFSET(0)] IS NULL THEN NULL
-    WHEN SAFE_CAST(DATA.value[SAFE_OFFSET(0)] AS BOOL) IS NOT NULL THEN "boolean"
-    WHEN SAFE_CAST(DATA.value[SAFE_OFFSET(0)] AS INT64) IS NOT NULL THEN "integer"
-    WHEN SAFE_CAST(DATA.value[SAFE_OFFSET(0)] AS FLOAT64) IS NOT NULL THEN "float"
-    WHEN ${data_functions.stringToTimestamp(`DATA.value[SAFE_OFFSET(0)]`)} IS NOT NULL THEN "timestamp"
-    WHEN ${data_functions.stringToDate(`DATA.value[SAFE_OFFSET(0)]`)} IS NOT NULL THEN "date"
-    WHEN REGEXP_CONTAINS(DATA.value[SAFE_OFFSET(0)], r"^\\[?(?:[0-9]+,)*[0-9]+\\]?$") THEN "integer_array"
+    WHEN LOGICAL_AND(this_value IS NULL) THEN NULL
+    WHEN LOGICAL_AND(JSON_TYPE(SAFE.PARSE_JSON(this_value)) = "boolean") THEN "boolean"
+    WHEN LOGICAL_AND(SAFE_CAST(this_value AS INT64) IS NOT NULL) THEN "integer"
+    WHEN LOGICAL_AND(SAFE_CAST(this_value AS FLOAT64) IS NOT NULL) THEN "float"
+    WHEN LOGICAL_AND(${data_functions.stringToTimestamp(`this_value`)} IS NOT NULL) THEN "timestamp"
+    WHEN LOGICAL_AND(${data_functions.stringToDate(`this_value`)} IS NOT NULL) THEN "date"
+    WHEN LOGICAL_AND(REGEXP_CONTAINS(this_value, r"^\\[?(?:[0-9]+,)*[0-9]+\\]?$")) THEN "integer_array"
     ELSE "string"
-  END AS data_type
+  END AS data_type,
+  LOGICAL_OR(ARRAY_LENGTH(value) > 1) AS is_array
   FROM
     ${ctx.ref("events_" + params.eventSourceName)},
-    UNNEST(DATA) AS DATA
+    UNNEST(DATA) AS DATA,
+    UNNEST(value) AS this_value
   WHERE
     DATE(occurred_at) = CURRENT_DATE - 1
     AND event_type IN ("create_entity",
@@ -39,26 +41,16 @@ module.exports = (params) => {
       "delete_entity",
       "import_entity")
     AND key NOT IN ("created_at","updated_at", "id")
+  GROUP BY
+    entity_table_name,
+    key
   ORDER BY
     entity_table_name,
     key),
-keys_with_data_type AS (
-  SELECT
-    entity_table_name,
-    key,
-    /* If we identified only one non-null data type for this field, use that data type - otherwise default to string */
-    IF(
-        COUNT(DISTINCT data_type) = 1,
-        ANY_VALUE(data_type),
-        "string"
-      ) AS data_type
-  FROM keys_with_data_types
-  GROUP BY entity_table_name,key
-),
 dataschemajson_table_part AS (
   SELECT
     entity_table_name,
-    "{\\n   entityTableName: \\"" || entity_table_name || "\\",\\n   description: \\"\\",\\n   keys: [" || STRING_AGG("{\\n      keyName: \\"" || key || "\\",\\n      dataType: \\"" || data_type || "\\",\\n      description: \\"\\"\\n   }", ", ") || "]\\n}" AS tableSchemaJSON
+    "{\\n   entityTableName: \\"" || entity_table_name || "\\",\\n   description: \\"\\",\\n   keys: [" || STRING_AGG("{\\n      keyName: \\"" || key || "\\",\\n      dataType: \\"" || data_type || "\\",\\n" || IF(is_array,"      isArray: true,\\n","") || "      description: \\"\\"\\n   }", ", ") || "]\\n}" AS tableSchemaJSON
   FROM keys_with_data_type
   GROUP BY
     entity_table_name

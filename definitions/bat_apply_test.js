@@ -2,40 +2,132 @@
 
 const dfeAnalyticsDataform = require("../");
 
-dfeAnalyticsDataform({
+dfeAnalyticsDataform({ 
   eventSourceName: "apply",
   bqProjectName: "rugged-abacus-218110",
   bqDatasetName: "apply_events_production",
   bqEventsTableName: "events",
   urlRegex: "apply-for-teacher-training.service.gov.uk",
   dataSchema: [{
-      entityTableName: "candidates",
-      description: "",
-      dataFreshnessDays: 3,
-      keys: [{
-        keyName: "candidate_api_updated_at",
-        dataType: "timestamp",
-        description: ""
-      }, {
-        keyName: "course_from_find_id",
-        dataType: "string",
-        description: ""
-      }, {
-        keyName: "hide_in_reporting",
-        dataType: "boolean",
-        description: ""
-      }, {
-        keyName: "last_signed_in_at",
-        dataType: "timestamp",
-        description: ""
-      }, {
-        keyName: "magic_link_token_sent_at",
-        dataType: "timestamp",
-        description: ""
-      }, {
-        keyName: "sign_up_email_bounced",
-        dataType: "boolean",
-        description: ""
-      }]
+    entityTableName: "application_choices",
+    description: "",
+    keys: [{
+      keyName: "accepted_at",
+      dataType: "timestamp",
+      description: ""
+    }, {
+      keyName: "application_form_id",
+      dataType: "integer",
+      description: ""
+    }, {
+      keyName: "course_changed_at",
+      dataType: "timestamp",
+      description: ""
+    }, {
+      keyName: "course_option_id",
+      dataType: "integer",
+      description: ""
+    }, {
+      keyName: "current_course_option_id",
+      dataType: "integer",
+      description: ""
+    }, {
+      keyName: "decline_by_default_at",
+      dataType: "timestamp",
+      description: ""
+    }, {
+      keyName: "decline_by_default_days",
+      dataType: "integer",
+      description: ""
+    }, {
+      keyName: "declined_at",
+      dataType: "timestamp",
+      description: ""
+    }, {
+      keyName: "declined_by_default",
+      dataType: "boolean",
+      description: ""
+    }, {
+      keyName: "offer_changed_at",
+      dataType: "timestamp",
+      description: ""
+    }, {
+      keyName: "offer_deferred_at",
+      dataType: "timestamp",
+      description: ""
+    }, {
+      keyName: "offered_at",
+      dataType: "timestamp",
+      description: ""
+    }, {
+      keyName: "original_course_option_id",
+      dataType: "integer",
+      description: ""
+    }, {
+      keyName: "personal_statement",
+      dataType: "string",
+      description: ""
+    }, {
+      keyName: "recruited_at",
+      dataType: "timestamp",
+      description: ""
+    }, {
+      keyName: "reject_by_default_at",
+      dataType: "timestamp",
+      description: ""
+    }, {
+      keyName: "reject_by_default_days",
+      dataType: "integer",
+      description: ""
+    }, {
+      keyName: "rejected_at",
+      dataType: "timestamp",
+      description: ""
+    }, {
+      keyName: "rejected_by_default",
+      dataType: "boolean",
+      description: ""
+    }, {
+      keyName: "rejection_reason",
+      dataType: "string",
+      description: ""
+    }, {
+      keyName: "rejection_reasons_type",
+      dataType: "string",
+      description: ""
+    }, {
+      keyName: "sent_to_provider_at",
+      dataType: "timestamp",
+      description: ""
+    }, {
+      keyName: "status",
+      dataType: "string",
+      description: ""
+    }, {
+      keyName: "status_before_deferral",
+      dataType: "string",
+      description: ""
+    }, {
+      keyName: "structured_rejection_reasons",
+      dataType: "string",
+      description: ""
+    }, {
+      keyName: "structured_withdrawal_reasons",
+      dataType: "string",
+      isArray: true,
+      description: ""
+    }, {
+      keyName: "withdrawal_feedback",
+      dataType: "string",
+      description: ""
+    }, {
+      keyName: "withdrawn_at",
+      dataType: "timestamp",
+      description: ""
+    }, {
+      keyName: "withdrawn_or_declined_for_candidate_by_provider",
+      dataType: "boolean",
+      description: ""
     }]
+  }]
 });

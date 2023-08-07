@@ -7,14 +7,14 @@ Dataform package containing commonly used SQL functions and table definitions, f
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.5.1.tar.gz"
+"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.6.0.tar.gz"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
         "@dataform/core": "2.6.0",
-        "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.5.1.tar.gz"
+        "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.6.0.tar.gz"
     }
 }
 ```
@@ -109,11 +109,25 @@ Update your ```dataSchema``` configuration whenever you wish to change the form 
 Once you have updated your dataSchema, commit your changes, merge to main/master and then re-run your pipeline in Dataform.
 
 ### Format
-```dataSchema``` is a JSON array of objects: ```dataSchema: [{}, {}, {}...]```:
-- Each of these objects represents a table in your schema. It must have the attributes ```entityTableName``` (the name of the table in your database, a string), ```description``` (a meta description of the table, which can be a blank string: ```''```) and ```keys```. If the table has a primary key that is not ```id```, then this object may optionally have the attribute ```primary_key``` (containing the name of the field that is the primary key, if it is not ```'id'```.).  If you wish to create an assertion which fails if no Create, Update or Delete events have been received in the last ```dataFreshnessDays``` days for this entity, then this object may optionally include an integer-valued ```dataFreshnessDays``` parameter.
-- ```keys``` is an array of objects. Each table listed within ```dataSchema``` has its own ```keys``` i.e. : ```dataSchema: [{entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}...]```.
-- Each object within each set of ```keys``` determines how dfe-analytics-dataform will transform a field within a table in your schema. Each field object must have within it the attribute ```keyName``` (name of the field in your database). It *may* also have the attributes ```dataType``` (determines the output data type for this field, which can be ```string```, ```boolean```, ```integer```, ```float```, ```date```, ```timestamp``` or ```integer_array```, but defaults to ```string``` if not present), ```description``` (a meta description of the field), ```alias``` (a name to give the field in outputs instead of ```entityTableName```), ```pastKeyNames``` (an array of strings, see below), ```historic``` (a boolean, see below), ```foreignKeyName``` (a string, see below) and/or ```foreignKeyTable``` (a string, see below).
-- An example of a ```dataSchema``` is included in the installation instructions above and in [example.js](https://github.com/DFE-Digital/dfe-analytics-dataform/blob/master/definitions/example.js).
+```dataSchema``` is a JSON array of objects: ```dataSchema: [{}, {}, {}...]```. Each of these objects represents a table in your schema. It has the following attributes:
+- ```entityTableName``` - the name of the table in your database; a string; mandatory
+- ```description``` - a meta description of the table, which can be a blank string: ```''```; mandatory
+- ```keys``` - an array of objects which determines how dfe-analytics-dataform will transform each of the fields in the table. Each table listed within ```dataSchema``` has its own ```keys``` i.e. : ```dataSchema: [{entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}...]```.
+- If the table has a primary key that is not ```id```, then this object may optionally have the attribute ```primary_key``` (containing the name of the field that is the primary key, if it is not ```'id'```.).
+- If you wish to create an assertion which fails if no Create, Update or Delete events have been received in the last ```dataFreshnessDays``` days for this entity, then this object may optionally include an integer-valued ```dataFreshnessDays``` parameter.
+
+Each object within each table's set of ```keys``` determines how dfe-analytics-dataform will transform a field within a table in your schema. It has the following attributes:
+- ```keyName``` - name of the field in your database; mandatory
+- ```dataType``` - determines the output data type for this field, which can be ```string```, ```boolean```, ```integer```, ```float```, ```date```, ```timestamp``` or ```integer_array```, but defaults to ```string``` if not present)
+- ```isArray``` - ```true``` or ```false```; defaults to ```false```. If ```true``` then the data type will be a ```REPEATED``` field of data type ```dataType```. May not be used with ```dataType: integer_array```.),
+- ```description``` - a meta description of the field
+- ```alias``` - a name to give the field in outputs instead of ```entityTableName```
+- ```pastKeyNames``` - an array of strings, see section "Retaining access to data in renamed fields" below
+- ```historic``` - a boolean, see section "Retaining access to historic fields" below
+- ```foreignKeyName``` - a string, see section "Referential integrity assertions" below
+- ```foreignKeyTable``` - a string, see section "Referential integrity assertions" below
+
+An example of a ```dataSchema``` is included in the installation instructions above and in [example.js](https://github.com/DFE-Digital/dfe-analytics-dataform/blob/master/definitions/example.js).
 
 ### Detecting times when you *must* update the ```dataSchema``
 You must update ```dataSchema``` whenever a field or table is added or removed from your dfe-analytics ```analytics.yml``` file (often because it has been added or removed from your database), changes data type (for example, from ```timestamp``` to ```date```), or changes name.
