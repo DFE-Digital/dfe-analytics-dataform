@@ -121,7 +121,7 @@ Each object within each table's set of ```keys``` determines how dfe-analytics-d
 - ```dataType``` - determines the output data type for this field, which can be ```'string'```, ```'boolean'```, ```'integer'```, ```'float'```, ```'date'```, ```'timestamp'``` or ```'integer_array'```, but defaults to ```'string'``` if not present)
 - ```isArray``` - ```true``` or ```false```; defaults to ```false```. If ```true``` then the data type will be a ```REPEATED``` field of data type ```dataType```. May not be used with ```dataType: 'integer_array'```.),
 - ```description``` - a meta description of the field
-- ```alias``` - a name to give the field in outputs instead of ```entityTableName```
+- ```alias``` - a name to give the field in outputs instead of ```keyName```
 - ```pastKeyNames``` - an array of strings, see section "Retaining access to data in renamed fields" below
 - ```historic``` - a boolean, see section "Retaining access to historic fields" below
 - ```foreignKeyName``` - a string, see section "Referential integrity assertions" below
