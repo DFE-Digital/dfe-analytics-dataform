@@ -120,13 +120,17 @@ FROM (
     SELECT
       AS STRUCT
       ${tableSchema.keys.map(key => {
+      var valueField = 'value';
+      if (key.isArray) {
+        valueField = 'value_array';
+      }
       var pastKeyNamesSql = '';
       if (key.pastKeyNames) {
         key.pastKeyNames.forEach(pastKeyName => {
-          pastKeyNamesSql += `  ANY_VALUE(IF(key="${pastKeyName}",value,NULL)) AS ${pastKeyName},\n`;
+          pastKeyNamesSql += `  ANY_VALUE(IF(key="${pastKeyName}",${valueField},NULL)) AS ${pastKeyName},\n`;
         });
       }
-      return `ANY_VALUE(IF(key="${key.keyName}",value,NULL)) AS ${key.keyName},\n` + pastKeyNamesSql;
+      return `ANY_VALUE(IF(key="${key.keyName}",${valueField},NULL)) AS ${key.keyName},\n` + pastKeyNamesSql;
     }
     ).join('')
     }
@@ -134,7 +138,8 @@ FROM (
       SELECT
         AS STRUCT key,
         NULLIF(ARRAY_TO_STRING(ARRAY_CONCAT_AGG(value), ","),
-          "") AS value
+          "") AS value,
+        ARRAY_CONCAT_AGG(value) AS value_array
       FROM
         UNNEST(DATA)
       GROUP BY

@@ -2,28 +2,29 @@
 Dataform package containing commonly used SQL functions and table definitions, for use with event data streamed to BigQuery using DfE-Digital/dfe-analytics: https://github.com/DFE-Digital/dfe-analytics.
 
 ## How to install
-1. Set up your Dataform project using the [legacy Dataform web interface](https://app.dataform.co). It is not yet recommended to use the version of Dataform which is included with GCP and BigQuery - this is still in development and not feature complete.
+1. Set up your Dataform project - see [Google documentation](https://cloud.google.com/dataform/docs/overview).
 2. Ensure that it is connected to your BigQuery project.
 3. Ensure that it is synchronised with its own dedicated Github repository.
-4. Add the following line within the dependencies block of the package.json file in your Dataform project:
+4. Set up a production release configuration - see [Google documentation](https://cloud.google.com/dataform/docs/release-configurations).
+5. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.5.1.tar.gz"
+"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.6.0.tar.gz"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
-        "@dataform/core": "2.6.0",
-        "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.5.1.tar.gz"
+        "@dataform/core": "2.6.1",
+        "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.6.0.tar.gz"
     }
 }
 ```
-5. Click the 'Install Packages' button on the right hand side of the package.json screen. This will also update package-lock.json automatically.
-6. Create a file called ```includes/data_functions.js``` containing the following line:
+6. Click the 'Install Packages' button on the right hand side of the package.json screen. This will also update package-lock.json automatically.
+7. Create a file called ```includes/data_functions.js``` containing the following line:
 ```
 module.exports = require("dfe-analytics-dataform/includes/data_functions");
 ```
-7. Create a second file called ```definitions/dfe_analytics_dataform.js``` that looks like the following:
+8. Create a second file called ```definitions/dfe_analytics_dataform.js``` that looks like the following:
 ```
 const dfeAnalyticsDataform = require("dfe-analytics-dataform");
 
@@ -53,27 +54,29 @@ dfeAnalyticsDataform({
 });
 ```
 
-8. Replace the values of the ```eventSourceName```, ```bqDatasetName```, ```bqEventsTableName``` and ```urlRegex``` parameters in this file with the values you need. At this stage compilation errors like ```Error: Not found: Dataset your-project-name:output-dataset-name was not found in location europe-west2 at [1:44]``` are normal because you haven't yet run the pipeline for the first time, which creates the output dataset.
+9. Replace the values of the ```eventSourceName```, ```bqDatasetName```, ```bqEventsTableName``` and ```urlRegex``` parameters in this file with the values you need. At this stage compilation errors are normal because you haven't yet run the pipeline for the first time, which creates the output dataset. You will do this later.
 
-9. Using the right hand side panel of the Dataform UI with ```dfe_analytics_dataform.js``` open, find the ```events_{eventSourceName}``` query and click 'Update table'. Enable the 'Full Refresh' option and run the query. This may take some time to complete.
+10. Execute the ```events_{eventSourceName}``` from your development workspace with the 'Full Refresh' option enabled. This may take some time to complete. See [Google documentation](https://cloud.google.com/dataform/docs/trigger-execution) for more information.
 
-10. If you are using dfe-analytics (not dfe-analytics-dotnet), do the same for the ```dataSchema``` parameter - a JSON value which specifies the schema of the tables and field names and types in your database which are being streamed to BigQuery. Don't include the ```id```, ```created_at``` and ```updated_at``` fields - they are included automatically. If you're starting from scratch, *don't* type this out. Instead, to save time, generate a blank ```dataSchema``` JSON to paste in to this file by running the ```data_schema_json_latest``` query in Dataform (in the same way that you did in the previous step for the ```events``` table). You can do this from the right hand sidebar when you open ```dfe_analytics_dataform``` in the Dataform web client, and then copying and pasting the output from the table this produces in BigQuery (don't copy and paste from Dataform as it doesn't handle newlines well). This will automatically attempt to work out table names, field names and data types for each field using data streamed the previous day and today - although you might need to add in any tables that didn't have entity events streamed yesterday/today manually, or tweak some data types.
+11. If you are using dfe-analytics (not dfe-analytics-dotnet), do the same for the ```dataSchema``` parameter - a JSON value which specifies the schema of the tables and field names and types in your database which are being streamed to BigQuery. Don't include the ```id```, ```created_at``` and ```updated_at``` fields - they are included automatically. If you're starting from scratch, *don't* type this out. Instead, to save time, generate a blank ```dataSchema``` JSON to paste in to this file by running the ```...data_schema_latest``` query in Dataform (in the same way that you did in the previous step for the ```events``` table). You can do this by copying and pasting the output from the preview of the table this produces in BigQuery. This will automatically attempt to work out table names, field names and data types for each field using data streamed the previous day and today - although you might need to add in any tables that didn't have entity events streamed yesterday/today manually, or tweak some data types.
 
-11. If you are using dfe-analytics-dotnet, replace the entire ```dataSchema: [ ... ],``` parameter with ```transformEntityEvents: false,``` - since the .NET port of dfe-analytics does not yet stream entity events into BigQuery.
+12. If you are using dfe-analytics-dotnet, replace the entire ```dataSchema: [ ... ],``` parameter with ```transformEntityEvents: false,``` - since the .NET port of dfe-analytics does not yet stream entity events into BigQuery.
 
-12. In the unlikely event that your ```events``` table is stored in a different BigQuery project to the project named in your ```defaultDatabase``` parameter in your GCP Dataform release configuration (or the ```dataform.json``` file in your legacy Dataform project), add the line ```bqProjectName: 'name_of_the_bigquery_project_your_events_table_is_in',``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
+13. In the unlikely event that your ```events``` table is stored in a different BigQuery project to the project named in your ```defaultDatabase``` parameter in your GCP Dataform release configuration (or the ```dataform.json``` file in your legacy Dataform project), add the line ```bqProjectName: 'name_of_the_bigquery_project_your_events_table_is_in',``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
 
-13. If your ```events``` table is stored in a different dataset to the dataset configured in your GCP Dataform release configuration (or the ```defaultSchema``` parameter in the ```dataform.json``` file in your legacy Dataform project), add the line ```bqDatasetName: "name_of_the_bigquery_project_your_events_table_is_in",``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
+14. If your ```events``` table is stored in a different dataset to the dataset configured in your GCP Dataform release configuration (or the ```defaultSchema``` parameter in the ```dataform.json``` file in your legacy Dataform project), add the line ```bqDatasetName: "name_of_the_bigquery_project_your_events_table_is_in",``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
 
-14. In the unlikely event that one or more of the tables in your database being streamed by ```dfe-analytics``` has a primary key that is not ```id```, add the line ```primary_key: 'name_of_primary_key_for_this_table'``` to the element of the dataSchema that represents this table, alongside the ```entityTableName```.
+15. In the unlikely event that one or more of the tables in your database being streamed by ```dfe-analytics``` has a primary key that is not ```id```, add the line ```primary_key: 'name_of_primary_key_for_this_table'``` to the element of the dataSchema that represents this table, alongside the ```entityTableName```.
 
-15. If your dfe-analytics implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table, add the line ```bqEventsTableNameSpace: 'your_namespace_here'``` after the line that sets the ```bqEventsTableName``` parameter. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per value of ```namespace``` - this allows configuration options to differ between namespaces.
+16. If your dfe-analytics implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table, add the line ```bqEventsTableNameSpace: 'your_namespace_here'``` after the line that sets the ```bqEventsTableName``` parameter. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per value of ```namespace``` - this allows configuration options to differ between namespaces.
 
-16. Optionally, for each foreign key, configure referential integrity assertions following the instructions in the section below. These check that the value of each foreign key matches a valid primary key in another table.
+17. Optionally, for each foreign key, configure referential integrity assertions following the instructions in the section below. These check that the value of each foreign key matches a valid primary key in another table.
 
-17. Commit your changes and merge to the ```main```/```master``` branch of your Dataform project.
+18. Commit your changes and merge to the ```main```/```master``` branch of the Github repository linked to your Dataform repository.
 
-18. Run a 'full refresh' on your entire pipeline, and resolve any configuration errors this flags (e.g. omissions made when specifying a ```dataSchema```).
+19. Leave your development workspace. Run a one-off [manual compilation](https://cloud.google.com/dataform/docs/release-configurations#manual-compilation) of your production release configuration.
+
+20. Run a 'full refresh' execution of your entire pipeline using this release configuration, and resolve any configuration errors this flags (e.g. omissions made when specifying a ```dataSchema```).
 
 ## Additional configuration options
 You may in addition to step 8 of the setup instructions wish to configure the following options by adding them to the JSON passed to the ```dfeAnalyticsDataform()``` JavaScript function.
@@ -109,13 +112,27 @@ Update your ```dataSchema``` configuration whenever you wish to change the form 
 Once you have updated your dataSchema, commit your changes, merge to main/master and then re-run your pipeline in Dataform.
 
 ### Format
-```dataSchema``` is a JSON array of objects: ```dataSchema: [{}, {}, {}...]```:
-- Each of these objects represents a table in your schema. It must have the attributes ```entityTableName``` (the name of the table in your database, a string), ```description``` (a meta description of the table, which can be a blank string: ```''```) and ```keys```. If the table has a primary key that is not ```id```, then this object may optionally have the attribute ```primary_key``` (containing the name of the field that is the primary key, if it is not ```'id'```.).  If you wish to create an assertion which fails if no Create, Update or Delete events have been received in the last ```dataFreshnessDays``` days for this entity, then this object may optionally include an integer-valued ```dataFreshnessDays``` parameter.
-- ```keys``` is an array of objects. Each table listed within ```dataSchema``` has its own ```keys``` i.e. : ```dataSchema: [{entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}...]```.
-- Each object within each set of ```keys``` determines how dfe-analytics-dataform will transform a field within a table in your schema. Each field object must have within it the attribute ```keyName``` (name of the field in your database). It *may* also have the attributes ```dataType``` (determines the output data type for this field, which can be ```string```, ```boolean```, ```integer```, ```float```, ```date```, ```timestamp``` or ```integer_array```, but defaults to ```string``` if not present), ```description``` (a meta description of the field), ```alias``` (a name to give the field in outputs instead of ```entityTableName```), ```pastKeyNames``` (an array of strings, see below), ```historic``` (a boolean, see below), ```foreignKeyName``` (a string, see below) and/or ```foreignKeyTable``` (a string, see below).
-- An example of a ```dataSchema``` is included in the installation instructions above and in [example.js](https://github.com/DFE-Digital/dfe-analytics-dataform/blob/master/definitions/example.js).
+```dataSchema``` is a JSON array of objects: ```dataSchema: [{}, {}, {}...]```. Each of these objects represents a table in your schema. It has the following attributes:
+- ```entityTableName``` - the name of the table in your database; a string; mandatory
+- ```description``` - a meta description of the table, which can be a blank string: ```''```; mandatory
+- ```keys``` - an array of objects which determines how dfe-analytics-dataform will transform each of the fields in the table. Each table listed within ```dataSchema``` has its own ```keys``` i.e. : ```dataSchema: [{entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}...]```.
+- If the table has a primary key that is not ```id```, then this object may optionally have the attribute ```primary_key``` (containing the name of the field that is the primary key, if it is not ```'id'```.).
+- If you wish to create an assertion which fails if no Create, Update or Delete events have been received in the last ```dataFreshnessDays``` days for this entity, then this object may optionally include an integer-valued ```dataFreshnessDays``` parameter.
 
-### Detecting times when you *must* update the ```dataSchema``
+Each object within each table's set of ```keys``` determines how dfe-analytics-dataform will transform a field within a table in your schema. It has the following attributes:
+- ```keyName``` - name of the field in your database; mandatory
+- ```dataType``` - determines the output data type for this field, which can be ```'string'```, ```'boolean'```, ```'integer'```, ```'float'```, ```'date'```, ```'timestamp'``` or ```'integer_array'```, but defaults to ```'string'``` if not present)
+- ```isArray``` - ```true``` or ```false```; defaults to ```false```. If ```true``` then the data type will be a ```REPEATED``` field of data type ```dataType```. May not be used with ```dataType: 'integer_array'```.),
+- ```description``` - a meta description of the field
+- ```alias``` - a name to give the field in outputs instead of ```keyName```
+- ```pastKeyNames``` - an array of strings, see section "Retaining access to data in renamed fields" below
+- ```historic``` - a boolean, see section "Retaining access to historic fields" below
+- ```foreignKeyName``` - a string, see section "Referential integrity assertions" below
+- ```foreignKeyTable``` - a string, see section "Referential integrity assertions" below
+
+An example of a ```dataSchema``` is included in the installation instructions above and in [example.js](https://github.com/DFE-Digital/dfe-analytics-dataform/blob/master/definitions/example.js).
+
+### Detecting times when you *must* update the ```dataSchema```
 You must update ```dataSchema``` whenever a field or table is added or removed from your dfe-analytics ```analytics.yml``` file (often because it has been added or removed from your database), changes data type (for example, from ```timestamp``` to ```date```), or changes name.
 
 dfe-analytics-dataform contains 2 [assertions](https://cloud.google.com/dataform/docs/assertions) which will cause your scheduled pipeline runs in Dataform to fail if:
