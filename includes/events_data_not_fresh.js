@@ -9,7 +9,7 @@ module.exports = (params) => {
     ).tags([params.eventSourceName.toLowerCase()])
       .query(ctx =>
         "SELECT MAX(occurred_at) AS event_last_streamed_at FROM " +
-        ctx.ref(params.bqDatasetName, params.bqEventsTableName) +
+        "`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`" +
         " HAVING event_last_streamed_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP, INTERVAL " + params.eventsDataFreshnessDays + " DAY)"
       )
   }

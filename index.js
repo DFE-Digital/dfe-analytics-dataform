@@ -69,20 +69,10 @@ module.exports = (params) => {
     throw new Error(`eventSourceName ${params.eventSourceName} contains characters that are not alphanumeric or an underscore`);
   }
 
-  // Declare the source table
-  const eventsRaw = declare({
-    ...defaultConfig,
-    database: bqProjectName,
-    schema: bqDatasetName,
-    name: bqEventsTableName,
-    dependencies: dependencies
-  });
-
   // Publish and return datasets - assertions first for quick access in the Dataform UI
 
   if (params.transformEntityEvents) {
     return {
-      eventsRaw,
       events: events(params),
       eventsDataNotFresh: eventsDataNotFresh(params),
       entityDataNotFresh: entityDataNotFresh(params),
@@ -104,7 +94,6 @@ module.exports = (params) => {
     }
   } else {
     return {
-      eventsRaw,
       events: events(params),
       eventsDataNotFresh: eventsDataNotFresh(params),
       pageviewWithFunnel: pageviewWithFunnel(params),
