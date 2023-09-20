@@ -54,7 +54,7 @@ dfeAnalyticsDataform({
 });
 ```
 
-9. Replace the values of the ```eventSourceName```, ```bqDatasetName```, ```bqEventsTableName``` and ```urlRegex``` parameters in this file with the values you need. At this stage compilation errors are normal because you haven't yet run the pipeline for the first time, which creates the output dataset. You will do this later.
+9. Replace the values of the ```eventSourceName```, ```bqEventsTableName``` and ```urlRegex``` parameters in this file with the values you need. At this stage compilation errors are normal because you haven't yet run the pipeline for the first time, which creates the output dataset. You will do this later.
 
 10. Execute the ```events_{eventSourceName}``` from your development workspace with the 'Full Refresh' option enabled. This may take some time to complete. See [Google documentation](https://cloud.google.com/dataform/docs/trigger-execution) for more information.
 
@@ -116,8 +116,9 @@ Once you have updated your dataSchema, commit your changes, merge to main/master
 - ```entityTableName``` - the name of the table in your database; a string; mandatory
 - ```description``` - a meta description of the table, which can be a blank string: ```''```; mandatory
 - ```keys``` - an array of objects which determines how dfe-analytics-dataform will transform each of the fields in the table. Each table listed within ```dataSchema``` has its own ```keys``` i.e. : ```dataSchema: [{entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}...]```.
-- If the table has a primary key that is not ```id```, then this object may optionally have the attribute ```primary_key``` (containing the name of the field that is the primary key, if it is not ```'id'```.).
-- If you wish to create an assertion which fails if no Create, Update or Delete events have been received in the last ```dataFreshnessDays``` days for this entity, then this object may optionally include an integer-valued ```dataFreshnessDays``` parameter.
+- ```primary_key``` - optional; if the table has a primary key that is not ```id```, then this should contain the name of the field that is the primary key, if it is not ```'id'```.
+- ```dataFreshnessDays``` - optional; if set, creates an assertion which fails if no Create, Update or Delete events have been received in the last ```dataFreshnessDays``` days for this entity.
+- ```materialisation``` - optional; may be ```'view'``` or ```'table'```. Defaults to 'table' if not set. Determines whether the ```entity_version```, ```entity_latest``` and ```entity_field_updates``` tables for this entity will be materialised by Dataform as views or tables. Recommended usage is to set this to ```'table'``` if these tables will be used more than once a day, or ```'table'``` if not to save query costs.
 
 Each object within each table's set of ```keys``` determines how dfe-analytics-dataform will transform a field within a table in your schema. It has the following attributes:
 - ```keyName``` - name of the field in your database; mandatory

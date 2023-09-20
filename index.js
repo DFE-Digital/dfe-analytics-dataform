@@ -69,6 +69,16 @@ module.exports = (params) => {
     throw new Error(`eventSourceName ${params.eventSourceName} contains characters that are not alphanumeric or an underscore`);
   }
 
+// Set default value of materialisation to 'table' for all tables in dataSchema if not set explicitly
+  dataSchema.forEach(tableSchema => {
+    if (!tableSchema.materialisation) {
+      tableSchema.materialisation = 'table';
+    }
+    else if (tableSchema.materialisation && tableSchema.materialisation != 'view' && tableSchema.materialisation != 'table') {
+      throw new Error(`Value of materialisationType ${tableSchema.materialisation} for table ${tableSchema.entityTableName} in dataSchema must be either 'view' or 'table'.`);
+    }
+  });
+
   // Declare the source table
   const eventsRaw = declare({
     ...defaultConfig,

@@ -13,15 +13,14 @@ const getPreviousColumnDescriptions = (keys) => {
 module.exports = (params) => {
   return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_field_updates_" + params.eventSourceName, {
     ...params.defaultConfig,
-    type: "table",
+    type: tableSchema.materialisation,
     bigquery: {
-      partitionBy: "DATE(occurred_at)",
-      clusterBy: ["key_updated"],
       labels: {
         eventsource: params.eventSourceName.toLowerCase(),
         sourcedataset: params.bqDatasetName.toLowerCase(),
         entitytabletype: "field_updates"
-      }
+      },
+      ...(tableSchema.materialisation == "table" ? {partitionBy: "DATE(occurred_at)", clusterBy: ["key_updated"]} : {})
     },
     tags: [params.eventSourceName.toLowerCase()],
     description: "One row for each time a field was updated for each " + tableSchema.entityTableName + " that was/were streamed as events from the database, setting out the previous value of the field and the new value of the field. Entity deletions and updates to the updated_at field are not included, but NULL values are. Taken from entity Create, Update and Delete events streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project. Description of these entities is: " + tableSchema.description,

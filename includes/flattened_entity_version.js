@@ -5,9 +5,10 @@ const getKeys = (keys) => {
   )
 };
 module.exports = (params) => {
-  return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_version_" + params.eventSourceName, {
+  return params.dataSchema.forEach(tableSchema => {
+    publish(tableSchema.entityTableName + "_version_" + params.eventSourceName, {
     ...params.defaultConfig,
-    type: "table",
+    type: tableSchema.materialisation,
     dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
     assertions: {
       uniqueKey: ["valid_from", "id"],
@@ -17,13 +18,12 @@ module.exports = (params) => {
       ]
     },
     bigquery: {
-      partitionBy: "DATE(valid_to)",
-      updatePartitionFilter: "valid_to IS NULL",
       labels: {
         eventsource: params.eventSourceName.toLowerCase(),
         sourcedataset: params.bqDatasetName.toLowerCase(),
         entitytabletype: "version"
-      }
+      },
+      ...(tableSchema.materialisation == "table" ? {partitionBy: "DATE(valid_to)", updatePartitionFilter: "valid_to IS NULL"} : {})
     },
     tags: [params.eventSourceName.toLowerCase()],
     description: "Versions of entities in the database valid between valid_from and valid_to. Taken from entity Create, Update and Delete events streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project. Description of these entities is: " + tableSchema.description,
@@ -147,6 +147,6 @@ FROM (
 FROM
   ${ctx.ref(params.eventSourceName + "_entity_version")}
 WHERE
-  entity_table_name = "${tableSchema.entityTableName}")`)
+  entity_table_name = "${tableSchema.entityTableName}")`)}
   )
 }
