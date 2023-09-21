@@ -8,17 +8,19 @@ module.exports = (params) => {
   return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_latest_" + params.eventSourceName, {
     ...params.defaultConfig,
     type: tableSchema.materialisation,
-    assertions: {
-      uniqueKey: ["id"],
-      nonNull: ["last_streamed_event_occurred_at", "last_streamed_event_type", "id"]
-    },
+    ...(tableSchema.materialisation == "table" ? {
+      assertions: {
+        uniqueKey: ["id"],
+        nonNull: ["last_streamed_event_occurred_at", "last_streamed_event_type", "id"]
+      }
+    } : {}),
     bigquery: {
       labels: {
         eventsource: params.eventSourceName.toLowerCase(),
         sourcedataset: params.bqDatasetName.toLowerCase(),
         entitytabletype: "latest"
       },
-      ...(tableSchema.materialisation == "table" ? {partitionBy: "DATE(created_at)"} : {})
+      ...(tableSchema.materialisation == "table" ? { partitionBy: "DATE(created_at)" } : {})
     },
     tags: [params.eventSourceName.toLowerCase()],
     description: "Latest version of " + tableSchema.entityTableName + ". Taken from entity Create, Update and Delete events streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project." + tableSchema.description,
