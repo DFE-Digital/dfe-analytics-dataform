@@ -28,7 +28,7 @@ module.exports = (params) => {
       ${data_functions.eventDataExtract("data", "analytics_version")} AS version,
       CAST(JSON_VALUE(${data_functions.eventDataExtract("data", "config")}, "$.pseudonymise_web_request_user_id") AS BOOLEAN) AS pseudonymise_web_request_user_id
     FROM
-      ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)}
+      ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
     WHERE
       event_type = "initialise_analytics"
     UNION ALL
@@ -37,13 +37,13 @@ module.exports = (params) => {
         SELECT
           MIN(occurred_at)
         FROM
-          ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)}
+          ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
       ) AS valid_from,
       (
         SELECT
           MIN(occurred_at)
         FROM
-          ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)}
+          ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
         WHERE
           event_type = "initialise_analytics"
       ) AS valid_to,
@@ -54,14 +54,14 @@ module.exports = (params) => {
             ANY_VALUE(environment),
             NULL)
         FROM
-          ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)}
+          ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
         WHERE
           occurred_at <
             (
               SELECT
                 MIN(occurred_at)
               FROM
-                ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)}
+                ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
               WHERE
                 event_type = "initialise_analytics"
             )
@@ -76,14 +76,14 @@ module.exports = (params) => {
             AND REGEXP_CONTAINS(user_id, r"[0-9]")
           )
         FROM
-          ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)}
+          ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
         WHERE
           occurred_at <
             (
               SELECT
                 MIN(occurred_at)
               FROM
-                ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)}
+                ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
               WHERE
                 event_type = "initialise_analytics"
             )
