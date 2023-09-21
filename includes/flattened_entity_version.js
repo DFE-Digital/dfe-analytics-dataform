@@ -107,9 +107,8 @@ module.exports = (params) => {
           fieldSql = `SAFE.PARSE_JSON(${coalesceSql})`;
         } else if (key.dataType == 'string' || key.dataType == undefined) {
           fieldSql = `${coalesceSql}`;
-        } else {
-          throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array, float, json or string or not set.`);
         }
+        // Else error which is handled in index.js
         return `${fieldSql} AS ${key.alias || key.keyName}`;
       }
     }

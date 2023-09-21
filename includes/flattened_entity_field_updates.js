@@ -86,9 +86,8 @@ module.exports = (params) => {
       fieldSql = `SAFE.PARSE_JSON(${newFieldCoalesceSql}) AS new_${key.alias || key.keyName},\nSAFE.PARSE_JSON(${previousFieldCoalesceSql}) AS previous_${key.alias || key.keyName}`;
     } else if (key.dataType == 'string' || key.dataType == undefined) {
       fieldSql = `${newFieldCoalesceSql} AS new_${key.alias || key.keyName},\n${previousFieldCoalesceSql} AS previous_${key.alias || key.keyName}`;
-    } else {
-      throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array, float, json or string or not set.`);
     }
+    // Else error which is handled in index.js
     return fieldSql;
   }
   ).join(',\n')
