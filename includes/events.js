@@ -48,7 +48,7 @@ module.exports = (params) => {
     request_uuid,
     MIN(occurred_at) AS occurred_at
   FROM
-    ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)}
+    ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
   WHERE
     event_type = "web_request"
     AND occurred_at > TIMESTAMP_SUB(event_timestamp_checkpoint, INTERVAL 1 DAY)
@@ -70,7 +70,7 @@ module.exports = (params) => {
   FROM
     minimal_earliest_event_for_web_request
   LEFT JOIN
-     ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)} AS web_request
+     ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"} AS web_request
   ON
     minimal_earliest_event_for_web_request.request_uuid = web_request.request_uuid
     AND minimal_earliest_event_for_web_request.occurred_at = web_request.occurred_at
@@ -100,7 +100,7 @@ event_with_web_request_data AS (
     COALESCE(event.response_content_type,earliest_event_for_web_request.response_content_type) AS response_content_type,
     COALESCE(event.anonymised_user_agent_and_ip,earliest_event_for_web_request.anonymised_user_agent_and_ip) AS anonymised_user_agent_and_ip
   FROM
-    ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)} AS event
+    ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"} AS event
     LEFT JOIN earliest_event_for_web_request
     ON event.request_uuid = earliest_event_for_web_request.request_uuid
     AND event.event_type != "web_request"

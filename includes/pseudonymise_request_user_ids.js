@@ -80,7 +80,7 @@ END IF;
 
 /* Pseudonymise the user_id for events in the source events table that happened during a period when dfe-analytics was configured not to pseudonymise user_ids */
 UPDATE
-  ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)} AS event_to_update
+  ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"} AS event_to_update
 SET
   user_id = TO_HEX(SHA256(user_id))
 FROM
@@ -93,7 +93,7 @@ WHERE
 
 /* Update initialise_analytics events such that it looks like dfe-analytics was configured to pseudonymise user_ids even though it wasn't - this is a failsafe to prevent this procedure accidentally being used to double-pseudonymise user_id if run a second time */
 UPDATE
-  ${ctx.ref(params.bqDatasetName, params.bqEventsTableName)} AS event_to_update
+  ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"} AS event_to_update
 SET
   DATA = ${data_functions.eventDataCreateOrReplace("DATA", "config", '{"pseudonymise_web_request_user_id":true}')}
 WHERE

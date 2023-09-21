@@ -68,7 +68,6 @@ module.exports = (params) => {
   else if (!/^[A-Za-z0-9_]*$/.test(params.eventSourceName)) {
     throw new Error(`eventSourceName ${params.eventSourceName} contains characters that are not alphanumeric or an underscore`);
   }
-
   // Loop through dataSchema to handle errors and set default values
   dataSchema.forEach(tableSchema => {
     // Set default value of materialisation to 'table' for all tables in dataSchema if not set explicitly
@@ -84,21 +83,11 @@ module.exports = (params) => {
       }
     })
   });
-
-  // Declare the source table
-  const eventsRaw = declare({
-    ...defaultConfig,
-    database: bqProjectName,
-    schema: bqDatasetName,
-    name: bqEventsTableName,
-    dependencies: dependencies
-  });
-
+  
   // Publish and return datasets - assertions first for quick access in the Dataform UI
 
   if (params.transformEntityEvents) {
     return {
-      eventsRaw,
       events: events(params),
       eventsDataNotFresh: eventsDataNotFresh(params),
       entityDataNotFresh: entityDataNotFresh(params),
@@ -120,7 +109,6 @@ module.exports = (params) => {
     }
   } else {
     return {
-      eventsRaw,
       events: events(params),
       eventsDataNotFresh: eventsDataNotFresh(params),
       pageviewWithFunnel: pageviewWithFunnel(params),
