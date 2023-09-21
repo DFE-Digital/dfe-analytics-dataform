@@ -69,7 +69,7 @@ module.exports = (params) => {
     throw new Error(`eventSourceName ${params.eventSourceName} contains characters that are not alphanumeric or an underscore`);
   }
 
-// Loop through dataSchema to handle errors and set default values
+  // Loop through dataSchema to handle errors and set default values
   dataSchema.forEach(tableSchema => {
     // Set default value of materialisation to 'table' for all tables in dataSchema if not set explicitly
     if (!tableSchema.materialisation) {
@@ -79,7 +79,7 @@ module.exports = (params) => {
       throw new Error(`Value of materialisationType ${tableSchema.materialisation} for table ${tableSchema.entityTableName} in dataSchema must be either 'view' or 'table'.`);
     }
     tableSchema.keys.forEach(key => {
-      if (key.dataType != 'boolean' && key.dataType != 'timestamp' && key.dataType != 'date' && key.dataType != 'integer' && key.dataType != 'integer_array' && key.dataType != 'float' && key.dataType != 'json' && key.dataType != 'string' && key.dataType) {
+      if (key.dataType && !['boolean', 'timestamp', 'date', 'integer', 'integer_array', 'float', 'json', 'string'].includes(key.dataType)) {
         throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array, float, json or string or not set.`);
       }
     })
