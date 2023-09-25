@@ -68,7 +68,22 @@ module.exports = (params) => {
   else if (!/^[A-Za-z0-9_]*$/.test(params.eventSourceName)) {
     throw new Error(`eventSourceName ${params.eventSourceName} contains characters that are not alphanumeric or an underscore`);
   }
-
+  // Loop through dataSchema to handle errors and set default values
+  dataSchema.forEach(tableSchema => {
+    // Set default value of materialisation to 'table' for all tables in dataSchema if not set explicitly
+    if (!tableSchema.materialisation) {
+      tableSchema.materialisation = 'table';
+    }
+    else if (tableSchema.materialisation && tableSchema.materialisation != 'view' && tableSchema.materialisation != 'table') {
+      throw new Error(`Value of materialisationType ${tableSchema.materialisation} for table ${tableSchema.entityTableName} in dataSchema must be either 'view' or 'table'.`);
+    }
+    tableSchema.keys.forEach(key => {
+      if (key.dataType && !['boolean', 'timestamp', 'date', 'integer', 'integer_array', 'float', 'json', 'string'].includes(key.dataType)) {
+        throw new Error(`Unrecognised dataType '${key.dataType}' for field '${key.keyName}'. dataType should be set to boolean, timestamp, date, integer, integer_array, float, json or string or not set.`);
+      }
+    })
+  });
+  
   // Publish and return datasets - assertions first for quick access in the Dataform UI
 
   if (params.transformEntityEvents) {
