@@ -129,6 +129,32 @@ dfeAnalyticsDataform({
       dataType: "boolean",
       description: ""
     }]
+  },
+  {
+    entityTableName: "application_feedback",
+    description: "Testing whether the view materialisation works",
+    materialisation: "view",
+    keys: [{
+      keyName: "application_form_id",
+      dataType: "string",
+      description: ""
+    }, {
+      keyName: "consent_to_be_contacted",
+      dataType: "boolean",
+      description: ""
+    }, {
+      keyName: "feedback",
+      dataType: "string",
+      description: ""
+    }, {
+      keyName: "page_title",
+      dataType: "string",
+      description: ""
+    }, {
+      keyName: "path",
+      dataType: "string",
+      description: ""
+    }]
   }]
 });
 

@@ -9,6 +9,7 @@ dfeAnalyticsDataform({
   dataSchema: [{
     entityTableName: "Your entity table name here from your production database analytics.yml",
     description: "Description of this entity to include in metadata of denormalised tables produced for this entity.",
+    materialisation: "table", // change to "view" to materialise as a view instead
     keys: [{
       keyName: "Your string field name here",
       dataType: "string",
