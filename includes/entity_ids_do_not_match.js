@@ -30,7 +30,7 @@ module.exports = (params) => {
             check.checksum AS database_checksum,
             TO_HEX(SHA256(STRING_AGG(entity_version.entity_id, ""
                 ORDER BY
-                  entity_version.entity_id ASC))) AS bigquery_checksum,
+                  entity_version.updated_at ASC))) AS bigquery_checksum,
             check.checksum_calculated_at
           FROM
             check
