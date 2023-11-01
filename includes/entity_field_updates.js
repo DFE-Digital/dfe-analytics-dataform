@@ -20,6 +20,7 @@ module.exports = (params) => {
     columns: {
       update_id: "UID for the collection of field updates that took place to this entity at this time. One-way hash of entity_id and occurred_at. Useful for COUNT DISTINCTs.",
       occurred_at: "Timestamp of the streamed entity update event that this field update was part of.",
+      event_type: "Type of streamed event that contained this update to a field. Usually should be either create_entity, update_entity or entity_imported, depending on whether the event was a creation, update or an import.",
       entity_table_name: "Indicates which table this entity came from e.g. application_choices",
       entity_id: "ID of this entity from the database, some IDs may have been removed or hashed (anonymised) if they contained personally identifiable information (PII).",
       created_at: "Timestamp this entity was first saved in the database, according to the streamed entity update event.",
@@ -119,8 +120,7 @@ instance_updates AS (
     event_type IN ("update_entity", "create_entity")
 )
 SELECT
-  instance_updates.*
-EXCEPT(event_type),
+  instance_updates.*,
   FARM_FINGERPRINT(entity_id || entity_table_name || CAST(occurred_at AS STRING)) AS update_id,
   new_data.key AS key_updated,
   ARRAY_TO_STRING(new_data.value,",") AS new_value,
