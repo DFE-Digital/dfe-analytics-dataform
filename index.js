@@ -99,18 +99,23 @@ module.exports = (params) => {
       // range is between two dates already so no further processing required
     }
     else if (Number.isInteger(range.fromMonth) && Number.isInteger(range.fromDay) && Number.isInteger(range.toMonth) && Number.isInteger(range.toDay)) {
-      range.fromDate = Date(Date.now().getFullYear,range.fromMonth,range.fromDay);
-      if (range.toMonth < range.fromMonth) {
-        range.toDate = Date(Date.now().getFullYear + 1,range.toMonth,range.toDay);
-      }
-      else {
-        range.toDate = Date(Date.now().getFullYear,range.toMonth,range.toDay);
+      range.fromDate = Date(Date.now().getFullYear, range.fromMonth, range.fromDay);
+      range.toDate = Date(Date.now().getFullYear, range.toMonth, range.toDay);
+      if (range.toMonth < range.fromMonth || range.toDay < range.fromDay) {
+        if (range.toDate >= Date.now()) {
+          range.fromDate = Date(Date.now().getFullYear - 1, range.toMonth, range.toDay);
+        } else if (range.fromDate <= Date.now()) {
+          range.toDate = Date(Date.now().getFullYear + 1, range.toMonth, range.toDay);
+        }
       }
     }
     else {
       throw new Error(`assertionDisableDuringDateRanges contains invalid range: ${JSON.stringify(range)}`);
     }
-    if (range.fromDate < Date.now() && range.toDate > Date.now()) {
+    if (range.toDate < range.fromDate) {
+      throw new Error(`toDate is after fromDate in range: ${JSON.stringify(range)}. If you didn't specify these parameters then please make a bug report.`);
+    }
+    else if (range.fromDate <= Date.now() && range.toDate >= Date.now()) {
         params.disableAssertionsNow = true;
     }
   });
