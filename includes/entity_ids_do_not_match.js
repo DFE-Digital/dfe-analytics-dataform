@@ -1,12 +1,12 @@
 module.exports = (params) => {
-  if (params.compareChecksums) {
-    return assert(
-      params.eventSourceName + "_entity_ids_do_not_match", {
-      ...params.defaultConfig
-    }
-    ).tags([params.eventSourceName.toLowerCase()])
-      .query(ctx =>
-        `WITH
+    if (params.compareChecksums) {
+        return assert(
+                params.eventSourceName + "_entity_ids_do_not_match", {
+                    ...params.defaultConfig
+                }
+            ).tags([params.eventSourceName.toLowerCase()])
+            .query(ctx =>
+                `WITH
           check AS (
           SELECT
             entity_table_name,
@@ -67,6 +67,6 @@ module.exports = (params) => {
           OR database_row_count != bigquery_row_count
         ORDER BY
           entity_table_name ASC`
-      )
-  }
+            )
+    }
 }
