@@ -31,9 +31,9 @@ module.exports = (params) => {
             TO_HEX(SHA256(
               IF(
                 COUNT(entity_version.entity_id) > 0,
-                STRING_AGG(entity_version.entity_id, "" ORDER BY entity_version.entity_id ASC))),
+                STRING_AGG(entity_version.entity_id, "" ORDER BY entity_version.entity_id ASC),
                 ""
-                ) AS bigquery_checksum,
+                ))) AS bigquery_checksum,
             check.checksum_calculated_at
           FROM
             check
