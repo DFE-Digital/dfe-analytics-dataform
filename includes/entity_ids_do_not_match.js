@@ -28,9 +28,12 @@ module.exports = (params) => {
             check.row_count AS database_row_count,
             COUNT(DISTINCT entity_version.updated_at) AS bigquery_row_count,
             check.checksum AS database_checksum,
-            TO_HEX(SHA256(STRING_AGG(entity_version.entity_id, ""
-                ORDER BY
-                  entity_version.entity_id ASC))) AS bigquery_checksum,
+            TO_HEX(SHA256(
+              IF(
+                COUNT(entity_version.entity_id) > 0,
+                STRING_AGG(entity_version.entity_id, "" ORDER BY entity_version.entity_id ASC))),
+                ""
+                ) AS bigquery_checksum,
             check.checksum_calculated_at
           FROM
             check
