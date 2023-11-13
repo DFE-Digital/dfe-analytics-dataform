@@ -38,6 +38,7 @@ module.exports = (params) => {
       seconds_since_created: "The number of seconds between occurred_at and created_at.",
       original_event_type: "Usually should be either create_entity or entity_imported, depending on whether the first entity data we have available is from when it was created, or whether we're relying on an import.",
       previous_event_type: "Usually should be either create_entity, update_entity or entity_imported, depending on whether the previous event was a creation, update or an import.",
+      event_type: "Type of streamed event that contained this update to a field. Usually should be either create_entity, update_entity or entity_imported, depending on whether the event was a creation, update or an import.",
       change_from_original_value: "TRUE if this update to this field represents a change away from the original value that the entity was created with, if that original value was not null or empty.",
       request_user_id: "If a user was logged in when they sent a web request event that caused this update, then this is the UID of this user.",
       request_uuid: "UUID of the web request that caused this update.",

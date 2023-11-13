@@ -6,6 +6,8 @@ module.exports = (params) => {
     .forEach(tableSchema => {
       if (!Number.isInteger(tableSchema.dataFreshnessDays) || tableSchema.dataFreshnessDays < 1) {
         throw new Error(`dataFreshnessDays parameter for the ${tableSchema.entityTableName} entityTableName is not a positive integer.`);
+      } else if (tableSchema.dataFreshnessDisableDuringRange && params.disableAssertionsNow) {
+        // Don't return an assertion because it's disabled right now
       } else {
         return assert(
           tableSchema.entityTableName +
