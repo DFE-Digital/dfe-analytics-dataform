@@ -88,26 +88,18 @@ module.exports = (params) => {
 ),
 instance_updates AS (
   SELECT
-    *   
+    *
+  EXCEPT
+    (data),
+    instance_versions.data AS new_data,
+    LAG(data) OVER versions_of_this_instance_over_time AS previous_data,
+    LAG(occurred_at) OVER versions_of_this_instance_over_time AS previous_occurred_at,
+    LAG(event_type) OVER versions_of_this_instance_over_time AS previous_event_type
   FROM
-    (
-      SELECT
-        *
-      EXCEPT
-        (data),
-        instance_versions.data AS new_data,
-        LAG(data) OVER versions_of_this_instance_over_time AS previous_data,
-        LAG(occurred_at) OVER versions_of_this_instance_over_time AS previous_occurred_at,
-        LAG(event_type) OVER versions_of_this_instance_over_time AS previous_event_type
-      FROM
-        instance_versions WINDOW versions_of_this_instance_over_time AS (
-          PARTITION BY entity_table_name, entity_id
-          ORDER BY
-            occurred_at ASC
-        )
-    )
-  WHERE
-    event_type IN ("update_entity", "create_entity")
+    instance_versions WINDOW versions_of_this_instance_over_time AS (
+      PARTITION BY entity_table_name, entity_id
+      ORDER BY
+        occurred_at ASC)
 )
 SELECT
   instance_updates.*,
@@ -122,7 +114,8 @@ FROM
   CROSS JOIN UNNEST(new_data) AS new_data
   CROSS JOIN UNNEST(previous_data) AS previous_data
 WHERE
-  new_data.key = previous_data.key
+  instance_updates.event_type IN ("update_entity", "create_entity")
+  AND new_data.key = previous_data.key
   AND ARRAY_TO_STRING(new_data.value,"","null") != ARRAY_TO_STRING(previous_data.value,"","null")
   AND new_data.key != "updated_at"`)
 }
