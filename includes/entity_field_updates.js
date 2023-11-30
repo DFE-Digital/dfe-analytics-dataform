@@ -33,9 +33,6 @@ module.exports = (params) => {
       previous_occurred_at: "Timestamp this entity was previously updated.",
       seconds_since_previous_update: "The number of seconds between occurred_at and previous_occurred_at.",
       seconds_since_created: "The number of seconds between occurred_at and created_at.",
-      original_DATA: "Full DATA struct for the first version of this entity that we have available, either from when it was created or imported.",
-      original_event_type: "Usually should be either create_entity or entity_imported, depending on whether the first entity data we have available is from when it was created, or whether we're relying on an import.",
-      change_from_original_value: "TRUE if this update to this field represents a change away from the original value that the entity was created with, if that original value was not null or empty.",
       request_user_id: "If a user was logged in when they sent a web request event that caused this update, then this is the UID of this user.",
       request_uuid: "UUID of the web request that caused this update.",
       request_method: "Whether the web request that caused this update was a GET or a POST request.",
@@ -93,31 +90,16 @@ instance_updates AS (
   SELECT
     *
   EXCEPT
-    (original_occurred_at),
-   
+    (data),
+    instance_versions.data AS new_data,
+    LAG(data) OVER versions_of_this_instance_over_time AS previous_data,
+    LAG(occurred_at) OVER versions_of_this_instance_over_time AS previous_occurred_at,
+    LAG(event_type) OVER versions_of_this_instance_over_time AS previous_event_type
   FROM
-    (
-      SELECT
-        *
-      EXCEPT
-        (data),
-        instance_versions.data AS new_data,
-        NTH_VALUE(data, 2) OVER this_instance_over_time_descending AS previous_data,
-        LAST_VALUE(data) OVER this_instance_over_time_descending AS original_data,
-        NTH_VALUE(occurred_at, 2) OVER this_instance_over_time_descending AS previous_occurred_at,
-        NTH_VALUE(event_type, 2) OVER this_instance_over_time_descending AS previous_event_type,
-        LAST_VALUE(event_type) OVER this_instance_over_time_descending AS original_event_type,
-        LAST_VALUE(occurred_at) OVER this_instance_over_time_descending AS original_occurred_at
-      FROM
-        instance_versions WINDOW this_instance_over_time_descending AS (
-          PARTITION BY entity_table_name,entity_id
-          ORDER BY
-            occurred_at DESC ROWS BETWEEN CURRENT ROW
-            AND UNBOUNDED FOLLOWING
-        )
-    )
-  WHERE
-    event_type IN ("update_entity", "create_entity")
+    instance_versions WINDOW versions_of_this_instance_over_time AS (
+      PARTITION BY entity_table_name, entity_id
+      ORDER BY
+        occurred_at ASC)
 )
 SELECT
   instance_updates.*,
@@ -126,22 +108,14 @@ SELECT
   ARRAY_TO_STRING(new_data.value,",") AS new_value,
   ARRAY_TO_STRING(previous_data.value,",") AS previous_value,
   TIMESTAMP_DIFF(occurred_at, previous_occurred_at, SECOND) AS seconds_since_previous_update,
-  TIMESTAMP_DIFF(occurred_at, created_at, SECOND) AS seconds_since_created,
-  /* Works out whether this update represented a change from the original value of this field. For this to be the case we check that (a) this is a change (we know this from the WHERE below) (b) the value we're changing from is the original value of the field and (c) the original value we have came from an entity creation event, and not an import event. */
-  ${data_functions.eventDataExtract("instance_updates.original_data", "new_data.key", true)} = ARRAY_TO_STRING(previous_data.value,",")
-  AND ARRAY_TO_STRING(previous_data.value,",") IS NOT NULL
-  AND ARRAY_TO_STRING(previous_data.value,",") NOT IN (
-    "",
-    "[]",
-    " "
-  )
-  AND original_event_type = "create_entity" AS change_from_original_value
+  TIMESTAMP_DIFF(occurred_at, created_at, SECOND) AS seconds_since_created
 FROM
   instance_updates
   CROSS JOIN UNNEST(new_data) AS new_data
   CROSS JOIN UNNEST(previous_data) AS previous_data
 WHERE
-  new_data.key = previous_data.key
+  instance_updates.event_type IN ("update_entity", "create_entity")
+  AND new_data.key = previous_data.key
   AND ARRAY_TO_STRING(new_data.value,"","null") != ARRAY_TO_STRING(previous_data.value,"","null")
   AND new_data.key != "updated_at"`)
 }
