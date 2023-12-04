@@ -8,14 +8,14 @@ Dataform package containing commonly used SQL functions and table definitions, f
 4. Set up a production release configuration - see [Google documentation](https://cloud.google.com/dataform/docs/release-configurations).
 5. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.7.3.tar.gz"
+"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.8.0.tar.gz"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
-        "@dataform/core": "2.6.7",
-        "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.7.3.tar.gz"
+        "@dataform/core": "2.7.0",
+        "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.8.0.tar.gz"
     }
 }
 ```
