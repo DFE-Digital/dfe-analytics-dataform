@@ -73,7 +73,7 @@ module.exports = (params) => {
     browser_version,
     operating_system_name,
     operating_system_vendor,
-    operating_system_version
+    operating_system_version,
     instance_versions.data AS new_data,
     LAG(data) OVER versions_of_this_instance_over_time AS previous_data,
     LAG(valid_from) OVER versions_of_this_instance_over_time AS previous_occurred_at,
