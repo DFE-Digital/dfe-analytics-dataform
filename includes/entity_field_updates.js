@@ -112,10 +112,9 @@ SELECT
 FROM
   instance_updates
   CROSS JOIN UNNEST(new_data) AS new_data
-  CROSS JOIN UNNEST(previous_data) AS previous_data
+  JOIN UNNEST(previous_data) AS previous_data ON new_data.key = previous_data.key
 WHERE
   instance_updates.event_type IN ("update_entity", "create_entity")
-  AND new_data.key = previous_data.key
   AND ARRAY_TO_STRING(new_data.value,"","null") != ARRAY_TO_STRING(previous_data.value,"","null")
   AND new_data.key != "updated_at"`)
 }
