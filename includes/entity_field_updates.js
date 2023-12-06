@@ -50,15 +50,14 @@ module.exports = (params) => {
       operating_system_vendor: "The vendor of the operating system that caused this update.",
       operating_system_version: "The version of the operating system that caused this update."
     }
-  }).query(ctx => `WITH instance_versions AS (
+  }).query(ctx => `WITH instance_updates AS (
   SELECT
     event_type,
-    occurred_at,
+    valid_from AS occurred_at,
     entity_table_name,
-    ${data_functions.eventDataExtract("data", "id")} AS entity_id,
-    ${data_functions.eventDataExtract("data", "created_at", false, "timestamp")} AS created_at,
-    ${data_functions.eventDataExtract("data", "updated_at", false, "timestamp")} AS updated_at,
-    data,
+    entity_id,
+    created_at,
+    updated_at,
     request_uuid,
     request_path,
     request_user_id,
@@ -74,32 +73,16 @@ module.exports = (params) => {
     browser_version,
     operating_system_name,
     operating_system_vendor,
-    operating_system_version
-  FROM
-    ${ctx.ref("events_" + params.eventSourceName)}
-  WHERE
-    event_type IN (
-      "update_entity",
-      "create_entity",
-      "import_entity"
-    )
-    AND entity_table_name IS NOT NULL
-    AND ${data_functions.eventDataExtract("data", "id")} IS NOT NULL
-),
-instance_updates AS (
-  SELECT
-    *
-  EXCEPT
-    (data),
+    operating_system_version,
     instance_versions.data AS new_data,
     LAG(data) OVER versions_of_this_instance_over_time AS previous_data,
-    LAG(occurred_at) OVER versions_of_this_instance_over_time AS previous_occurred_at,
+    LAG(valid_from) OVER versions_of_this_instance_over_time AS previous_occurred_at,
     LAG(event_type) OVER versions_of_this_instance_over_time AS previous_event_type
   FROM
-    instance_versions WINDOW versions_of_this_instance_over_time AS (
+    ${ctx.ref(params.eventSourceName + "_entity_version")} AS instance_versions WINDOW versions_of_this_instance_over_time AS (
       PARTITION BY entity_table_name, entity_id
       ORDER BY
-        occurred_at ASC)
+        valid_from ASC)
 )
 SELECT
   instance_updates.*,
@@ -112,10 +95,9 @@ SELECT
 FROM
   instance_updates
   CROSS JOIN UNNEST(new_data) AS new_data
-  CROSS JOIN UNNEST(previous_data) AS previous_data
+  JOIN UNNEST(previous_data) AS previous_data ON new_data.key = previous_data.key
 WHERE
   instance_updates.event_type IN ("update_entity", "create_entity")
-  AND new_data.key = previous_data.key
   AND ARRAY_TO_STRING(new_data.value,"","null") != ARRAY_TO_STRING(previous_data.value,"","null")
   AND new_data.key != "updated_at"`)
 }
