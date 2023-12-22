@@ -1,4 +1,38 @@
 module.exports = (params) => {
+  function tablesWithMetricsSql(sortFields, ctx) {
+    return sortFields.map(sortField => {
+    return `tables_with_${sortField}_metrics AS (
+          SELECT
+            check.entity_table_name,
+            check.row_count AS database_row_count,
+            COUNT(DISTINCT entity_version.${sortField}) AS bigquery_row_count,
+            check.checksum AS database_checksum,
+            check.order_column,
+            TO_HEX(MD5( STRING_AGG(entity_version.entity_id, ""
+                ORDER BY
+                  entity_version.${sortField} ASC))) AS bigquery_checksum,
+            check.checksum_calculated_at
+          FROM
+            check
+          LEFT JOIN
+            ${ctx.ref(params.eventSourceName + "_entity_version")} AS entity_version
+          ON
+            check.entity_table_name = entity_version.entity_table_name
+            /* Join on to entity versions which were valid at the time the checksum was calculated from the database */
+            AND ((entity_version.valid_to IS NULL
+                OR entity_version.valid_to > check.checksum_calculated_at)
+              AND entity_version.valid_from <= check.checksum_calculated_at)
+          WHERE
+            check.order_column = "${(sortField == "entity_id") ? "id":sortField}"
+            ${(sortField == "updated_at") ? "/* Default to sorting by updated_at for backwards compatibility */ OR check.order_column IS NULL":""}
+          GROUP BY
+            check.entity_table_name,
+            check.row_count,
+            check.checksum,
+            check.checksum_calculated_at,
+            check.order_column ),`;
+  }).join('');
+  }
   if (params.compareChecksums) {
     return assert(
       params.eventSourceName + "_entity_ids_do_not_match", {
@@ -26,95 +60,7 @@ module.exports = (params) => {
           /* BigQuery has a 100MB limit for the data processed across all aggregate functions within an individual subquery. */
           /* Calculating checksums with three different sort orders depending on order_column causes this limit to be breached if completed within the same subquery. */
           /* To work around this each order is calculated in a separate subquery below and then recombined. */
-          tables_with_updated_at_metrics AS (
-          SELECT
-            check.entity_table_name,
-            check.row_count AS database_row_count,
-            COUNT(DISTINCT entity_version.updated_at) AS bigquery_row_count,
-            check.checksum AS database_checksum,
-            check.order_column,
-            TO_HEX(MD5( STRING_AGG(entity_version.entity_id, ""
-                ORDER BY
-                  entity_version.updated_at ASC))) AS bigquery_checksum,
-            check.checksum_calculated_at
-          FROM
-            check
-          LEFT JOIN
-            ${ctx.ref(params.eventSourceName + "_entity_version")} AS entity_version
-          ON
-            check.entity_table_name = entity_version.entity_table_name
-            /* Join on to entity versions which were valid at the time the checksum was calculated from the database */
-            AND ((entity_version.valid_to IS NULL
-                OR entity_version.valid_to > check.checksum_calculated_at)
-              AND entity_version.valid_from <= check.checksum_calculated_at)
-          WHERE
-            check.order_column = "updated_at"
-            /* Default to sorting by updated_at for backwards compatibility */
-            OR check.order_column IS NULL
-          GROUP BY
-            check.entity_table_name,
-            check.row_count,
-            check.checksum,
-            check.checksum_calculated_at,
-            check.order_column ),
-          tables_with_created_at_metrics AS (
-          SELECT
-            check.entity_table_name,
-            check.row_count AS database_row_count,
-            COUNT(DISTINCT entity_version.updated_at) AS bigquery_row_count,
-            check.checksum AS database_checksum,
-            check.order_column,
-            TO_HEX(MD5( STRING_AGG(entity_version.entity_id, ""
-                ORDER BY
-                  entity_version.created_at ASC))) AS bigquery_checksum,
-            check.checksum_calculated_at
-          FROM
-            check
-          LEFT JOIN
-            ${ctx.ref(params.eventSourceName + "_entity_version")} AS entity_version
-          ON
-            check.entity_table_name = entity_version.entity_table_name
-            /* Join on to entity versions which were valid at the time the checksum was calculated from the database */
-            AND ((entity_version.valid_to IS NULL
-                OR entity_version.valid_to > check.checksum_calculated_at)
-              AND entity_version.valid_from <= check.checksum_calculated_at)
-          WHERE
-            check.order_column = "created_at"
-          GROUP BY
-            check.entity_table_name,
-            check.row_count,
-            check.checksum,
-            check.checksum_calculated_at,
-            check.order_column ),
-          tables_with_entity_id_metrics AS (
-          SELECT
-            check.entity_table_name,
-            check.row_count AS database_row_count,
-            COUNT(DISTINCT entity_version.updated_at) AS bigquery_row_count,
-            check.checksum AS database_checksum,
-            check.order_column,
-            TO_HEX(MD5( STRING_AGG(entity_version.entity_id, ""
-                ORDER BY
-                  entity_version.entity_id ASC))) AS bigquery_checksum,
-            check.checksum_calculated_at
-          FROM
-            check
-          LEFT JOIN
-            ${ctx.ref(params.eventSourceName + "_entity_version")} AS entity_version
-          ON
-            check.entity_table_name = entity_version.entity_table_name
-            /* Join on to entity versions which were valid at the time the checksum was calculated from the database */
-            AND ((entity_version.valid_to IS NULL
-                OR entity_version.valid_to > check.checksum_calculated_at)
-              AND entity_version.valid_from <= check.checksum_calculated_at)
-          WHERE
-            check.order_column = "id"
-          GROUP BY
-            check.entity_table_name,
-            check.row_count,
-            check.checksum,
-            check.checksum_calculated_at,
-            check.order_column ),
+          ${tablesWithMetricsSql(["updated_at", "created_at", "entity_id"], ctx)}
           tables_with_metrics AS (
           SELECT
             check.entity_table_name,
