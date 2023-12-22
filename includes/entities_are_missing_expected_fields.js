@@ -12,7 +12,7 @@ WITH expected_entity_fields AS (
   UNNEST([
       ${params.dataSchema.map(tableSchema => {
     return `STRUCT("${tableSchema.entityTableName}" AS entity_name,
-        [${tableSchema.keys.filter(key => !key.historic).map(key => { return `"${key.keyName}"`; }).join(', ')}, ${tableSchema.primary_key || `"id"`}] AS keys
+        [${tableSchema.keys.filter(key => !key.historic).map(key => { return `"${key.keyName}"`; }).join(', ')}, "${tableSchema.primary_key || 'id'}"] AS keys
         )`;
   }
   ).join(',')}  
