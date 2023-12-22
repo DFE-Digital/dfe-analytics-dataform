@@ -160,7 +160,8 @@ module.exports = (params) => {
         FROM
           tables_with_metrics
         WHERE
-          /* Only fail if something doesn't match */ database_checksum != bigquery_checksum
+          /* Only fail if something doesn't match */
+          database_checksum != bigquery_checksum
           OR database_row_count != bigquery_row_count
         ORDER BY
           entity_table_name ASC`
