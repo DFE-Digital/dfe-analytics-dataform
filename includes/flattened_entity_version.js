@@ -9,7 +9,6 @@ module.exports = (params) => {
     publish(tableSchema.entityTableName + "_version_" + params.eventSourceName, {
       ...params.defaultConfig,
       type: tableSchema.materialisation,
-      dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
       ...(tableSchema.materialisation == "table" ? {
         assertions: {
           uniqueKey: ["valid_from", "id"],
