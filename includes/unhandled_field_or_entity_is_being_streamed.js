@@ -12,7 +12,7 @@ WITH expected_entity_fields AS (
   UNNEST([
       ${params.dataSchema.map(tableSchema => {
     return `STRUCT("${tableSchema.entityTableName}" AS entity_name,
-        [${tableSchema.keys.filter(key => !key.historic).map(key => { return `"${key.keyName}"`; }).join(', ')}] AS keys
+        [${tableSchema.keys.filter(key => !key.historic).map(key => { return `"${key.keyName}"`; }).join(', ')}, "${tableSchema.primary_key || 'id'}"] AS keys
         )`;
   }
   ).join(',')}  
@@ -27,12 +27,13 @@ FROM
     SELECT
       entity_table_name,
       key,
-      COUNT(DISTINCT entity_id) AS updates_made_yesterday_with_this_key
+      COUNT(DISTINCT occurred_at) AS updates_made_yesterday_with_this_key
     FROM
-      ${ctx.ref(params.eventSourceName + "_entity_version")},
+      ${ctx.ref("events_" + params.eventSourceName)},
       UNNEST(DATA)
     WHERE
-      DATE(valid_from) >= CURRENT_DATE - 1
+      DATE(occurred_at) >= CURRENT_DATE - 1
+      AND event_type IN ("create_entity", "update_entity", "import_entity")
     GROUP BY
       entity_table_name,
       key
@@ -42,7 +43,7 @@ FROM
 
 WHERE
   key NOT IN UNNEST(expected_entity_fields.keys)
-  AND key NOT IN ("entity_name","id","created_at","updated_at")
+  AND key NOT IN ("entity_name", "created_at", "updated_at")
 ORDER BY
   entity_table_name,
   key`)

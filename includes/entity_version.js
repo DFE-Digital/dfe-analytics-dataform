@@ -33,6 +33,7 @@ module.exports = (params) => {
         'valid_from < valid_to OR valid_to IS NULL'
       ]
     },
+    dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
     bigquery: {
       partitionBy: "DATE(valid_to)",
       clusterBy: ["entity_table_name"],
