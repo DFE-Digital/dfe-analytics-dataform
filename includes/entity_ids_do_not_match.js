@@ -5,7 +5,7 @@ module.exports = (params) => {
           SELECT
             check.entity_table_name,
             check.row_count AS database_row_count,
-            COUNT(DISTINCT entity_version.${sortField}) AS bigquery_row_count,
+            COUNT(DISTINCT entity_version.entity_id) AS bigquery_row_count,
             check.checksum AS database_checksum,
             check.order_column,
             TO_HEX(MD5( STRING_AGG(entity_version.entity_id, ""
