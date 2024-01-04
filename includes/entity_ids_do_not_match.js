@@ -23,7 +23,7 @@ module.exports = (params) => {
                 OR entity_version.valid_to > check.checksum_calculated_at)
               AND entity_version.valid_from <= check.checksum_calculated_at)
           WHERE
-            check.order_column = "${(sortField == "entity_id") ? "id":sortField}"
+            check.order_column = "${sortField}"
             ${(sortField == "updated_at") ? "/* Default to sorting by updated_at for backwards compatibility */ OR check.order_column IS NULL":""}
           GROUP BY
             check.entity_table_name,
@@ -58,21 +58,20 @@ module.exports = (params) => {
             QUALIFY ROW_NUMBER() OVER (PARTITION BY entity_table_name ORDER BY occurred_at DESC) = 1
           ),
           /* BigQuery has a 100MB limit for the data processed across all aggregate functions within an individual subquery. */
-          /* Calculating checksums with three different sort orders depending on order_column causes this limit to be breached if completed within the same subquery. */
+          /* Calculating checksums with two different sort orders depending on order_column causes this limit to be breached if completed within the same subquery. */
           /* To work around this each order is calculated in a separate subquery below and then recombined. */
-          ${tablesWithMetricsSql(["updated_at", "created_at", "entity_id"], ctx)}
+          ${tablesWithMetricsSql(["updated_at", "created_at"], ctx)}
           tables_with_metrics AS (
           SELECT
             check.entity_table_name,
             check.row_count AS database_row_count,
-            COALESCE(tables_with_updated_at_metrics.bigquery_row_count, tables_with_created_at_metrics.bigquery_row_count, tables_with_entity_id_metrics.bigquery_row_count) AS bigquery_row_count,
+            COALESCE(tables_with_updated_at_metrics.bigquery_row_count, tables_with_created_at_metrics.bigquery_row_count) AS bigquery_row_count,
             check.checksum AS database_checksum,
             check.order_column,
             check.checksum_calculated_at,
             CASE
-              WHEN NOT COALESCE(tables_with_updated_at_metrics.bigquery_row_count, tables_with_created_at_metrics.bigquery_row_count, tables_with_entity_id_metrics.bigquery_row_count) > 0 THEN TO_HEX(MD5(""))
+              WHEN NOT COALESCE(tables_with_updated_at_metrics.bigquery_row_count, tables_with_created_at_metrics.bigquery_row_count) > 0 THEN TO_HEX(MD5(""))
               WHEN check.order_column = "created_at" THEN tables_with_created_at_metrics.bigquery_checksum
-              WHEN check.order_column = "id" THEN tables_with_entity_id_metrics.bigquery_checksum
             ELSE
             /* Default to sorting by updated_at for backwards compatibility */
             tables_with_updated_at_metrics.bigquery_checksum
@@ -88,17 +87,14 @@ module.exports = (params) => {
             tables_with_created_at_metrics
           USING
             (entity_table_name)
-          LEFT JOIN
-            tables_with_entity_id_metrics
-          USING
-            (entity_table_name))
+          )
         SELECT
           *,
           CASE
             WHEN database_row_count > 0 AND (bigquery_row_count IS NULL OR bigquery_row_count = 0) THEN "Row count in BigQuery is zero even though rows existed in source database"
             WHEN database_row_count > bigquery_row_count THEN "Row count in BigQuery is less than row count in source database"
-            WHEN database_row_count < bigquery_row_count THEN "Row count in BigQuery is more than row count in source database"
-            WHEN database_checksum != bigquery_checksum THEN "Set of IDs in BigQuery did not exactly match the set of IDs in source database even though row counts do match"
+            WHEN database_row_count < bigquery_row_count THEN "Row count in BigQuery is more than row count in source database. Perhaps some deletion events were not streamed as intended?"
+            WHEN database_checksum != bigquery_checksum THEN "Set of IDs in BigQuery ordered by " || order_column || " did not exactly match the source database even though row counts do match."
           ELSE
           "None"
         END
