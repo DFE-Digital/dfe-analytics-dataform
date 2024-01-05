@@ -6,10 +6,10 @@ module.exports = (params) => {
             check.entity_table_name,
             check.row_count AS database_row_count,
             COUNT(DISTINCT entity_version.entity_id) AS bigquery_row_count,
-            COUNT(DISTINCT CASE WHEN ${sortField} < check.checksum_calculated_at THEN entity_version.entity_id END) AS bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation,
+            COUNT(DISTINCT CASE WHEN NOT ${sortField} < check.checksum_calculated_at THEN entity_version.entity_id END) AS bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation,
             check.checksum AS database_checksum,
             check.order_column,
-            TO_HEX(MD5( STRING_AGG(CASE WHEN NOT ${sortField} < check.checksum_calculated_at THEN entity_version.entity_id END, ""
+            TO_HEX(MD5( STRING_AGG(CASE WHEN ${sortField} < check.checksum_calculated_at THEN entity_version.entity_id END, ""
                 ORDER BY
                   entity_version.${sortField} ASC))) AS bigquery_checksum,
             check.checksum_calculated_at
