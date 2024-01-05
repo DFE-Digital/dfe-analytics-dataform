@@ -99,19 +99,26 @@ module.exports = (params) => {
 // Work out whether we should be disabling any assertions *now* (if we are at all)
  params.disableAssertionsNow = false;
 
+ // Work out when now is
+ const rightNow = new Date();
+
   // Check format of all ranges in the assertionDisableDuringDateRanges array of range objects, and convert month-day formats to date ranges that start within the current year
   params.assertionDisableDuringDateRanges.forEach(range => {
     if (range.fromDate instanceof Date && range.toDate instanceof Date) {
       // range is between two dates already so no further processing required
     }
     else if (Number.isInteger(range.fromMonth) && Number.isInteger(range.fromDay) && Number.isInteger(range.toMonth) && Number.isInteger(range.toDay)) {
-      range.fromDate = Date(Date.now().getFullYear, range.fromMonth, range.fromDay);
-      range.toDate = Date(Date.now().getFullYear, range.toMonth, range.toDay);
+      range.fromDate = new Date();
+      range.fromDate.setMonth(range.fromMonth - 1); //setMonth() takes January as month 0
+      range.fromDate.setDate(range.fromDay);
+      range.toDate = new Date();
+      range.toDate.setMonth(range.toMonth - 1); //setMonth() takes January as month 0
+      range.toDate.setDate(range.toDay);
       if (range.toMonth < range.fromMonth || range.toDay < range.fromDay) {
-        if (range.toDate >= Date.now()) {
-          range.fromDate = Date(Date.now().getFullYear - 1, range.toMonth, range.toDay);
-        } else if (range.fromDate <= Date.now()) {
-          range.toDate = Date(Date.now().getFullYear + 1, range.toMonth, range.toDay);
+        if (range.toDate >= rightNow) {
+          range.fromDate.setYear(rightNow.getFullYear() - 1);
+        } else if (range.fromDate <= rightNow) {
+          range.toDate.setYear(rightNow.getFullYear() + 1);
         }
       }
     }
@@ -121,7 +128,7 @@ module.exports = (params) => {
     if (range.toDate < range.fromDate) {
       throw new Error(`toDate is after fromDate in range: ${JSON.stringify(range)}. If you didn't specify these parameters then please make a bug report.`);
     }
-    else if (range.fromDate <= Date.now() && range.toDate >= Date.now()) {
+    else if (range.fromDate <= rightNow && range.toDate >= rightNow) {
         params.disableAssertionsNow = true;
     }
   });
