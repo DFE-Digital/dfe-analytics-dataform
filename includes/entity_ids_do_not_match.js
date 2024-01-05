@@ -6,16 +6,17 @@ module.exports = (params) => {
             check.entity_table_name,
             check.row_count AS database_row_count,
             COUNT(DISTINCT entity_version.entity_id) AS bigquery_row_count,
+            COUNT(DISTINCT CASE WHEN ${sortField} < check.checksum_calculated_at THEN entity_version.entity_id END) AS bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation,
             check.checksum AS database_checksum,
             check.order_column,
-            TO_HEX(MD5( STRING_AGG(entity_version.entity_id, ""
+            TO_HEX(MD5( STRING_AGG(CASE WHEN NOT ${sortField} < check.checksum_calculated_at THEN entity_version.entity_id END, ""
                 ORDER BY
                   entity_version.${sortField} ASC))) AS bigquery_checksum,
             check.checksum_calculated_at
           FROM
             check
           LEFT JOIN
-            ${ctx.ref(params.eventSourceName + "_entity_version")} AS entity_version
+            entity_version
           ON
             check.entity_table_name = entity_version.entity_table_name
             /* Join on to entity versions which were valid at the time the checksum was calculated from the database */
@@ -41,6 +42,15 @@ module.exports = (params) => {
     ).tags([params.eventSourceName.toLowerCase()])
       .query(ctx =>
         `WITH
+          entity_version AS (
+          /* Pre filter entity_version on its valid_to partition to accelerate performance */
+          SELECT
+            *
+          FROM
+            ${ctx.ref(params.eventSourceName + "_entity_version")}
+          WHERE
+            valid_to IS NULL
+            OR DATE(valid_to) >= CURRENT_DATE - 1 ),
           check AS (
           SELECT
             entity_table_name,
@@ -66,6 +76,7 @@ module.exports = (params) => {
             check.entity_table_name,
             check.row_count AS database_row_count,
             COALESCE(tables_with_updated_at_metrics.bigquery_row_count, tables_with_created_at_metrics.bigquery_row_count) AS bigquery_row_count,
+            COALESCE(tables_with_updated_at_metrics.bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation, tables_with_created_at_metrics.bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation) AS bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation,
             check.checksum AS database_checksum,
             check.order_column,
             check.checksum_calculated_at,
