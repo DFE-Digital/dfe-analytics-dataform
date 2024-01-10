@@ -24,6 +24,7 @@ module.exports = (params) => {
 
   params = {
     disabled: false, // whether to disable dfe-analytics-dataform
+    enableUnitTests: false, // whether to run dfe-analytics-dataform JS unit tests
     eventSourceName: null, // suffix to append to table names to distinguish them if this package is run more than once
     bqProjectName: dataform.projectConfig.defaultDatabase, // name of the BigQuery project that dfe-analytics streams event data into. Defaults to the same project name set in your GCP Dataform release configuration, or as the default set in dataform.json (for legacy Dataform).
     bqDatasetName: dataform.projectConfig.defaultSchema, // name of the BigQuery dataset that dfe-analytics streams event data into. Defaults to the same dataset name set in your GCP Dataform release configuration, or in dataform.json (for legacy Dataform).

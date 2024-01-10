@@ -97,6 +97,7 @@ You may in addition to step 8 of the setup instructions wish to configure the fo
 - ```socialRefererDomainRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to work out whether an HTTP referer's domain name is a social media site. Defaults to ```'(?i)(facebook|twitter|^t.co|linkedin|youtube|pinterest|whatsapp|tumblr|reddit)'``` if not specified.
 - ```searchEngineRefererDomainRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to work out whether an HTTP referer's domain name is a search engine (regardless of whether paid or organic). Defaults to ```'(?i)(google|bing|yahoo|aol|ask.co|baidu|duckduckgo|dogpile|ecosia|exalead|gigablast|hotbot|lycos|metacrawler|mojeek|qwant|searx|swisscows|webcrawler|yandex|yippy)'``` if not specified.
 - ```disabled``` - ```true``` or ```false```. Defaults to ```false```. If set to ```true``` then calling the package will not do anything.
+- ```enableUnitTests``` - ```true``` or ```false```. Defaults to ```false```. If set to ```true``` then JavaScript unit tests of the dfe-analytics-dataform code will be run on compilation. It is not recommend you enable this unless you are carrying out dfe-analytics-dataform development.
 
 ## Updating to a new version
 Users are notified through internal channels when a new version of dfe-analytics-dataform is released. To update:
