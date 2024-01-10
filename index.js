@@ -108,18 +108,18 @@ module.exports = (params) => {
       // range is between two dates already so no further processing required
     }
     else if (Number.isInteger(range.fromMonth) && Number.isInteger(range.fromDay) && Number.isInteger(range.toMonth) && Number.isInteger(range.toDay)) {
-      range.fromDate = new Date();
-      range.fromDate.setMonth(range.fromMonth - 1); //setMonth() takes January as month 0
-      range.fromDate.setDate(range.fromDay);
-      range.toDate = new Date();
-      range.toDate.setMonth(range.toMonth - 1); //setMonth() takes January as month 0
-      range.toDate.setDate(range.toDay);
-      if (range.toMonth < range.fromMonth || range.toDay < range.fromDay) {
-        if (range.toDate >= rightNow) {
-          range.fromDate.setYear(rightNow.getFullYear() - 1);
-        } else if (range.fromDate <= rightNow) {
-          range.toDate.setYear(rightNow.getFullYear() + 1);
+      range.fromDate = new Date(rightNow.getFullYear(), range.fromMonth - 1, range.fromDay); //setMonth() takes January as month 0
+      range.toDate = new Date(rightNow.getFullYear(), range.toMonth - 1, range.toDay); //setMonth() takes January as month 0
+      if (range.toMonth < range.fromMonth || ((range.toMonth == range.fromMonth) && (range.toDay < range.fromDay))) {
+        //If the days of the year are the wrong way round e.g. "From 10th Sept to 9th Sept" or "From 1st Aug to 1st May"
+        if (range.fromDate >= rightNow) {
+          //If the from day of the year is in the future
+          range.fromDate.setFullYear(rightNow.getFullYear() - 1);
+        } else if (range.fromDate < rightNow) {
+          //If the from day is in the past
+          range.toDate.setFullYear(rightNow.getFullYear() + 1);
         }
+
       }
     }
     else {
@@ -128,7 +128,7 @@ module.exports = (params) => {
     if (range.toDate < range.fromDate) {
       throw new Error(`toDate is after fromDate in range: ${JSON.stringify(range)}. If you didn't specify these parameters then please make a bug report.`);
     }
-    else if (range.fromDate <= rightNow && range.toDate >= rightNow) {
+    else if ((range.fromDate <= rightNow) && (range.toDate >= rightNow)) {
         params.disableAssertionsNow = true;
     }
   });
