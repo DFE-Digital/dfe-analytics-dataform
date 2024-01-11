@@ -9,7 +9,6 @@ dfeAnalyticsDataform({
   bqEventsTableName: "events",
   urlRegex: "apply-for-teacher-training.service.gov.uk",
   compareChecksums: true,
-  enableUnitTests: true,
   dataSchema: [{
     entityTableName: "application_choices",
     description: "",
@@ -165,7 +164,7 @@ dfeAnalyticsDataform({
   bqProjectName: "rugged-abacus-218110",
   bqDatasetName: "apply_events_production",
   bqEventsTableName: "events",
-  namespace: "namespace",
+  bqEventsTableNameSpace: "namespace",
   urlRegex: "apply-for-teacher-training.service.gov.uk",
   dataSchema: [{
     entityTableName: "application_choices",
