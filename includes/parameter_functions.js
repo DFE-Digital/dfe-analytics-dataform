@@ -92,7 +92,6 @@ function setDefaultDataSchemaParameters(params) {
 
 function dateRangesToDisableAssertionsNow(ranges, currentDate) {
     let disableAssertionsNow = false;
-    /*let dateRanges = JSON.parse(JSON.stringify(ranges));*/
     ranges.forEach(range => {
         if (range.fromDate instanceof Date && range.toDate instanceof Date) {
             // range is between two dates already so no further processing required
