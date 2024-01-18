@@ -5,6 +5,9 @@ module.exports = (params) => {
     })
     )
   };
+  if (!params.enableSessionTables) {
+    return true;
+  }  
   return publish("sessions_" + params.eventSourceName, {
     ...params.defaultConfig,
     type: "table",

@@ -9,6 +9,7 @@ dfeAnalyticsDataform({
   bqEventsTableName: "events",
   urlRegex: "apply-for-teacher-training.service.gov.uk",
   compareChecksums: true,
+  enableSessionTables: false,
   dataSchema: [{
     entityTableName: "application_choices",
     description: "",

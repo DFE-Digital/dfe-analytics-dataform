@@ -66,6 +66,9 @@ module.exports = (params) => {
   else if (params.urlRegex.includes(":") || params.urlRegex.includes("/")) {
     throw new Error(`urlRegex contains ':' and/or '/'. Please specify a urlRegex that does not contain the protocol or the path i.e. the part starting after the :// and before the first / after the domain e.g. 'www.yourdomain.gov.uk'`);
   }
+  if (!params.enableSessionTables) {
+    return true;
+  }
   return publish("pageview_with_funnels_" + params.eventSourceName, {
     ...params.defaultConfig,
     type: "incremental",

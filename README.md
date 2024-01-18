@@ -8,14 +8,14 @@ Dataform package containing commonly used SQL functions and table definitions, f
 4. Set up a production release configuration - see [Google documentation](https://cloud.google.com/dataform/docs/release-configurations).
 5. Add the following line within the dependencies block of the package.json file in your Dataform project:
 ```
-"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.8.2.tar.gz"
+"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.8.3.tar.gz"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
         "@dataform/core": "2.8.2",
-        "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.8.2.tar.gz"
+        "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.8.3.tar.gz"
     }
 }
 ```
@@ -85,6 +85,7 @@ You may in addition to step 8 of the setup instructions wish to configure the fo
 - ```bqDatasetName``` - name of the BigQuery dataset that your events table is located in. Defaults to the same BigQuery dataset configured in your GCP Dataform release configuration (or named in your ```defaultSchema``` parameter in the ```dataform.json``` file in your legacy Dataform project).
 - ```bqEventsTableNameSpace``` - value of the ```namespace``` field in the ```events``` table to filter all data being transformed by before it enters the pipeline. Use this if your dfe-analytics implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table in BigQuery. ```null``` by default. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per possible value of ```namespace``` - this allows configuration options to differ between namespaces.
 - ```transformEntityEvents``` - whether to generate queries that transform entity CRUD events into flattened tables. Boolean (```true``` or ```false```, without quotes). Defaults to ```true``` if not specified.
+- ```enableSessionTables``` - whether to generate the ```sessions``` and ```pageviews_with_funnels``` tables. Boolean (```true``` or ```false```, without quotes). Defaults to ```true``` if not specified.
 - ```eventsDataFreshnessDays``` - number of days after which, if no new events have been received, the events_data_not_fresh assertion will fail to alert you to this. Defaults to ```1``` if not specified.
 - ```eventsDataFreshnessDisableDuringRange``` - if set to ```true```, disables the events_data_not_fresh assertion if today's date is currently between one of the ranges in assertionDisableDuringDateRanges
 - ```assertionDisableDuringDateRanges``` - an array of day or date ranges between which some assertions will be disabled if other parameters are set to disable them. Each range is a hash containing either the integer values fromDay, fromMonth, toDay and toMonth *or* the date values fromDate and toDate. Defaults to an approximation to school holidays each year: ```[{fromMonth: 7, fromDay: 25, toMonth: 9, toDay: 1}, {fromMonth: 3, fromDay: 29, toMonth: 4, toDay: 14}, {fromMonth: 12, fromDay: 22, toMonth: 1, toDay: 7}]```
@@ -190,7 +191,7 @@ The names of these will vary depending on the ```eventSourceName``` you have spe
 - Assertions to help spot when your ```dataSchema``` has become out of date or has a problem. These will tell you if ```foo_entities_are_missing_expected_fields``` or if ```foo_unhandled_field_or_entity_is_being_streamed```. The former will halt your pipeline from executing, while the latter will just alert you to the assertion failure.
 - A table called ```foo_entity_field_updates```, which contains one row for each time a field was updated for any entity that is streamed as events from the database, setting out the name of the field, the previous value of the field and the new value of the field. Entity deletions and updates to any ```updated_at``` fields are not included, but ```NULL``` values are.
 - For each ```entityTableName``` you specified in ```dataSchema``` like ```bar```, a table called something like ```bar_field_updates_foo```. ```bar_field_updates_foo``` is a denormalised ('flattened') version of ```foo_entity_field_updates```, filtered down to the entity ```bar```, and with the new and previous values of that entity flattened according to the schema for ```foo``` you specified in ```dataSchema```. Fields will have metadata set to match the descriptions set in ```dataSchema```.
-- An incremental table called ```pageview_with_funnels_foo```, which contains pageview events from the events table, along with two ARRAYs of STRUCTs containing a number of pageviews in either direction for use in funnel analysis. This number of pageviews is determined by the ```funnelDepth``` parameter you may optionally call ```dfeAnalyticsDataform()``` with. By default ```funnelDepth``` is 10.
-- A table called ```sessions_foo```, which contains rows representing user sessions with attribution fields (e.g. medium, referer_domain) for each session. Includes the session_started_at and next_session_started_at timestamps to allow attribution modelling of a goal conversion that occurred between those timestamps.
+- An incremental table called ```pageview_with_funnels_foo```, which contains pageview events from the events table, along with two ARRAYs of STRUCTs containing a number of pageviews in either direction for use in funnel analysis. This number of pageviews is determined by the ```funnelDepth``` parameter you may optionally call ```dfeAnalyticsDataform()``` with. By default ```funnelDepth``` is 10. Disabled if ```enableSessionTables``` is ```false```.
+- A table called ```sessions_foo```, which contains rows representing user sessions with attribution fields (e.g. medium, referer_domain) for each session. Includes the session_started_at and next_session_started_at timestamps to allow attribution modelling of a goal conversion that occurred between those timestamps. Disabled if ```enableSessionTables``` is ```false```.
 - A table called ```dfe_analytics_configuration_foo``` which contains details of the configuration of dfe-analytics for ```foo``` over time, with ```valid_from``` and ```valid_to``` fields
 - A stored procedure called ```pseudonymise_request_user_ids``` in the same dataset as the events table dfe-analytics streams data into (not necessarily the same dataset that Dataform outputs to). You can invoke this to convert raw user_ids in the events table to pseudonymised user IDs following the instructions in the procedure metadata.

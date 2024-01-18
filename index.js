@@ -33,6 +33,7 @@ module.exports = (params) => {
         eventsDataFreshnessDisableDuringRange: false, // whether to disable the events_data_not_fresh assertion if today's date is currently between one of the ranges in assertionDisableDuringDateRanges
         compareChecksums: false, // whether to enable an assertion to compare checksums and row counts in entity_table_check events to checksums and row counts in BigQuery
         transformEntityEvents: true, // whether to generate tables that transform entity CRUD events into flattened tables
+        enableSessionTables: true, // whether to generate the sessions and pageview_with_funnels tables
         urlRegex: null, // re-2 formatted regular expression to use to identify whether a URL is this service's own URL or an external one. If your service only has one domain name set this to 'www.yourdomainname.gov.uk' (without the protocol). If you have more than one use something like '(?i)(www.domain1.gov.uk|www.domain2.gov.uk|www.domain3.gov.uk)'
         socialRefererDomainRegex: "(?i)(facebook|twitter|^t.co|linkedin|youtube|pinterest|whatsapp|tumblr|reddit)", // re-2 formatted regular expression to use to work out whether an HTTP referer is a social media site
         searchEngineRefererDomainRegex: "(?i)(google|bing|yahoo|aol|ask.co|baidu|duckduckgo|dogpile|ecosia|exalead|gigablast|hotbot|lycos|metacrawler|mojeek|qwant|searx|swisscows|webcrawler|yandex|yippy)", // re-2 formatted regular expression to use to work out whether an HTTP referer is a search enginer (regardless of whether paid or organic)
