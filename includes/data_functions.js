@@ -232,6 +232,24 @@ function eventDataCreateOrReplace(dataField, keyToSet, valueToSet) {
 )`
 };
 
+/* Delete all key constraints on the table - even ones that are no longer included in dfeAnalyticsDataform() configuration */
+function dropAllKeyConstraints(ctx, dataform) {
+  return `
+  ALTER TABLE ${ctx.self()} DROP PRIMARY KEY IF EXISTS;
+  FOR constraint_to_drop IN (
+    SELECT
+      SPLIT(constraint_name, ".")[1]
+    FROM
+      ${"`" + dataform.projectConfig.defaultDatabase + "." + dataform.projectConfig.defaultSchema + "_" + dataform.projectConfig.schemaSuffix + ".INFORMATION_SCHEMA.TABLE_CONSTRAINTS`"}
+    WHERE
+      constraint_type = "FOREIGN KEY"
+      AND table_name = "${ctx.name()}"
+    )
+  DO
+    ALTER TABLE ${ctx.self()} DROP CONSTRAINT IF EXISTS constraint_to_delete;
+  END FOR;`
+};
+
 module.exports = {
   stringToTimestamp,
   stringToDate,
@@ -242,5 +260,6 @@ module.exports = {
   eventDataExtractIntegerArray,
   eventDataExtractListOfStringsBeginning,
   keyIsInEventData,
-  eventDataCreateOrReplace
+  eventDataCreateOrReplace,
+  dropAllKeyConstraints
 };

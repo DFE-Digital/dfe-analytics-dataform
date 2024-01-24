@@ -1,77 +1,75 @@
 module.exports = (params) => {
-  function idField(dataSchema) {
-    /* Generates SQL that extracts the primary key from the 'data' array of structs, defaulting to 'id', but using the primary_key configured for each entity_table_name if specified. */
-    var sqlToReturn = 'CASE\n';
-    var allPrimaryKeysAreId = true;
-    dataSchema.forEach(tableSchema => {
-      if (!tableSchema.primary_key) {
+    function idField(dataSchema) {
+        /* Generates SQL that extracts the primary key from the 'data' array of structs, defaulting to 'id', but using the primary_key configured for each entity_table_name if specified. */
+        var sqlToReturn = 'CASE\n';
+        var allPrimaryKeysAreId = true;
+        dataSchema.forEach(tableSchema => {
+            if (!tableSchema.primary_key) {
 
-      }
-      else if (tableSchema.primary_key == "id") {
-        throw new Error(`primary_key for the ${tableSchema.entityTableName} table is set to 'id', which is the default value for primary_key. If id is the primary key for this table in the database, remove the primary_key configuration for this table in your dataSchema. If id is not the primary key for this table in the database, set primary_key to the correct primary key.`);
-      }
-      else {
-        sqlToReturn += `WHEN entity_table_name = '${tableSchema.entityTableName}' THEN ${data_functions.eventDataExtract("data", tableSchema.primary_key)}\n`;
-        allPrimaryKeysAreId = false;
-      }
-    })
-    sqlToReturn += `ELSE ${data_functions.eventDataExtract("data", "id")}\nEND\n`;
-    if (allPrimaryKeysAreId) {
-      sqlToReturn = data_functions.eventDataExtract("data", "id");
+            } else if (tableSchema.primary_key == "id") {
+                throw new Error(`primary_key for the ${tableSchema.entityTableName} table is set to 'id', which is the default value for primary_key. If id is the primary key for this table in the database, remove the primary_key configuration for this table in your dataSchema. If id is not the primary key for this table in the database, set primary_key to the correct primary key.`);
+            } else {
+                sqlToReturn += `WHEN entity_table_name = '${tableSchema.entityTableName}' THEN ${data_functions.eventDataExtract("data", tableSchema.primary_key)}\n`;
+                allPrimaryKeysAreId = false;
+            }
+        })
+        sqlToReturn += `ELSE ${data_functions.eventDataExtract("data", "id")}\nEND\n`;
+        if (allPrimaryKeysAreId) {
+            sqlToReturn = data_functions.eventDataExtract("data", "id");
+        }
+        return sqlToReturn;
     }
-    return sqlToReturn;
-  }
-  return publish(params.eventSourceName + "_entity_version", {
-    ...params.defaultConfig,
-    type: "incremental",
-    protected: false,
-    uniqueKey: ["entity_table_name", "entity_id", "valid_from"],
-    assertions: {
-      uniqueKey: ["entity_table_name", "entity_id", "valid_from"],
-      nonNull: ["entity_table_name", "entity_id", "valid_from"],
-      rowConditions: [
-        'valid_from < valid_to OR valid_to IS NULL'
-      ]
-    },
-    dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
-    bigquery: {
-      partitionBy: "DATE(valid_to)",
-      clusterBy: ["entity_table_name"],
-      updatePartitionFilter: "valid_to IS NULL",
-      labels: {
-        eventsource: params.eventSourceName.toLowerCase(),
-        sourcedataset: params.bqDatasetName.toLowerCase()
-      }
-    },
-    tags: [params.eventSourceName.toLowerCase()],
-    description: "Each row represents a version of an entity in the " + params.eventSourceName + " database that was been streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project. Versions are valid from valid_from until just before valid_to. If valid_to is NULL then this version is the latest version of this entity. If valid_to is not NULL, but no later version exists, then this entity has been deleted.",
-    columns: {
-      valid_from: "Timestamp from which this version of this entity started to be valid.",
-      valid_to: "Timestamp until which this version of this entity was valid.",
-      event_type: "Event type of the event that provided us with this version of this entity. Either create_entity, update_entity or import_entity.",
-      entity_table_name: "Indicates which table this entity version came from",
-      entity_id: "Hashed (anonymised) version of the ID of this entity from the database.",
-      created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
-      updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
-      DATA: "ARRAY of STRUCTs containing all data stored against this entity as of the latest version we have. Some fields that are in the database may have been removed or hashed (anonymised) if they contained personally identifiable information (PII) or were not deemed to be useful for analytics. NULL if entity has been deleted from the database.",
-      request_user_id: "If a user was logged in when they sent a web request event that caused this version to be created, then this is the UID of this user.",
-      request_uuid: "UUID of the web request that caused this version to be created.",
-      request_method: "Whether the web request that caused this version to be created was a GET or a POST request.",
-      request_path: "The path, starting with a / and excluding any query parameters, of the web request that caused this version to be created.",
-      request_user_agent: "The user agent of the web request that caused this version to be created. Allows a user's browser and operating system to be identified.",
-      request_referer: "The URL of any page the user was viewing when they initiated the web request that caused this version to be created. This is the full URL, including protocol (https://) and any query parameters, if the browser shared these with our application as part of the web request. It is very common for this referer to be truncated for referrals from external sites.",
-      request_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters that were sent to the application as part of the web request that caused this version to be created.",
-      response_content_type: "Content type of any data that was returned to the browser following the web request that caused this version to be created. For example, 'text/html; charset=utf-8'. Image views, for example, may have a non-text/html content type.",
-      response_status: "HTTP response code returned by the application in response to the web request that caused this version to be created. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status.",
-      anonymised_user_agent_and_ip: "One way hash of a combination of the IP address and user agent of the user who made the web request that caused this version to be created. Can be used to identify the user anonymously, even when user_id is not set. Cannot be used to identify the user over a time period of longer than about a month, because of IP address changes and browser updates.",
-      device_category: "The category of device that caused this version to be created - desktop, mobile, bot or unknown.",
-      browser_name: "The name of the browser that caused this version to be created.",
-      browser_version: "The version of the browser that caused this version to be created.",
-      operating_system_name: "The name of the operating system that caused this version to be created.",
-      operating_system_vendor: "The vendor of the operating system that caused this version to be created.",
-      operating_system_version: "The version of the operating system that caused this version to be created."
-    }
-  }).query(ctx => `WITH entity_events AS (
+    return publish(params.eventSourceName + "_entity_version", {
+            ...params.defaultConfig,
+            type: "incremental",
+            protected: false,
+            uniqueKey: ["entity_table_name", "entity_id", "valid_from"],
+            assertions: {
+                uniqueKey: ["entity_table_name", "entity_id", "valid_from"],
+                nonNull: ["entity_table_name", "entity_id", "valid_from"],
+                rowConditions: [
+                    'valid_from < valid_to OR valid_to IS NULL'
+                ]
+            },
+            dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
+            bigquery: {
+                partitionBy: "DATE(valid_to)",
+                clusterBy: ["entity_table_name"],
+                updatePartitionFilter: "valid_to IS NULL",
+                labels: {
+                    eventsource: params.eventSourceName.toLowerCase(),
+                    sourcedataset: params.bqDatasetName.toLowerCase()
+                }
+            },
+            tags: [params.eventSourceName.toLowerCase()],
+            description: "Each row represents a version of an entity in the " + params.eventSourceName + " database that was been streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project. Versions are valid from valid_from until just before valid_to. If valid_to is NULL then this version is the latest version of this entity. If valid_to is not NULL, but no later version exists, then this entity has been deleted.",
+            columns: {
+                valid_from: "Timestamp from which this version of this entity started to be valid.",
+                valid_to: "Timestamp until which this version of this entity was valid.",
+                event_type: "Event type of the event that provided us with this version of this entity. Either create_entity, update_entity or import_entity.",
+                entity_table_name: "Indicates which table this entity version came from",
+                entity_id: "Hashed (anonymised) version of the ID of this entity from the database.",
+                created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
+                updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
+                DATA: "ARRAY of STRUCTs containing all data stored against this entity as of the latest version we have. Some fields that are in the database may have been removed or hashed (anonymised) if they contained personally identifiable information (PII) or were not deemed to be useful for analytics. NULL if entity has been deleted from the database.",
+                request_user_id: "If a user was logged in when they sent a web request event that caused this version to be created, then this is the UID of this user.",
+                request_uuid: "UUID of the web request that caused this version to be created.",
+                request_method: "Whether the web request that caused this version to be created was a GET or a POST request.",
+                request_path: "The path, starting with a / and excluding any query parameters, of the web request that caused this version to be created.",
+                request_user_agent: "The user agent of the web request that caused this version to be created. Allows a user's browser and operating system to be identified.",
+                request_referer: "The URL of any page the user was viewing when they initiated the web request that caused this version to be created. This is the full URL, including protocol (https://) and any query parameters, if the browser shared these with our application as part of the web request. It is very common for this referer to be truncated for referrals from external sites.",
+                request_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters that were sent to the application as part of the web request that caused this version to be created.",
+                response_content_type: "Content type of any data that was returned to the browser following the web request that caused this version to be created. For example, 'text/html; charset=utf-8'. Image views, for example, may have a non-text/html content type.",
+                response_status: "HTTP response code returned by the application in response to the web request that caused this version to be created. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status.",
+                anonymised_user_agent_and_ip: "One way hash of a combination of the IP address and user agent of the user who made the web request that caused this version to be created. Can be used to identify the user anonymously, even when user_id is not set. Cannot be used to identify the user over a time period of longer than about a month, because of IP address changes and browser updates.",
+                device_category: "The category of device that caused this version to be created - desktop, mobile, bot or unknown.",
+                browser_name: "The name of the browser that caused this version to be created.",
+                browser_version: "The version of the browser that caused this version to be created.",
+                operating_system_name: "The name of the operating system that caused this version to be created.",
+                operating_system_vendor: "The vendor of the operating system that caused this version to be created.",
+                operating_system_version: "The version of the operating system that caused this version to be created."
+            }
+        }).query(ctx => `WITH entity_events AS (
   /* all entity events that have been streamed since we last ran this query, UNION ALLed with the latest events only for events that this query already processed in the past - this avoids having to process any unnecessary entity events later in the query */
   SELECT
     *
@@ -166,4 +164,10 @@ WHERE
   )`).preOps(ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(), `SELECT MAX(valid_to) FROM ${ctx.self()}`, `SELECT TIMESTAMP("2018-01-01")`)}
       )`)
+        .postOps(ctx => `
+  IF TRUE THEN /* Workaround - without putting the ALTER TABLE statements in a conditional block, although the script would execute without error, BigQuery query compilation unhelpfully returns an error on the line that attempts to add a primary key if a primary key already exists, ignoring the fact that a previous step in the script removes the primary key. */
+  ${data_functions.dropAllKeyConstraints(ctx, dataform)}
+  ALTER TABLE ${ctx.self()} ADD PRIMARY KEY(entity_id, valid_from, entity_table_name) NOT ENFORCED;
+  END IF;
+    `)
 }

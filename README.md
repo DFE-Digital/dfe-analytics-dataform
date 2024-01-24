@@ -98,6 +98,7 @@ You may in addition to step 8 of the setup instructions wish to configure the fo
 - ```socialRefererDomainRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to work out whether an HTTP referer's domain name is a social media site. Defaults to ```'(?i)(facebook|twitter|^t.co|linkedin|youtube|pinterest|whatsapp|tumblr|reddit)'``` if not specified.
 - ```searchEngineRefererDomainRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to work out whether an HTTP referer's domain name is a search engine (regardless of whether paid or organic). Defaults to ```'(?i)(google|bing|yahoo|aol|ask.co|baidu|duckduckgo|dogpile|ecosia|exalead|gigablast|hotbot|lycos|metacrawler|mojeek|qwant|searx|swisscows|webcrawler|yandex|yippy)'``` if not specified.
 - ```disabled``` - ```true``` or ```false```. Defaults to ```false```. If set to ```true``` then calling the package will not do anything.
+- ```checkReferentialIntegrity``` - ```true``` or ```false```. Defaults to ```false```. See section "Referential integrity assertions" below.
 
 ## Updating to a new version
 Users are notified through internal channels when a new version of dfe-analytics-dataform is released. To update:
@@ -135,6 +136,7 @@ Each object within each table's set of ```keys``` determines how dfe-analytics-d
 - ```historic``` - a boolean, see section "Retaining access to historic fields" below
 - ```foreignKeyName``` - a string, see section "Referential integrity assertions" below
 - ```foreignKeyTable``` - a string, see section "Referential integrity assertions" below
+- ```checkReferentialIntegrity``` - ```true``` or ```false```, see section "Referential integrity assertions" below
 
 An example of a ```dataSchema``` is included in the installation instructions above and in [example.js](https://github.com/DFE-Digital/dfe-analytics-dataform/blob/master/definitions/example.js).
 
@@ -169,11 +171,16 @@ To configure a referential integrity assertion for a particular field (key), add
       dataType: "string",
       description: "Description of this field to include in metadata here.",
       foreignKeyTable: "other_things", // The name of the table the other_thing_id foreign key in this table relates *to* in your application database
-      foreignKeyName: "other_thing_id" // The name of the primary key in the foreignKeyTable table the other_thing_id foreign key relates to.
+      foreignKeyName: "other_thing_id", // The name of the primary key in the foreignKeyTable table the other_thing_id foreign key relates to.
+      checkReferentialIntegrity: true
     }
 ```
 
 If ```foreignKeyName``` is omitted, it defaults to ```id```.
+
+If ```foreignKeyTable``` is set and ```foreignKeyName``` is ```id``` or is omitted, then foreign key constraints will be created where possible to accelerate JOIN performance. See [here](https://cloud.google.com/blog/products/data-analytics/join-optimizations-with-bigquery-primary-and-foreign-keys) for more information.
+
+As an alternative to including ```checkReferentialIntegrity: true``` at key level like this, you may set ```checkReferentialIntegrity: true``` at the top level of the JSON passed to the ```dfeAnalyticsDataform()``` JavaScript function. If this is set then assertions will be created to check referential integrity for all keys in ```dataSchema``` which have ```foreignKeyTable``` set.
 
 ## Tables, assertions, and declarations this will create
 For each occurrence of ```dfeAnalyticsDataform()``` in ```definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the Dataform UI by opening ```definitions/dfe_analytics_dataform.js```.
