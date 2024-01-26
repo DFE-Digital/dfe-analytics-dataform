@@ -1,7 +1,8 @@
 module.exports = (params) => {
   return params.dataSchema
-    // Only generate assertions for tables which have at least one foreignKeyTable parameter configured for one of the fields (keys) in the table
-    .filter(tableSchema => tableSchema.keys.some(key => key.foreignKeyTable))
+    // Only generate assertions for tables which have at least one foreignKeyTable parameter configured for one of the fields (keys) in the table,
+    // and when referential integrity checks are enabled at either key or eventDataSource level
+    .filter(tableSchema => tableSchema.keys.some(key => key.foreignKeyTable && (key.checkReferentialIntegrity || params.checkReferentialIntegrity)))
     // Generate a separate assertion with a different name for each entityname_latest_eventsourcename table called something like entityname_foreign_key_lacks_referential_integrity_eventsourcename
     .forEach(tableSchema =>
       assert(
@@ -16,8 +17,8 @@ module.exports = (params) => {
           "SELECT * FROM\n"
           // Generate a separate subquery for each foreign key in the table that a referential integrity check is configured for
           + tableSchema.keys
-            // Only generate these subqueries for keys in the table that have the foreignKeyTable parameter set
-            .filter(key => key.foreignKeyTable)
+            // Only generate these subqueries for keys in the table that have the foreignKeyTable parameter set and when referential integrity checks are enabled at either key or eventDataSource level
+            .filter(key => key.foreignKeyTable && (key.checkReferentialIntegrity || params.checkReferentialIntegrity))
             .map(
               key =>
                 "  (SELECT '"

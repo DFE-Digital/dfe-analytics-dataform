@@ -1,58 +1,59 @@
 const getKeys = (keys) => {
-  return keys.map(key => ({
-    [key.alias || key.keyName]: key.description
-  })
-  )
+    return keys.map(key => ({
+        [key.alias || key.keyName]: key.description
+    }))
 };
 module.exports = (params) => {
-  return params.dataSchema.forEach(tableSchema => {
-    publish(tableSchema.entityTableName + "_version_" + params.eventSourceName, {
-      ...params.defaultConfig,
-      type: tableSchema.materialisation,
-      ...(tableSchema.materialisation == "table" ? {
-        assertions: {
-          uniqueKey: ["valid_from", "id"],
-          nonNull: ["id"],
-          rowConditions: [
-            'valid_from < valid_to OR valid_to IS NULL'
-          ]
-        },
-      } : {}),
-      bigquery: {
-        labels: {
-          eventsource: params.eventSourceName.toLowerCase(),
-          sourcedataset: params.bqDatasetName.toLowerCase(),
-          entitytabletype: "version"
-        },
-        ...(tableSchema.materialisation == "table" ? { partitionBy: "DATE(valid_to)" } : {})
-      },
-      tags: [params.eventSourceName.toLowerCase()],
-      description: "Versions of entities in the database valid between valid_from and valid_to. Taken from entity Create, Update and Delete events streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project. Description of these entities is: " + tableSchema.description,
-      columns: Object.assign({
-        valid_from: "Timestamp from which this version of this entity started to be valid.",
-        valid_to: "Timestamp until which this version of this entity was valid.",
-        type: "Event type of the event that provided us with this version of this entity. Either entity_created, entity_updated or entity_imported.",
-        id: "Hashed (anonymised) version of the ID of this entity from the database.",
-        created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
-        updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
-        request_user_id: "If a user was logged in when they sent a web request event that caused this version to be created, then this is the UID of this user.",
-        request_uuid: "UUID of the web request that caused this version to be created.",
-        request_method: "Whether the web request that caused this version to be created was a GET or a POST request.",
-        request_path: "The path, starting with a / and excluding any query parameters, of the web request that caused this version to be created.",
-        request_user_agent: "The user agent of the web request that caused this version to be created. Allows a user's browser and operating system to be identified.",
-        request_referer: "The URL of any page the user was viewing when they initiated the web request that caused this version to be created. This is the full URL, including protocol (https://) and any query parameters, if the browser shared these with our application as part of the web request. It is very common for this referer to be truncated for referrals from external sites.",
-        request_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters that were sent to the application as part of the web request that caused this version to be created.",
-        response_content_type: "Content type of any data that was returned to the browser following the web request that caused this version to be created. For example, 'text/html; charset=utf-8'. Image views, for example, may have a non-text/html content type.",
-        response_status: "HTTP response code returned by the application in response to the web request that caused this version to be created. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status.",
-        anonymised_user_agent_and_ip: "One way hash of a combination of the IP address and user agent of the user who made the web request that caused this version to be created. Can be used to identify the user anonymously, even when user_id is not set. Cannot be used to identify the user over a time period of longer than about a month, because of IP address changes and browser updates.",
-        device_category: "The category of device that caused this version to be created - desktop, mobile, bot or unknown.",
-        browser_name: "The name of the browser that caused this version to be created.",
-        browser_version: "The version of the browser that caused this version to be created.",
-        operating_system_name: "The name of the operating system that caused this version to be created.",
-        operating_system_vendor: "The vendor of the operating system that caused this version to be created.",
-        operating_system_version: "The version of the operating system that caused this version to be created."
-      }, ...getKeys(tableSchema.keys))
-    }).query(ctx => `SELECT
+    return params.dataSchema.forEach(tableSchema => {
+        publish(tableSchema.entityTableName + "_version_" + params.eventSourceName, {
+            ...params.defaultConfig,
+            type: tableSchema.materialisation,
+            ...(tableSchema.materialisation == "table" ? {
+                assertions: {
+                    uniqueKey: ["valid_from", "id"],
+                    nonNull: ["id"],
+                    rowConditions: [
+                        'valid_from < valid_to OR valid_to IS NULL'
+                    ]
+                },
+            } : {}),
+            bigquery: {
+                labels: {
+                    eventsource: params.eventSourceName.toLowerCase(),
+                    sourcedataset: params.bqDatasetName.toLowerCase(),
+                    entitytabletype: "version"
+                },
+                ...(tableSchema.materialisation == "table" ? {
+                    partitionBy: "DATE(valid_to)"
+                } : {})
+            },
+            tags: [params.eventSourceName.toLowerCase()],
+            description: "Versions of entities in the database valid between valid_from and valid_to. Taken from entity Create, Update and Delete events streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project. Description of these entities is: " + tableSchema.description,
+            columns: Object.assign({
+                valid_from: "Timestamp from which this version of this entity started to be valid.",
+                valid_to: "Timestamp until which this version of this entity was valid.",
+                type: "Event type of the event that provided us with this version of this entity. Either entity_created, entity_updated or entity_imported.",
+                id: "Hashed (anonymised) version of the ID of this entity from the database.",
+                created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
+                updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
+                request_user_id: "If a user was logged in when they sent a web request event that caused this version to be created, then this is the UID of this user.",
+                request_uuid: "UUID of the web request that caused this version to be created.",
+                request_method: "Whether the web request that caused this version to be created was a GET or a POST request.",
+                request_path: "The path, starting with a / and excluding any query parameters, of the web request that caused this version to be created.",
+                request_user_agent: "The user agent of the web request that caused this version to be created. Allows a user's browser and operating system to be identified.",
+                request_referer: "The URL of any page the user was viewing when they initiated the web request that caused this version to be created. This is the full URL, including protocol (https://) and any query parameters, if the browser shared these with our application as part of the web request. It is very common for this referer to be truncated for referrals from external sites.",
+                request_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters that were sent to the application as part of the web request that caused this version to be created.",
+                response_content_type: "Content type of any data that was returned to the browser following the web request that caused this version to be created. For example, 'text/html; charset=utf-8'. Image views, for example, may have a non-text/html content type.",
+                response_status: "HTTP response code returned by the application in response to the web request that caused this version to be created. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status.",
+                anonymised_user_agent_and_ip: "One way hash of a combination of the IP address and user agent of the user who made the web request that caused this version to be created. Can be used to identify the user anonymously, even when user_id is not set. Cannot be used to identify the user over a time period of longer than about a month, because of IP address changes and browser updates.",
+                device_category: "The category of device that caused this version to be created - desktop, mobile, bot or unknown.",
+                browser_name: "The name of the browser that caused this version to be created.",
+                browser_version: "The version of the browser that caused this version to be created.",
+                operating_system_name: "The name of the operating system that caused this version to be created.",
+                operating_system_vendor: "The vendor of the operating system that caused this version to be created.",
+                operating_system_version: "The version of the operating system that caused this version to be created."
+            }, ...getKeys(tableSchema.keys))
+        }).query(ctx => `SELECT
   valid_from,
   valid_to,
   event_type,
@@ -120,10 +121,10 @@ FROM (
         let pastKeyNamesSql = '';
         if (key.pastKeyNames) {
           key.pastKeyNames.forEach(pastKeyName => {
-            pastKeyNamesSql += `  ANY_VALUE(IF(key="${pastKeyName}",${valueField},NULL)) AS ${pastKeyName},\n`;
+            pastKeyNamesSql += `ANY_VALUE(IF(key = "${pastKeyName}", ${valueField}, NULL)) AS ${pastKeyName}, \n`;
           });
         }
-        return `ANY_VALUE(IF(key="${key.keyName}",${valueField},NULL)) AS ${key.keyName},\n` + pastKeyNamesSql;
+        return `ANY_VALUE(IF(key = "${key.keyName}", ${valueField}, NULL)) AS ${key.keyName}, \n` + pastKeyNamesSql;
       }
       ).join('')
       }
@@ -140,7 +141,11 @@ FROM (
 FROM
   ${ctx.ref(params.eventSourceName + "_entity_version")}
 WHERE
-  entity_table_name = "${tableSchema.entityTableName}")`)
-  }
-  )
+  entity_table_name = "${tableSchema.entityTableName}")`).postOps(ctx => tableSchema.materialisation == "table" ? `
+  IF TRUE THEN /* Workaround - without putting the ALTER TABLE statements in a conditional block, although the script would execute without error, BigQuery query compilation unhelpfully returns an error on the line that attempts to add a primary key if a primary key already exists, ignoring the fact that a previous step in the script removes the primary key. */
+  ${data_functions.dropAllKeyConstraints(ctx, dataform)}
+  ALTER TABLE ${ctx.self()} ADD PRIMARY KEY(id, valid_from) NOT ENFORCED;
+  END IF;
+    ` : ``)
+    })
 }
