@@ -82,71 +82,28 @@ module.exports = (params) => {
         coalesceSql = `DATA_struct.${key.keyName}`;
       }
       else {
-        coalesceSql = `
-            COALESCE(DATA_struct.${
-                key.keyName
-            }, DATA_struct.${
-                key.pastKeyNames.join(', DATA_struct.')
-            })`;
+        coalesceSql = `COALESCE(DATA_struct.${key.keyName}, DATA_struct.${key.pastKeyNames.join(', DATA_struct.')})`;
       }
       let fieldSql;
       if (key.dataType == 'boolean') {
-        fieldSql = `
-            SAFE_CAST(${
-                    coalesceSql
-                }
-                AS BOOL)`;
+        fieldSql = `SAFE_CAST(${coalesceSql} AS BOOL)`;
       } else if (key.dataType == 'timestamp') {
-        fieldSql = `
-            ${
-                data_functions.stringToTimestamp(coalesceSql)
-            }
-            `;
+        fieldSql = `${data_functions.stringToTimestamp(coalesceSql)}`;
       } else if (key.dataType == 'date') {
-        fieldSql = `
-            ${
-                data_functions.stringToDate(coalesceSql)
-            }
-            `;
+        fieldSql = `${data_functions.stringToDate(coalesceSql)}`;
       } else if (key.dataType == 'integer') {
-        fieldSql = `
-            SAFE_CAST(${
-                    coalesceSql
-                }
-                AS INT64)`;
+        fieldSql = `SAFE_CAST(${coalesceSql} AS INT64)`;
       } else if (key.dataType == 'integer_array') {
-        fieldSql = `
-            ${
-                data_functions.stringToIntegerArray(coalesceSql)
-            }
-            `;
+        fieldSql = `${data_functions.stringToIntegerArray(coalesceSql)}`;
       } else if (key.dataType == 'float') {
-        fieldSql = `
-            SAFE_CAST(${
-                    coalesceSql
-                }
-                AS FLOAT64)`;
+        fieldSql = `SAFE_CAST(${coalesceSql} AS FLOAT64)`;
       } else if (key.dataType == 'json') {
-        fieldSql = `
-            SAFE.PARSE_JSON(${
-                coalesceSql
-            })`;
+        fieldSql = `SAFE.PARSE_JSON(${coalesceSql})`;
       } else if (key.dataType == 'string' || key.dataType == undefined) {
-        fieldSql = `
-            ${
-                coalesceSql
-            }
-            `;
+        fieldSql = `${coalesceSql}`;
       }
       // Else error which is handled in index.js
-      return `
-            ${
-                fieldSql
-            }
-            AS ${
-                key.alias || key.keyName
-            }
-            `;
+      return `${fieldSql} AS ${key.alias || key.keyName}`;
     }
     ).join(',\n')
       }
@@ -164,20 +121,10 @@ FROM (
         let pastKeyNamesSql = '';
         if (key.pastKeyNames) {
           key.pastKeyNames.forEach(pastKeyName => {
-            pastKeyNamesSql += `
-            ANY_VALUE(IF(key = "${pastKeyName}", ${
-                valueField
-            }, NULL)) AS ${
-                pastKeyName
-            }, \n`;
+            pastKeyNamesSql += `ANY_VALUE(IF(key = "${pastKeyName}", ${valueField}, NULL)) AS ${pastKeyName}, \n`;
           });
         }
-        return `
-            ANY_VALUE(IF(key = "${key.keyName}", ${
-                valueField
-            }, NULL)) AS ${
-                key.keyName
-            }, \n` + pastKeyNamesSql;
+        return `ANY_VALUE(IF(key = "${key.keyName}", ${valueField}, NULL)) AS ${key.keyName}, \n` + pastKeyNamesSql;
       }
       ).join('')
       }
