@@ -240,24 +240,69 @@ function wait(intervalString) {
     `;
 }
 
-/* Delete all key constraints on the table - even ones that are no longer included in dfeAnalyticsDataform() configuration */
-function dropAllKeyConstraints(ctx, dataform) {
+/* Drops all current constraints on a table and sets the constraints specified in constraints. For use in a Dataform pre operation.
+keyInForeignTable defaults to "id" if not specified. Composite keys may be specified for keyInThisTable and keyInForeignTable as a comma separated list.
+e.g. 
+post_operations {
+    data_functions.setKeyConstraints(ctx, dataform, {
+    primaryKey: "myidname",
+    foreignKeys: [
+        {keyInThisTable: "myotherkeyname", foreignTable: "myothertable", keyInForeignTable: "myotheridname"},
+        {keyInThisTable: "anotherkeyname", foreignTable: "myotherothertable"},
+        {keyInThisTable: "firstpartofcompositekey, secondpartofcompositekey", foreignTable: "myothertable", keyInForeignTable: "firstpartofcompositekeyinothertable, secondpartofcompositekeyinothertable"}
+        ]
+    })
+}
+Using this function enables project level table definitions to avoid having to handle their own workarounds for the following issues:
+1. Without putting the ALTER TABLE statements in a conditional IF TRUE THEN... END IF; block, although the script would execute without error, BigQuery query compilation unhelpfully returns an error on the line that attempts to add a primary key if a primary key already exists, ignoring the fact that a previous step in the script removes the primary key.
+2. BigQuery has a 5 table updates per 10s limit which may be breached if too many constraint removal operations happen too quickly. The function builds in waits to avoid this.
+*/
+function setKeyConstraints(ctx, dataform, constraints) {
+    /* Detect incorrectly formatted constraints objects */
+    Object.keys(constraints).forEach(key => {
+        if (!['primaryKey', 'foreignKeys'].includes(key)) {
+            throw new Error(`Invalid parameter passed to setKeyConstraints() inside constraints object: ${key}. Valid top level parameters are primaryKey and foreignKeys.`);
+        }
+    });
+    if (constraints.foreignKeys && constraints.foreignKeys.length > 0) {
+        constraints.foreignKeys.forEach(foreignKey => Object.keys(foreignKey).forEach(foreignKeyParameter => {
+            if (!['keyInThisTable', 'foreignTable', 'keyInForeignTable'].includes(foreignKeyParameter)) {
+                throw new Error(`Invalid foreign key parameter passed to setKeyConstraints() inside constraints object: ${foreignKeyParameter}. Valid key level parameters are keyInThisTable, foreignTable and (optionally) keyInForeignTable.`);
+            }
+        }));
+    }
     return `
-  ALTER TABLE ${ctx.self()} DROP PRIMARY KEY IF EXISTS;
-  FOR constraint_to_drop IN (
-    SELECT
-      SPLIT(constraint_name, ".")[1]
-    FROM
-      ${"`" + dataform.projectConfig.defaultDatabase + "." + dataform.projectConfig.defaultSchema + "_" + dataform.projectConfig.schemaSuffix + ".INFORMATION_SCHEMA.TABLE_CONSTRAINTS`"}
-    WHERE
-      constraint_type = "FOREIGN KEY"
-      AND table_name = "${ctx.name()}"
-    )
-  DO
-    ALTER TABLE ${ctx.self()} DROP CONSTRAINT IF EXISTS constraint_to_delete;
-    ${wait("2 SECOND")}
-  END FOR;`
-};
+    IF TRUE THEN
+    /* Delete all key constraints on the table - even ones that are no longer included in dfeAnalyticsDataform() configuration */
+      ALTER TABLE ${ctx.self()} DROP PRIMARY KEY IF EXISTS;
+      FOR constraint_to_drop IN (
+        SELECT
+          SPLIT(constraint_name, ".")[1]
+        FROM
+          ${"`" + dataform.projectConfig.defaultDatabase + "." + dataform.projectConfig.defaultSchema + "_" + dataform.projectConfig.schemaSuffix + ".INFORMATION_SCHEMA.TABLE_CONSTRAINTS`"}
+        WHERE
+          constraint_type = "FOREIGN KEY"
+          AND table_name = "${ctx.name()}"
+        )
+      DO
+        ALTER TABLE ${ctx.self()} DROP CONSTRAINT IF EXISTS constraint_to_delete;
+        ${wait("2 SECOND")}
+      END FOR;
+    /* Set primary key */
+      ${constraints.primaryKey ?
+          `ALTER TABLE ${ctx.self()} ADD PRIMARY KEY(${constraints.primaryKey}) NOT ENFORCED;
+          ${wait("2 SECOND")}`
+          : ``}
+    /* Set foreign key constraints */
+      ${constraints.foreignKeys && constraints.foreignKeys.length > 0 ?
+      `ALTER TABLE ${ctx.self()}
+          ${constraints.foreignKeys.map(foreignKey =>
+              `ADD CONSTRAINT ${foreignKey.keyInThisTable.replaceAll(",", "_").replaceAll(" ", "")}_relationship FOREIGN KEY(${foreignKey.keyInThisTable}) REFERENCES ${ctx.ref(foreignKey.foreignTable)}(${foreignKey.keyInForeignTable || "id"}) NOT ENFORCED`).join(',\n')
+              };`
+      : ``}
+      END IF;
+  `;
+}
 
 module.exports = {
     stringToTimestamp,
@@ -271,5 +316,5 @@ module.exports = {
     keyIsInEventData,
     eventDataCreateOrReplace,
     wait,
-    dropAllKeyConstraints
+    setKeyConstraints
 };

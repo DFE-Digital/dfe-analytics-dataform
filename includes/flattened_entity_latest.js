@@ -42,19 +42,14 @@ FROM
   ${ctx.ref(tableSchema.entityTableName + "_version_" + params.eventSourceName)}
 WHERE
   valid_to IS NULL
-`).postOps(ctx => tableSchema.materialisation == "table" ? `
-  IF TRUE THEN /* Workaround - without putting the ALTER TABLE statements in a conditional block, although the script would execute without error, BigQuery query compilation unhelpfully returns an error on the line that attempts to add a primary key if a primary key already exists, ignoring the fact that a previous step in the script removes the primary key. */
-  ${data_functions.dropAllKeyConstraints(ctx, dataform)}
-  ALTER TABLE ${ctx.self()} ADD PRIMARY KEY(id) NOT ENFORCED;
-  ${data_functions.wait("2 SECOND")}
-    ${tableSchema.keys
-            // Only generate foreign key constraints for keys in the table that have the foreignKeyTable parameter set and when referential integrity checks are enabled at either key or eventDataSource level
-            .filter(key => key.foreignKeyTable && (key.foreignKeyName == "id" || !key.foreignKeyName))
-            .map(
-              key => `ALTER TABLE ${ctx.self()} ADD CONSTRAINT ${key.alias || key.keyName}_relationship FOREIGN KEY(${key.alias || key.keyName}) REFERENCES ${ctx.ref(key.foreignKeyTable + "_latest_" + params.eventSourceName)}(id) NOT ENFORCED;
-              ${data_functions.wait("2 SECOND")}`
-              ).join('\n')}
-
-  END IF;
-    ` : ``))
+`)
+.postOps(ctx => tableSchema.materialisation == "table" ? data_functions.setKeyConstraints(ctx, dataform, {
+    primaryKey: "id",
+    foreignKeys: tableSchema.keys
+        .filter(key => key.foreignKeyTable && (key.foreignKeyName == "id" || !key.foreignKeyName))
+            .map(key => {return {
+                keyInThisTable: key.alias || key.keyName,
+                foreignTable: key.foreignKeyTable + "_latest_" + params.eventSourceName
+                }})
+    }) : ``))
 }

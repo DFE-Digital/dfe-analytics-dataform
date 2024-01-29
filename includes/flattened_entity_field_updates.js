@@ -77,12 +77,11 @@ ON
   AND field_update.occurred_at >= version.valid_from
   AND (field_update.occurred_at < version.valid_to
     OR version.valid_to IS NULL)
-  `).postOps(ctx => tableSchema.materialisation == "table" ? `
-  IF TRUE THEN /* Workaround - without putting the ALTER TABLE statements in a conditional block, although the script would execute without error, BigQuery query compilation unhelpfully returns an error on the line that attempts to add a primary key if a primary key already exists, ignoring the fact that a previous step in the script removes the primary key. */
-  ${data_functions.dropAllKeyConstraints(ctx, dataform)}
-  ALTER TABLE ${ctx.self()}
-    ADD CONSTRAINT IF NOT EXISTS latest_many_to_one FOREIGN KEY(entity_id) REFERENCES ${ctx.ref(tableSchema.entityTableName + "_latest_" + params.eventSourceName)}(id) NOT ENFORCED,
-    ADD CONSTRAINT IF NOT EXISTS version_many_to_one FOREIGN KEY(entity_id, occurred_at) REFERENCES ${ctx.ref(tableSchema.entityTableName + "_version_" + params.eventSourceName)}(id, valid_from) NOT ENFORCED;
-  END IF;
+  `).postOps(ctx => tableSchema.materialisation == "table" ?
+        `${data_functions.setKeyConstraints(ctx, dataform, {
+            foreignKeys: [
+                {keyInThisTable: "entity_id", foreignTable: tableSchema.entityTableName + "_latest_" + params.eventSourceName, keyInForeignTable: "id"},
+                {keyInThisTable: "entity_id, occurred_at", foreignTable: tableSchema.entityTableName + "_version_" + params.eventSourceName, keyInForeignTable: "id, valid_from"}
+                ]})}
     ` : ``))
 }

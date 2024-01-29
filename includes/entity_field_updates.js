@@ -100,12 +100,10 @@ WHERE
   instance_updates.event_type IN ("update_entity", "create_entity")
   AND ARRAY_TO_STRING(new_data.value,"","null") != ARRAY_TO_STRING(previous_data.value,"","null")
   AND new_data.key != "updated_at"`)
-        .postOps(ctx => `
-  IF TRUE THEN /* Workaround - without putting the ALTER TABLE statements in a conditional block, although the script would execute without error, BigQuery query compilation unhelpfully returns an error on the line that attempts to add a primary key if a primary key already exists, ignoring the fact that a previous step in the script removes the primary key. */
-  ${data_functions.dropAllKeyConstraints(ctx, dataform)}
-  ALTER TABLE ${ctx.self()}
-    ADD PRIMARY KEY(entity_id, occurred_at, key_updated, entity_table_name) NOT ENFORCED,
-    ADD CONSTRAINT entity_version_many_to_one FOREIGN KEY(entity_id, occurred_at, entity_table_name) REFERENCES ${ctx.ref(params.eventSourceName + "_entity_version")}(entity_id, valid_from, entity_table_name) NOT ENFORCED;
-  END IF;
+        .postOps(ctx => `${data_functions.setKeyConstraints(ctx, dataform, {
+            primaryKey: "entity_id, occurred_at, key_updated, entity_table_name",
+            foreignKeys: [
+                {keyInThisTable: "entity_id, occurred_at, entity_table_name", foreignTable: params.eventSourceName + "_entity_version", keyInForeignTable: "entity_id, valid_from, entity_table_name"}
+                ]})}
     `)
 }
