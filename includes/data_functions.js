@@ -244,14 +244,14 @@ function wait(intervalString) {
 keyInForeignTable defaults to "id" if not specified. Composite keys may be specified for keyInThisTable and keyInForeignTable as a comma separated list.
 e.g. 
 post_operations {
-    data_functions.setKeyConstraints(ctx, dataform, {
+    ${data_functions.setKeyConstraints(ctx, dataform, {
     primaryKey: "myidname",
     foreignKeys: [
         {keyInThisTable: "myotherkeyname", foreignTable: "myothertable", keyInForeignTable: "myotheridname"},
         {keyInThisTable: "anotherkeyname", foreignTable: "myotherothertable"},
         {keyInThisTable: "firstpartofcompositekey, secondpartofcompositekey", foreignTable: "myothertable", keyInForeignTable: "firstpartofcompositekeyinothertable, secondpartofcompositekeyinothertable"}
         ]
-    })
+    })}
 }
 Using this function enables project level table definitions to avoid having to handle their own workarounds for the following issues:
 1. Without putting the ALTER TABLE statements in a conditional IF TRUE THEN... END IF; block, although the script would execute without error, BigQuery query compilation unhelpfully returns an error on the line that attempts to add a primary key if a primary key already exists, ignoring the fact that a previous step in the script removes the primary key.
