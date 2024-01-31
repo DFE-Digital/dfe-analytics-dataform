@@ -285,7 +285,7 @@ function setKeyConstraints(ctx, dataform, constraints) {
           AND table_name = "${ctx.name()}"
         )
       DO
-        ALTER TABLE ${ctx.self()} DROP CONSTRAINT IF EXISTS constraint_to_delete;
+        ALTER TABLE ${ctx.self()} DROP CONSTRAINT IF EXISTS constraint_to_drop;
         ${wait("2 SECOND")}
       END FOR;
     /* Set primary key */
