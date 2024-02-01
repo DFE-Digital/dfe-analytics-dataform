@@ -14,7 +14,7 @@ It should now look something like:
 ```
 {
     "dependencies": {
-        "@dataform/core": "2.8.4",
+        "@dataform/core": "2.9.0",
         "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.9.1.tar.gz"
     }
 }
