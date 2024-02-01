@@ -100,7 +100,7 @@ function eventDataExtract(dataField, keyToExtract, dynamic = false, dataType = '
     if (dataType == "string") {
         thisValueWithDataTypeAppliedSql = 'this_value';
     } else if (dataType == "boolean") {
-        thisValueWithDataTypeAppliedSql = `SAFE_CAST(this_value AS BOOL)`;
+        thisValueWithDataTypeAppliedSql = `SAFE_CAST(LOWER(this_value) AS BOOL)`;
     } else if (dataType == "timestamp") {
         thisValueWithDataTypeAppliedSql = stringToTimestamp('this_value');
     } else if (dataType == "date") {
