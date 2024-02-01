@@ -141,11 +141,10 @@ FROM (
 FROM
   ${ctx.ref(params.eventSourceName + "_entity_version")}
 WHERE
-  entity_table_name = "${tableSchema.entityTableName}")`).postOps(ctx => tableSchema.materialisation == "table" ? `
-  IF TRUE THEN /* Workaround - without putting the ALTER TABLE statements in a conditional block, although the script would execute without error, BigQuery query compilation unhelpfully returns an error on the line that attempts to add a primary key if a primary key already exists, ignoring the fact that a previous step in the script removes the primary key. */
-  ${data_functions.dropAllKeyConstraints(ctx, dataform)}
-  ALTER TABLE ${ctx.self()} ADD PRIMARY KEY(id, valid_from) NOT ENFORCED;
-  END IF;
-    ` : ``)
-    })
+  entity_table_name = "${tableSchema.entityTableName}")`)
+.postOps(ctx => tableSchema.materialisation == "table" ? data_functions.setKeyConstraints(ctx, dataform, {
+    primaryKey: "id, valid_from"
+    }) : ``)
+})
 }
+    
