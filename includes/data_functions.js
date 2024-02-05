@@ -279,7 +279,7 @@ function setKeyConstraints(ctx, dataform, constraints) {
         SELECT
           SPLIT(constraint_name, ".")[1]
         FROM
-          ${"`" + dataform.projectConfig.defaultDatabase + "." + dataform.projectConfig.defaultSchema + "_" + dataform.projectConfig.schemaSuffix + ".INFORMATION_SCHEMA.TABLE_CONSTRAINTS`"}
+          ${"`" + dataform.projectConfig.defaultDatabase + "." + dataform.projectConfig.defaultSchema + (dataform.projectConfig.schemaSuffix ? "_" + dataform.projectConfig.schemaSuffix : "" ) + ".INFORMATION_SCHEMA.TABLE_CONSTRAINTS`"}
         WHERE
           constraint_type = "FOREIGN KEY"
           AND table_name = "${ctx.name()}"
