@@ -8,7 +8,7 @@ dfeAnalyticsDataform({
     bqDatasetName: "apply_events_production",
     bqEventsTableName: "events",
     urlRegex: "apply-for-teacher-training.service.gov.uk",
-    compareChecksums: false,
+    compareChecksums: true,
     enableSessionTables: false,
     dataSchema: [{
             entityTableName: "application_choices",
