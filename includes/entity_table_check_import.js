@@ -81,7 +81,7 @@ module.exports = (params) => {
             check.order_column,
             TO_HEX(MD5(STRING_AGG(${sortField == "id" ? `import_event.id` : `CASE WHEN ${sortField} < check.checksum_calculated_at THEN import_event.id END`}, ""
                 ORDER BY
-                  import_event.${sortField} ASC))) AS bigquery_checksum,
+                  import_event.${sortField} ASC${sortField == "id" ? `` : `, id ASC`}))) AS bigquery_checksum,
             check.checksum_calculated_at,
             GREATEST(MAX(check.occurred_at), MAX(import_event.occurred_at)) AS final_import_event_received_at
           FROM
