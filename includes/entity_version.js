@@ -167,6 +167,10 @@ WHERE
     .postOps(ctx => `${data_functions.setKeyConstraints(ctx, dataform, {
             primaryKey: "entity_id, valid_from, entity_table_name"
             })}
+            /* On occasion there is no entity deletion event present in the events table for entities which have in fact been deleted from the application database.
+            This UPDATE statement corrects this using import_entity events when it is possible to be certain that a table has been fully and accurately loaded from its post-import checksum.
+            Entities with IDs which were not included in these imports but where the latest version in entity_version does not have a valid_to timestamp are assumed to have been deleted
+            at the time that the checksum for the earliest complete import was calculated. */
             UPDATE
             ${ctx.self()} AS entity_version
             SET
