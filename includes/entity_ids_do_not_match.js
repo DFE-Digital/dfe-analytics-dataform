@@ -7,7 +7,7 @@ module.exports = (params) => {
     ).tags([params.eventSourceName.toLowerCase()])
       .query(ctx =>
         `SELECT
-          * EXCEPT(check_type, import_id),
+          * EXCEPT(import_id),
           CASE
             WHEN database_row_count > 0 AND (bigquery_row_count IS NULL OR bigquery_row_count = 0) THEN "Row count in BigQuery is zero even though rows existed in source database"
             WHEN database_row_count > bigquery_row_count THEN "Row count in BigQuery is less than row count in source database"

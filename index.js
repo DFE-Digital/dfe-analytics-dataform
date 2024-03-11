@@ -8,6 +8,7 @@ const entityDataNotFresh = require("./includes/entity_data_not_fresh");
 const entityTableCheckScheduled = require("./includes/entity_table_check_scheduled");
 const entityTableCheckImport = require("./includes/entity_table_check_import");
 const entityIdsDoNotMatch = require("./includes/entity_ids_do_not_match");
+const entityImportIdsDoNotMatch = require("./includes/entity_import_ids_do_not_match");
 const pageviewWithFunnel = require("./includes/pageview_with_funnels");
 const sessions = require("./includes/sessions");
 const entityVersion = require("./includes/entity_version");
@@ -89,6 +90,7 @@ module.exports = (params) => {
             entityTableCheckScheduled: entityTableCheckScheduled(params),
             entityTableCheckImport: entityTableCheckImport(params),
             entityIdsDoNotMatch: entityIdsDoNotMatch(params),
+            entityImportIdsDoNotMatch: entityImportIdsDoNotMatch(params),
             pageviewWithFunnel: pageviewWithFunnel(params),
             sessions: sessions(params),
             dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
