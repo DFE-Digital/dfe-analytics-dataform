@@ -3,6 +3,7 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
+    disabled: true,
     eventSourceName: "apply",
     bqProjectName: "rugged-abacus-218110",
     bqDatasetName: "apply_events_production",
