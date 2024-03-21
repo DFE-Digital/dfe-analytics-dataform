@@ -79,10 +79,10 @@ module.exports = (params) => {
   ${tableSchema.keys.map(key => {
       let coalesceSql;
       if (!key.pastKeyNames) {
-        coalesceSql = `DATA_struct.${key.keyName}`;
+        coalesceSql = `DATA_struct.\`${key.keyName}\``;
       }
       else {
-        coalesceSql = `COALESCE(DATA_struct.${key.keyName}, DATA_struct.${key.pastKeyNames.join(', DATA_struct.')})`;
+        coalesceSql = `COALESCE(DATA_struct.\`${key.keyName}\`, DATA_struct.\`${key.pastKeyNames.join('\`, DATA_struct.\`')}\`)`;
       }
       let fieldSql;
       if (key.dataType == 'boolean') {
@@ -103,7 +103,7 @@ module.exports = (params) => {
         fieldSql = `${coalesceSql}`;
       }
       // Else error which is handled in index.js
-      return `${fieldSql} AS ${key.alias || key.keyName}`;
+      return `${fieldSql} AS \`${key.alias || key.keyName}\``;
     }
     ).join(',\n')
       }
@@ -121,10 +121,10 @@ FROM (
         let pastKeyNamesSql = '';
         if (key.pastKeyNames) {
           key.pastKeyNames.forEach(pastKeyName => {
-            pastKeyNamesSql += `ANY_VALUE(IF(key = "${pastKeyName}", ${valueField}, NULL)) AS ${pastKeyName}, \n`;
+            pastKeyNamesSql += `ANY_VALUE(IF(key = "${pastKeyName}", ${valueField}, NULL)) AS \`${pastKeyName}\`, \n`;
           });
         }
-        return `ANY_VALUE(IF(key = "${key.keyName}", ${valueField}, NULL)) AS ${key.keyName}, \n` + pastKeyNamesSql;
+        return `ANY_VALUE(IF(key = "${key.keyName}", ${valueField}, NULL)) AS \`${key.keyName}\`, \n` + pastKeyNamesSql;
       }
       ).join('')
       }
