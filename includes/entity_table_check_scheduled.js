@@ -80,7 +80,7 @@ module.exports = (params) => {
             check.order_column,
             TO_HEX(MD5(STRING_AGG(${sortField == "id" ? `entity_version.id` : `CASE WHEN ${sortField} < check.checksum_calculated_at THEN entity_version.id END`}, ""
                 ORDER BY
-                  entity_version.${sortField} ASC${sortField == "id" ? `` : `, id ASC`}))) AS bigquery_checksum,
+                  entity_version.${sortField} ASC${sortField == "id" ? `` : `, SAFE_CAST(entity_version.id AS INT64) ASC, entity_version.id ASC`}))) AS bigquery_checksum,
             check.checksum_calculated_at
           FROM
             check
