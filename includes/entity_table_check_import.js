@@ -46,6 +46,19 @@ module.exports = (params) => {
             AND ARRAY_LENGTH(event_tags) = 1
             AND occurred_at > event_timestamp_checkpoint
           ),
+        latest_import_event AS (
+        /* In rare cases duplicate import events are streamed. This deduplicates by taking only the most recent one. */
+          SELECT
+            import_id,
+            entity_table_name,
+            occurred_at,
+            id,
+            created_at,
+            updated_at
+          FROM import_event
+          WHERE id IS NOT NULL
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY import_id, entity_table_name, id ORDER BY occurred_at DESC) = 1
+        ),
         check_event AS (
           SELECT
             *
@@ -75,22 +88,22 @@ module.exports = (params) => {
             check.entity_table_name,
             check.import_id,
             check.row_count AS database_row_count,
-            COUNT(DISTINCT import_event.id) AS bigquery_row_count,
-            ARRAY_AGG(import_event.id) AS imported_entity_ids,
+            COUNT(DISTINCT latest_import_event.id) AS bigquery_row_count,
+            ARRAY_AGG(latest_import_event.id) AS imported_entity_ids,
             check.checksum AS database_checksum,
             check.order_column,
-            TO_HEX(MD5(STRING_AGG(${sortField == "id" ? `import_event.id` : `CASE WHEN ${sortField} < check.checksum_calculated_at THEN import_event.id END`}, ""
+            TO_HEX(MD5(STRING_AGG(${sortField == "id" ? `latest_import_event.id` : `CASE WHEN ${sortField} < check.checksum_calculated_at THEN latest_import_event.id END`}, ""
                 ORDER BY
-                  import_event.${sortField} ASC${sortField == "id" ? `` : `, import_event.id ASC`}))) AS bigquery_checksum,
+                  latest_import_event.${sortField} ASC${sortField == "id" ? `` : `, latest_import_event.id ASC`}))) AS bigquery_checksum,
             check.checksum_calculated_at,
-            GREATEST(MAX(check.occurred_at), MAX(import_event.occurred_at)) AS final_import_event_received_at
+            GREATEST(MAX(check.occurred_at), MAX(latest_import_event.occurred_at)) AS final_import_event_received_at
           FROM
             check
           LEFT JOIN
-            import_event
+            latest_import_event
           ON
-            check.entity_table_name = import_event.entity_table_name
-            AND check.import_id = import_event.import_id
+            check.entity_table_name = latest_import_event.entity_table_name
+            AND check.import_id = latest_import_event.import_id
           WHERE
             check.order_column = "${sortField}"
             ${(sortField == "updated_at") ? "/* Default to sorting by updated_at for backwards compatibility */ OR check.order_column IS NULL":""}
