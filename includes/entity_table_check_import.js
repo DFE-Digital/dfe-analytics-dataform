@@ -23,7 +23,7 @@ module.exports = (params) => {
                     database_checksum: "Checksum for the database table at checksum_calculated_at. The checksum is calculated by ordering all the entity IDs by order_column, concatenating them and then using the SHA256 algorithm.",
                     bigquery_checksum: "Checksum for the group of import_entity events with this import_id in the events table. The checksum is calculated by ordering all the entity IDs by order_column, concatenating them and then using the SHA256 algorithm.",
                     checksum_calculated_at: "The time that database_checksum was calculated.",
-                    final_import_event_received_at: "The time that the final import_entity or import_entity_table_check was received from dfe-analytics for this import",
+                    final_import_event_received_at: "The time that the final import_entity or import_entity_table_check event was received from dfe-analytics for this import",
                     order_column: "The column used to order entity IDs as part of the checksum calculation algorithm for both database_checksum and bigquery_checksum. May be updated_at (default), created_at or id.",
                     bigquery_row_count: "The number of unique IDs for this entity in the group of import_entity events with this import_id in the events table. ",
                     imported_entity_ids: "Array of UIDs for entities included in this import."
@@ -57,7 +57,7 @@ module.exports = (params) => {
             updated_at
           FROM import_event
           WHERE id IS NOT NULL
-          QUALIFY ROW_NUMBER() OVER (PARTITION BY import_id, entity_table_name, id ORDER BY occurred_at DESC) = 1
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY import_id, entity_table_name, id ORDER BY COALESCE(updated_at, created_at, occurred_at) DESC) = 1
         ),
         check_event AS (
           SELECT
@@ -94,9 +94,9 @@ module.exports = (params) => {
             check.order_column,
             TO_HEX(MD5(STRING_AGG(${sortField == "id" ? `latest_import_event.id` : `CASE WHEN ${sortField} < check.checksum_calculated_at THEN latest_import_event.id END`}, ""
                 ORDER BY
-                  latest_import_event.${sortField} ASC${sortField == "id" ? `` : `, latest_import_event.id ASC`}))) AS bigquery_checksum,
+                  ${sortField == "id" ? `latest_import_event.id ASC` : `TIMESTAMP_TRUNC(latest_import_event.${sortField}, MILLISECOND) ASC, latest_import_event.id ASC`}))) AS bigquery_checksum,
             check.checksum_calculated_at,
-            GREATEST(MAX(check.occurred_at), MAX(latest_import_event.occurred_at)) AS final_import_event_received_at
+            GREATEST(MAX(latest_import_event.occurred_at), MAX(check.occurred_at)) AS final_import_event_received_at
           FROM
             check
           LEFT JOIN
@@ -123,7 +123,11 @@ module.exports = (params) => {
         check.checksum AS database_checksum,
         check.order_column,
         check.checksum_calculated_at,
-        GREATEST(imports_with_updated_at_metrics.final_import_event_received_at, imports_with_created_at_metrics.final_import_event_received_at, imports_with_id_metrics.final_import_event_received_at) AS final_import_event_received_at,
+        CASE check.order_column
+          WHEN "id" THEN imports_with_id_metrics.final_import_event_received_at
+          WHEN "created_at" THEN imports_with_created_at_metrics.final_import_event_received_at
+          ELSE imports_with_updated_at_metrics.final_import_event_received_at
+        END AS final_import_event_received_at,
         CASE
           WHEN NOT COALESCE(imports_with_updated_at_metrics.bigquery_row_count, imports_with_created_at_metrics.bigquery_row_count, imports_with_id_metrics.bigquery_row_count) > 0 THEN TO_HEX(MD5(""))
           WHEN check.order_column = "created_at" THEN imports_with_created_at_metrics.bigquery_checksum
