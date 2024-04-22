@@ -78,7 +78,7 @@ module.exports = (params) => {
             ${sortField == "id" ? `` : `COUNT(DISTINCT CASE WHEN NOT ${sortField} < check.checksum_calculated_at THEN entity_version.id END) AS bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation,`}
             check.checksum AS database_checksum,
             check.order_column,
-            TO_HEX(MD5(STRING_AGG(${sortField == "id" ? `entity_version.id` : `CASE WHEN ${sortField} < check.checksum_calculated_at THEN entity_version.id END`}, ""
+            TO_HEX(MD5(STRING_AGG(${sortField == "id" ? `entity_version.id` : `CASE WHEN TIMESTAMP_TRUNC(${sortField}, MILLISECOND) < TIMESTAMP_TRUNC(check.checksum_calculated_at, MILLISECOND) THEN entity_version.id END`}, ""
                 ORDER BY
                   ${sortField == "id" ? `entity_version.id ASC` : `TIMESTAMP_TRUNC(entity_version.${sortField}, MILLISECOND) ASC, entity_version.id ASC`}))) AS bigquery_checksum,
             check.checksum_calculated_at

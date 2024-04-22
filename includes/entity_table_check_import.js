@@ -92,7 +92,7 @@ module.exports = (params) => {
             ARRAY_AGG(latest_import_event.id) AS imported_entity_ids,
             check.checksum AS database_checksum,
             check.order_column,
-            TO_HEX(MD5(STRING_AGG(${sortField == "id" ? `latest_import_event.id` : `CASE WHEN ${sortField} < check.checksum_calculated_at THEN latest_import_event.id END`}, ""
+            TO_HEX(MD5(STRING_AGG(${sortField == "id" ? `latest_import_event.id` : `CASE WHEN TIMESTAMP_TRUNC(${sortField}, MILLISECOND) < TIMESTAMP_TRUNC(check.checksum_calculated_at, MILLISECOND) THEN latest_import_event.id END`}, ""
                 ORDER BY
                   ${sortField == "id" ? `latest_import_event.id ASC` : `TIMESTAMP_TRUNC(latest_import_event.${sortField}, MILLISECOND) ASC, latest_import_event.id ASC`}))) AS bigquery_checksum,
             check.checksum_calculated_at,
