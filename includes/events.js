@@ -132,6 +132,6 @@ FROM
     RETURNS STRUCT < category STRING, name STRING, version STRING, os STRING, vendor STRING, os_version STRING >
       LANGUAGE js
       AS "return {category:woothee.parse(user_agent).category,name:woothee.parse(user_agent).name,version:woothee.parse(user_agent).version,os:woothee.parse(user_agent).os,vendor:woothee.parse(user_agent).vendor,os_version:woothee.parse(user_agent).os_version};"
-      OPTIONS(library = 'https://storage.googleapis.com/public-dfe-analytics-dataform-scripts/woothee.js')`
+      OPTIONS(library = 'https://storage.googleapis.com/public-dfe-analytics-dataform-scripts-cross-service/woothee.js')`
   )
 }
