@@ -1,0 +1,5 @@
+defaultDataset: dataform
+defaultAssertionDataset: dataform_assertions
+defaultProject: rugged-abacus-218110
+defaultLocation: europe-west2
+dataformCoreVersion: 3.0.0-beta.0

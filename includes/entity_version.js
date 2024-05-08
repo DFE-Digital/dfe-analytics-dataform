@@ -167,5 +167,44 @@ WHERE
     .postOps(ctx => `${data_functions.setKeyConstraints(ctx, dataform, {
             primaryKey: "entity_id, valid_from, entity_table_name"
             })}
+            /* On occasion there is no entity deletion event present in the events table for entities which have in fact been deleted from the application database.
+            This UPDATE statement corrects this using import_entity events when it is possible to be certain that a table has been fully and accurately loaded from its post-import checksum.
+            Entities with IDs which were not included in these imports but where the latest version in entity_version does not have a valid_to timestamp are assumed to have been deleted
+            at the time that the checksum for the earliest complete import was calculated. */
+            UPDATE
+            ${ctx.self()} AS entity_version
+            SET
+            valid_to = apparently_deleted_before
+            FROM (
+            WITH
+                complete_import AS (
+                SELECT
+                *
+                FROM
+                ${ctx.ref("entity_table_check_import_" + params.eventSourceName)} AS import
+                WHERE
+                database_checksum = bigquery_checksum
+                AND ARRAY_LENGTH(import.imported_entity_ids) > 0)
+            SELECT
+                entity_version.entity_table_name,
+                entity_version.entity_id AS id_that_was_apparently_deleted,
+                MIN(import.checksum_calculated_at) AS apparently_deleted_before
+            FROM
+                ${ctx.self()} AS entity_version
+            JOIN
+                complete_import AS import
+            ON
+                import.entity_table_name = entity_version.entity_table_name
+                AND import.checksum_calculated_at > entity_version.valid_from
+            WHERE
+                entity_version.valid_to IS NULL
+                AND entity_version.entity_id NOT IN UNNEST(import.imported_entity_ids)
+            GROUP BY
+                entity_version.entity_table_name,
+                entity_version.entity_id) AS apparently_deleted_entity
+            WHERE
+            entity_version.valid_to IS NULL
+            AND entity_version.entity_table_name = apparently_deleted_entity.entity_table_name
+            AND entity_version.entity_id = apparently_deleted_entity.id_that_was_apparently_deleted
     `)
 }
