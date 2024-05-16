@@ -1,5 +1,6 @@
 {
+    "name": "dfe-analytics-dataform",
     "dependencies": {
-        "@dataform/core": "3.0.0-beta.0"
+        "@dataform/core": "3.0.0-beta.5"
     }
 }
