@@ -28,8 +28,8 @@ WITH
     COUNT(DISTINCT entity_table_name) AS number_of_tables,
     COUNT(DISTINCT CASE WHEN database_checksum = bigquery_checksum THEN entity_table_name END) AS number_of_tables_with_matching_checksums,
     SUM(database_row_count) AS number_of_rows,
-    SUM(CASE WHEN database_row_count < bigquery_row_count THEN bigquery_row_count - database_row_count ELSE 0 END) AS number_of_missing_rows,
-    SUM(CASE WHEN database_row_count > bigquery_row_count THEN database_row_count - bigquery_row_count ELSE 0 END) AS number_of_extra_rows
+    SUM(CASE WHEN database_row_count > bigquery_row_count THEN database_row_count - bigquery_row_count ELSE 0 END) AS number_of_missing_rows,
+    SUM(CASE WHEN database_row_count < bigquery_row_count THEN bigquery_row_count - database_row_count ELSE 0 END) AS number_of_extra_rows
   FROM
     ${ctx.ref("entity_table_check_scheduled_" + params.eventSourceName)} ),
   dfe_analytics_configuration_metrics AS (
