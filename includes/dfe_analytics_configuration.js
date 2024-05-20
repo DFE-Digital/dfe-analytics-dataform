@@ -23,7 +23,6 @@ module.exports = (params) => {
     SELECT
       occurred_at AS valid_from,
       FIRST_VALUE(occurred_at) OVER (ORDER BY occurred_at ASC ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) AS valid_to,
-      environment,
       ${data_functions.eventDataExtract("data", "analytics_version")} AS version,
       CAST(JSON_VALUE(${data_functions.eventDataExtract("data", "config")}, "$.pseudonymise_web_request_user_id") AS BOOLEAN) AS pseudonymise_web_request_user_id
     FROM
