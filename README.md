@@ -6,16 +6,16 @@ Dataform package containing commonly used SQL functions and table definitions, f
 2. Ensure that it is connected to your BigQuery project.
 3. Ensure that it is synchronised with its own dedicated Github repository.
 4. Set up a production release configuration - see [Google documentation](https://cloud.google.com/dataform/docs/release-configurations).
-5. Add the following line within the dependencies block of the package.json file in your Dataform project:
+5. Add the following line within the dependencies block of the package.json file in your Dataform project, replacing the Xs with the [latest version number of this package](https://github.com/DFE-Digital/dfe-analytics-dataform/releases).:
 ```
-"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.11.0.tar.gz"
+"dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/vX.X.X.tar.gz"
 ```
 It should now look something like:
 ```
 {
     "dependencies": {
-        "@dataform/core": "2.9.0",
-        "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/v1.11.0.tar.gz"
+        "@dataform/core": "X.X.X",
+        "dfe-analytics-dataform": "https://github.com/DFE-Digital/dfe-analytics-dataform/archive/refs/tags/vX.X.X.tar.gz"
     }
 }
 ```
@@ -86,6 +86,7 @@ You may in addition to step 8 of the setup instructions wish to configure the fo
 - ```bqEventsTableNameSpace``` - value of the ```namespace``` field in the ```events``` table to filter all data being transformed by before it enters the pipeline. Use this if your dfe-analytics implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table in BigQuery. ```null``` by default. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per possible value of ```namespace``` - this allows configuration options to differ between namespaces.
 - ```transformEntityEvents``` - whether to generate queries that transform entity CRUD events into flattened tables. Boolean (```true``` or ```false```, without quotes). Defaults to ```true``` if not specified.
 - ```enableSessionTables``` - whether to generate the ```sessions``` and ```pageviews_with_funnels``` tables. Boolean (```true``` or ```false```, without quotes). Defaults to ```true``` if not specified.
+- ```enableMonitoring``` - whether to send summary monitoring data to the monitoring.pipeline_snapshots table in the cross-service GCP project. Boolean (```true``` or ```false```, without quotes). Defaults to ```true``` if not specified.
 - ```eventsDataFreshnessDays``` - number of days after which, if no new events have been received, the events_data_not_fresh assertion will fail to alert you to this. Defaults to ```1``` if not specified.
 - ```eventsDataFreshnessDisableDuringRange``` - if set to ```true```, disables the events_data_not_fresh assertion if today's date is currently between one of the ranges in assertionDisableDuringDateRanges
 - ```assertionDisableDuringDateRanges``` - an array of day or date ranges between which some assertions will be disabled if other parameters are set to disable them. Each range is a hash containing either the integer values fromDay, fromMonth, toDay and toMonth *or* the date values fromDate and toDate. Defaults to an approximation to school holidays each year: ```[{fromMonth: 7, fromDay: 25, toMonth: 9, toDay: 1}, {fromMonth: 3, fromDay: 29, toMonth: 4, toDay: 14}, {fromMonth: 12, fromDay: 22, toMonth: 1, toDay: 7}]```
@@ -172,6 +173,8 @@ To monitor whether tables have been loaded accurately, query the ```entity_table
 To correct incomplete or out of date tables, ask your developers to follow dfe-analytics documentation to import the latest table contents to BigQuery. It is recommended that you limit this import to tables where checksums do not match.
 
 An import will also cause dfe-analytics-dataform to correct occasions when there is no entity deletion event present in the events table for entities which have in fact been deleted from the application database. Entities with IDs which were not included in the import but which still exist as latest versions of the entity in the event stream will be assumed to have been deleted at the time that the checksum for the earliest complete import that did not contain the entity was calculated.
+
+Unless ```enableMonitoring: false``` is set, dfe-analytics-dataform will automatically send a small packet of summary monitoring data to the ```monitoring.pipeline_snapshots``` table in the cross-service GCP project. This will include details of how many tables in your project have matching checksums, and how many rows are missing/extra in BigQuery when compared to the database.
 
 ### Referential integrity assertions
 Referential integrity means that each value of a foreign key stored in a table matches a value of a primary key in a related table. dfe-analytics-dataform provides optional Dataform assertions which you may use to monitor referential integrity automatically. If a referential integrity assertion fails, the likely cause is that some data has not been streamed correctly to your ```events``` table by ```dfe-analytics```. A short term fix might be to run a ```dfe-analytics``` backfill on that table. Please report persistent referential integrity assertion failures, however, so that they can be investigated.
