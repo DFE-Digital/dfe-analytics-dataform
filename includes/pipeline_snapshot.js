@@ -34,7 +34,7 @@ WITH
     ${ctx.ref("entity_table_check_scheduled_" + params.eventSourceName)} ),
   dfe_analytics_configuration_metrics AS (
   SELECT
-    STRING_AGG(version, ", ") AS dfe_analytics_version
+    MAX_BY(version, valid_from) AS dfe_analytics_version
   FROM
     ${ctx.ref("dfe_analytics_configuration_" + params.eventSourceName)}
   WHERE
