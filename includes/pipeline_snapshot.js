@@ -23,6 +23,7 @@ INSERT \`cross-teacher-services.monitoring.pipeline_snapshots\` (
     )
 WITH
   entity_table_check_scheduled_metrics AS (
+  ${params.transformEntityEvents ? `
   SELECT
     COUNT(DISTINCT entity_table_name) > 0 AS checksum_enabled,
     COUNT(DISTINCT entity_table_name) AS number_of_tables,
@@ -31,7 +32,16 @@ WITH
     SUM(CASE WHEN database_row_count > bigquery_row_count THEN database_row_count - bigquery_row_count ELSE 0 END) AS number_of_missing_rows,
     SUM(CASE WHEN database_row_count < bigquery_row_count THEN bigquery_row_count - database_row_count ELSE 0 END) AS number_of_extra_rows
   FROM
-    ${ctx.ref("entity_table_check_scheduled_" + params.eventSourceName)} ),
+    ${ctx.ref("entity_table_check_scheduled_" + params.eventSourceName)} ` : `
+    SELECT
+    CAST(NULL AS BOOL) AS checksum_enabled,
+    CAST(NULL AS INT64) AS number_of_tables,
+    CAST(NULL AS INT64) AS number_of_tables_with_matching_checksums,
+    CAST(NULL AS INT64) AS number_of_rows,
+    CAST(NULL AS INT64) AS number_of_missing_rows,
+    CAST(NULL AS INT64) AS number_of_extra_rows
+    `}
+  ),
   dfe_analytics_configuration_metrics AS (
   SELECT
     MAX_BY(version, valid_from) AS dfe_analytics_version
