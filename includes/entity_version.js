@@ -51,7 +51,13 @@ module.exports = (params) => {
                 entity_id: "Hashed (anonymised) version of the ID of this entity from the database.",
                 created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
                 updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
-                DATA: "ARRAY of STRUCTs containing all data stored against this entity as of the latest version we have. Some fields that are in the database may have been removed or hashed (anonymised) if they contained personally identifiable information (PII) or were not deemed to be useful for analytics. NULL if entity has been deleted from the database.",
+                data: {
+                    description: "ARRAY of STRUCTs containing all data stored against this entity as of the latest version we have. Some fields that are in the database may have been removed or hashed (anonymised) if they contained personally identifiable information (PII) or were not deemed to be useful for analytics. NULL if entity has been deleted from the database.",
+                    columns: {
+                        key: "Name of the field in the entity_table_name table in the database after it was created or updated, or just before it was imported or destroyed.",
+                        value: "Contents of the field in the database after it was created or updated, or just before it was imported or destroyed."
+                    }
+                },
                 request_user_id: "If a user was logged in when they sent a web request event that caused this version to be created, then this is the UID of this user.",
                 request_uuid: "UUID of the web request that caused this version to be created.",
                 request_method: "Whether the web request that caused this version to be created was a GET or a POST request.",
@@ -164,7 +170,7 @@ WHERE
   )`).preOps(ctx => `DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(), `SELECT MAX(valid_to) FROM ${ctx.self()}`, `SELECT TIMESTAMP("2018-01-01")`)}
       )`)
-    .postOps(ctx => `${data_functions.setKeyConstraints(ctx, dataform, {
+        .postOps(ctx => `${data_functions.setKeyConstraints(ctx, dataform, {
             primaryKey: "entity_id, valid_from, entity_table_name"
             })}
             /* On occasion there is no entity deletion event present in the events table for entities which have in fact been deleted from the application database.
