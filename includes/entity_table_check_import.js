@@ -26,7 +26,10 @@ module.exports = (params) => {
                     final_import_event_received_at: "The time that the final import_entity or import_entity_table_check event was received from dfe-analytics for this import",
                     order_column: "The column used to order entity IDs as part of the checksum calculation algorithm for both database_checksum and bigquery_checksum. May be updated_at (default), created_at or id.",
                     bigquery_row_count: "The number of unique IDs for this entity in the group of import_entity events with this import_id in the events table. ",
-                    imported_entity_ids: "Array of UIDs for entities included in this import."
+                    imported_entity_ids: {
+                        description: "Array of UIDs for entities included in this import.",
+                        bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+                    }
                 }
             }
         ).tags([params.eventSourceName.toLowerCase()])
@@ -37,9 +40,9 @@ module.exports = (params) => {
             event_tags[0] AS import_id,
             entity_table_name,
             occurred_at,
-            ${data_functions.eventDataExtract("data", "id")} AS id,
-            ${data_functions.eventDataExtract("data", "created_at", false, "timestamp")} AS created_at,
-            ${data_functions.eventDataExtract("data", "updated_at", false, "timestamp")} AS updated_at
+            ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "id")} AS id,
+            ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "created_at", false, "timestamp")} AS created_at,
+            ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "updated_at", false, "timestamp")} AS updated_at
           FROM ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
           WHERE
             event_type = "import_entity"
@@ -71,10 +74,10 @@ module.exports = (params) => {
         SELECT
           entity_table_name,
           occurred_at,
-          ${data_functions.eventDataExtract("data", "row_count", false, "integer")} AS row_count,
-          ${data_functions.eventDataExtract("data", "checksum", false, "string")} AS checksum,
-          ${data_functions.eventDataExtract("data", "checksum_calculated_at", false, "timestamp")} AS checksum_calculated_at,
-          LOWER(${data_functions.eventDataExtract("data", "order_column", false, "string")}) AS order_column,
+          ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "row_count", false, "integer")} AS row_count,
+          ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "checksum", false, "string")} AS checksum,
+          ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "checksum_calculated_at", false, "timestamp")} AS checksum_calculated_at,
+          LOWER(${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "order_column", false, "string")}) AS order_column,
           event_tags[0] AS import_id
         FROM
           check_event

@@ -10,6 +10,7 @@ dfeAnalyticsDataform({
     transformEntityEvents: true,
     compareChecksums: true,
     enableSessionTables: false,
+    hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     dataSchema: [{
             entityTableName: "academic_cycles",
             description: "",
@@ -873,7 +874,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "trn",
                 dataType: "string",
-                description: "Trainees's Teacher Reference Number"
+                description: "Trainees's Teacher Reference Number",
+                hidden: true
             }, {
                 keyName: "withdraw_date",
                 dataType: "date",

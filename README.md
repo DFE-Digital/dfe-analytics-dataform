@@ -66,7 +66,7 @@ dfeAnalyticsDataform({
 
 14. If your ```events``` table is stored in a different dataset to the dataset configured in your GCP Dataform release configuration (or the ```defaultSchema``` parameter in the ```dataform.json``` file in your legacy Dataform project), add the line ```bqDatasetName: "name_of_the_bigquery_project_your_events_table_is_in",``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
 
-15. In the unlikely event that one or more of the tables in your database being streamed by ```dfe-analytics``` has a primary key that is not ```id```, add the line ```primary_key: 'name_of_primary_key_for_this_table'``` to the element of the dataSchema that represents this table, alongside the ```entityTableName```.
+15. In the unlikely event that one or more of the tables in your database being streamed by ```dfe-analytics``` has a primary key that is not ```id```, add the line ```primaryKey: 'name_of_primary_key_for_this_table'``` to the element of the dataSchema that represents this table, alongside the ```entityTableName```.
 
 16. If your dfe-analytics implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table, add the line ```bqEventsTableNameSpace: 'your_namespace_here'``` after the line that sets the ```bqEventsTableName``` parameter. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per value of ```namespace``` - this allows configuration options to differ between namespaces.
 
@@ -123,7 +123,7 @@ Once you have updated your dataSchema, commit your changes, merge to main/master
 - ```entityTableName``` - the name of the table in your database; a string; mandatory
 - ```description``` - a meta description of the table, which can be a blank string: ```''```; mandatory
 - ```keys``` - an array of objects which determines how dfe-analytics-dataform will transform each of the fields in the table. Each table listed within ```dataSchema``` has its own ```keys``` i.e. : ```dataSchema: [{entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}...]```.
-- ```primary_key``` - optional; if the table has a primary key that is not ```id```, then this should contain the name of the field that is the primary key, if it is not ```'id'```.
+- ```primaryKey``` - optional; if the table has a primary key that is not ```id```, then this should contain the name of the field that is the primary key, if it is not ```'id'```.
 - ```dataFreshnessDays``` - optional; if set, creates an assertion which fails if no Create, Update or Delete events have been received in the last ```dataFreshnessDays``` days for this entity.
 - ```dataFreshnessDisableDuringRange``` - optional; if set to ```true```, disables this assertion if today's date is currently between one of the ranges in ```assertionDisableDuringDateRanges```
 - ```materialisation``` - optional; may be ```'view'``` or ```'table'```. Defaults to 'table' if not set. Determines whether the ```entity_version```, ```entity_latest``` and ```entity_field_updates``` tables for this entity will be materialised by Dataform as views or tables. Recommended usage is to set this to ```'table'``` if these tables will be used more than once a day, or ```'view'``` if not to save query costs.
@@ -153,7 +153,7 @@ The output from the assertions in the run logs for the failed run in Dataform wi
 
 In either case, you should update your ```dataSchema``` configuration in ```dfe_analytics_dataform.js``` in Dataform to add or remove configuration for that field, following the JSON format above.
 
-You should not usually need to run a full refresh in this scenario. The only exception to this is if you have added, removed or updated the ```primary_key``` attribute for a table in the ```dataSchema```. If you have done this then you will need to run a full refresh on the ```entity_version``` table in Dataform.
+You should not usually need to run a full refresh in this scenario. The only exception to this is if you have added, removed or updated the ```primaryKey``` attribute for a table in the ```dataSchema```. If you have done this then you will need to run a full refresh on the ```entity_version``` table in Dataform.
 
 ### Retaining access to data in renamed fields
 If a field in your database has been renamed one or more times, and if the data type of that field has not changed, you may merge data from that field stored under its previous names by adding the configuration ```pastKeyNames: ['past_key_name_1','past_key_name_2']``` to the key configuration for that field. The value of that field will be handled as if it were called ```keyName``` if a field with that name is present. If it is not present then the value will be set to the first value in ```pastKeyNames```. If no field with that name is present then the value will be set to the second value in ```pastKeyNames```, and so on. (Behind the scenes, this functions as a SQL ```COALESCE()```.)

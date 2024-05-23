@@ -1,6 +1,9 @@
 const getKeys = (keys) => {
     return keys.map(key => ({
-        [key.alias || key.keyName]: key.description
+        [key.alias || key.keyName]: {
+          description: key.description,
+          bigqueryPolicyTags: key.hidden && key.hiddenPolicyTagLocation ? [key.hiddenPolicyTagLocation] : []
+        }
     }))
 };
 module.exports = (params) => {
@@ -28,9 +31,18 @@ module.exports = (params) => {
         columns: Object.assign({
             last_streamed_event_occurred_at: "Timestamp of the event that we think provided us with the latest version of this entity.",
             last_streamed_event_type: "Event type of the event that we think provided us with the latest version of this entity. Either entity_created, entity_updated, entity_destroyed or entity_imported.",
-            id: "UID",
-            created_at: "Date this entity was created, according to the latest version of the data received from the database.",
-            updated_at: "Date this entity was last updated something in the database, according to the latest version of the data received from the database.",
+            entity_id: {
+                description: "ID of this entity from the database.",
+                bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+            },
+            created_at: {
+                description: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
+                bigqueryPolicyTags: params.hideCreatedAt && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+            },
+            updated_at: {
+                description: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
+                bigqueryPolicyTags: params.hideUpdatedAt && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+            },
         }, ...getKeys(tableSchema.keys))
     }).query(ctx => `SELECT
   *

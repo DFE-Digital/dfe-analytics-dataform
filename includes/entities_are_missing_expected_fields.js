@@ -12,7 +12,7 @@ WITH expected_entity_fields AS (
   UNNEST([
       ${params.dataSchema.map(tableSchema => {
     return `STRUCT("${tableSchema.entityTableName}" AS entity_name,
-        [${tableSchema.keys.filter(key => !key.historic).map(key => { return `"${key.keyName}"`; }).join(', ')}, "${tableSchema.primary_key || 'id'}"] AS keys
+        [${tableSchema.keys.filter(key => !key.historic).map(key => { return `"${key.keyName}"`; }).join(', ')}, "${tableSchema.primaryKey || 'id'}"] AS keys
         )`;
   }
   ).join(',')}  
@@ -23,42 +23,42 @@ SELECT
   expected_key,
   COUNT(
     IF(
-      NOT ${data_functions.keyIsInEventData("DATA", "expected_key", true)},
+      NOT ${data_functions.keyIsInEventData("ARRAY_CONCAT(data, hidden_data)", "expected_key", true)},
       occurred_at,
       NULL
     )
   ) AS updates_made_yesterday_without_this_key,
   COUNT(
     IF(
-      ${data_functions.keyIsInEventData("DATA", "expected_key", true)},
+      ${data_functions.keyIsInEventData("ARRAY_CONCAT(data, hidden_data)", "expected_key", true)},
       occurred_at,
       NULL
     )
   ) AS updates_made_yesterday_with_this_key,
   MIN(
     IF(
-      NOT ${data_functions.keyIsInEventData("DATA", "expected_key", true)},
+      NOT ${data_functions.keyIsInEventData("ARRAY_CONCAT(data, hidden_data)", "expected_key", true)},
       occurred_at,
       NULL
     )
   ) AS first_update_yesterday_without_this_key_at,
   MAX(
     IF(
-      NOT ${data_functions.keyIsInEventData("DATA", "expected_key", true)},
+      NOT ${data_functions.keyIsInEventData("ARRAY_CONCAT(data, hidden_data)", "expected_key", true)},
       occurred_at,
       NULL
     )
   ) AS last_update_yesterday_without_this_key_at,
   MIN(
     IF(
-      ${data_functions.keyIsInEventData("DATA", "expected_key", true)},
+      ${data_functions.keyIsInEventData("ARRAY_CONCAT(data, hidden_data)", "expected_key", true)},
       occurred_at,
       NULL
     )
   ) AS first_update_yesterday_with_this_key_at,
   MAX(
     IF(
-      ${data_functions.keyIsInEventData("DATA", "expected_key", true)},
+      ${data_functions.keyIsInEventData("ARRAY_CONCAT(data, hidden_data)", "expected_key", true)},
       occurred_at,
       NULL
     )
