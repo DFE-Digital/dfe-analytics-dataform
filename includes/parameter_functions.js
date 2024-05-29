@@ -102,6 +102,9 @@ function validateParams(params) {
             if (key.hidden && !(key.hiddenPolicyTagLocation || params.hiddenPolicyTagLocation)) {
                 throw new Error(`hiddenPolicyTagLocation not set at either eventDataSource level or key level for the ${key.keyName} field in the ${tableSchema.entityTableName} table, even though hidden is ${key.hidden}`);
             }
+            if ((key.keyName == tableSchema.primaryKey) && (key.hidden === true || key.hidden === false)) {
+                throw new Error(`The ${key.keyName} field in the ${tableSchema.entityTableName} table has 'hidden' parameter set at field level even though it is the primary key. Set the 'hidePrimaryKey' parameter at table level for this table instead.`);
+            }
         })
     });
     return params;

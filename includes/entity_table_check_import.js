@@ -7,7 +7,7 @@ module.exports = (params) => {
                     uniqueKey: ["entity_table_name", "import_id"],
                     nonNull: ["entity_table_name"]
                 },
-                dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
+                dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields", params.eventSourceName + "_hidden_pii_configuration_does_not_match_events_streamed"],
                 bigquery: {
                     labels: {
                         eventsource: params.eventSourceName.toLowerCase(),

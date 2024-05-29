@@ -31,7 +31,7 @@ module.exports = (params) => {
                     'valid_from < valid_to OR valid_to IS NULL'
                 ]
             },
-            dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
+            dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields", params.eventSourceName + "_hidden_pii_configuration_does_not_match_events_streamed"],
             bigquery: {
                 partitionBy: "DATE(valid_to)",
                 clusterBy: ["entity_table_name"],
