@@ -25,7 +25,7 @@ WITH expected_entity_fields AS (
   ]), UNNEST(keys) AS this_key
 ),
 events_to_test AS (
-  /* Test all entity events from today and yesterday, plus a small sample of all other past events */
+  /* Test all entity events from today and yesterday on one assertion, plus a small sample of all other past events in the other assertion */
   SELECT
     occurred_at,
     entity_table_name,
