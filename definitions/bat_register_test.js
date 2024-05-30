@@ -645,7 +645,6 @@ dfeAnalyticsDataform({
             entityTableName: "trainees",
             description: "",
             dataFreshnessDays: 3,
-            primaryKey: "trn",
             keys: [{
                 keyName: "apply_application_id",
                 dataType: "string",
@@ -875,7 +874,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "trn",
                 dataType: "string",
-                description: "Trainees's Teacher Reference Number"
+                description: "Trainees's Teacher Reference Number",
+                hidden: true
             }, {
                 keyName: "withdraw_date",
                 dataType: "date",

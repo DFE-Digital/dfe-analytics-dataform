@@ -1,8 +1,8 @@
 module.exports = (params) => {
-  return assert(params.eventSourceName + "_hidden_pii_configuration_does_not_match_events_streamed", {
+  return ["hidden_pii_configuration_does_not_match_events_streamed_yesterday", "hidden_pii_configuration_does_not_match_sample_of_historic_events_streamed"].forEach(assertionNamePart => {assert(params.eventSourceName + "_" + assertionNamePart, {
     ...params.defaultConfig,
     type: "assertion",
-    description: "Counts the number of entities updated yesterday which were either in the hidden_data field but not configured to be hidden in the dfe-analytics-dataform dataSchema, or vice versa. If this assertion fails, either change the dataSchema to hide / unhide the field(s) as appropriate, or ask a developer to change dfe-analytics configuration to hide / unhide the field(s) in streamed data."
+    description: `Counts the number of entities updated ${assertionNamePart == 'hidden_pii_configuration_does_not_match_events_streamed_yesterday' ? `yesterday` : `in a sample representing 1% of historic data`} which were either in the hidden_data field but not configured to be hidden in the dfe-analytics-dataform dataSchema, or vice versa. If this assertion fails, either change the dataSchema to hide / unhide the field(s) as appropriate, or ask a developer to change dfe-analytics configuration to hide / unhide the field(s) in streamed data. You may also need to update past entity events to move key-value pairs from data to hidden_data or vice versa as appropriate.`
   }).tags([params.eventSourceName.toLowerCase()]).query(ctx => `
 WITH expected_entity_fields AS (
   SELECT DISTINCT
@@ -23,6 +23,19 @@ WITH expected_entity_fields AS (
   }
   ).join(',')}  
   ]), UNNEST(keys) AS this_key
+),
+events_to_test AS (
+  /* Test all entity events from today and yesterday, plus a small sample of all other past events */
+  SELECT
+    occurred_at,
+    entity_table_name,
+    data,
+    hidden_data
+  FROM
+    ${ctx.ref("events_" + params.eventSourceName)} ${assertionNamePart == 'hidden_pii_configuration_does_not_match_sample_of_historic_events_streamed' ? `TABLESAMPLE SYSTEM ( 1 PERCENT )` : ``}
+  WHERE
+    event_type IN ("create_entity", "update_entity", "import_entity")
+    ${assertionNamePart == 'hidden_pii_configuration_does_not_match_events_streamed_yesterday' ? `AND DATE(occurred_at) >= CURRENT_DATE - 1` : `AND DATE(occurred_at) < CURRENT_DATE - 1`}
 )
 SELECT
   entity_name,
@@ -34,58 +47,55 @@ SELECT
       occurred_at,
       NULL
     )
-  ) AS updates_made_yesterday_with_this_key_not_hidden,
+  ) AS updates_made_with_this_key_not_hidden,
   MIN(
     IF(
       ${data_functions.keyIsInEventData("data", "key_configured", true)},
       occurred_at,
       NULL
     )
-  ) AS first_update_yesterday_with_this_key_not_hidden_at,
+  ) AS first_update_with_this_key_not_hidden_at,
   MAX(
     IF(
       ${data_functions.keyIsInEventData("data", "key_configured", true)},
       occurred_at,
       NULL
     )
-  ) AS last_update_yesterday_with_this_key_not_hidden_at,
+  ) AS last_update_with_this_key_not_hidden_at,
   COUNT(
     IF(
       ${data_functions.keyIsInEventData("hidden_data", "key_configured", true)},
       occurred_at,
       NULL
     )
-  ) AS updates_made_yesterday_with_this_key_hidden,
+  ) AS updates_made_with_this_key_hidden,
   MIN(
     IF(
       ${data_functions.keyIsInEventData("hidden_data", "key_configured", true)},
       occurred_at,
       NULL
     )
-  ) AS first_update_yesterday_with_this_key_hidden_at,
+  ) AS first_update_with_this_key_hidden_at,
   MAX(
     IF(
       ${data_functions.keyIsInEventData("hidden_data", "key_configured", true)},
       occurred_at,
       NULL
     )
-  ) AS last_update_yesterday_with_this_key_hidden_at
+  ) AS last_update_with_this_key_hidden_at
 
 FROM
-  ${ctx.ref("events_" + params.eventSourceName)}
+  events_to_test
   JOIN expected_entity_fields ON entity_name = entity_table_name
-WHERE
-  DATE(occurred_at) >= CURRENT_DATE - 1
-  AND event_type IN ("create_entity", "update_entity", "import_entity")
 GROUP BY
   entity_name,
   key_configured,
   configured_to_be_hidden_in_data_schema
 HAVING
-  (updates_made_yesterday_with_this_key_hidden > 0 AND configured_to_be_hidden_in_data_schema IS FALSE)
-  OR (updates_made_yesterday_with_this_key_not_hidden > 0 AND configured_to_be_hidden_in_data_schema IS TRUE)
+  (updates_made_with_this_key_hidden > 0 AND configured_to_be_hidden_in_data_schema IS FALSE)
+  OR (updates_made_with_this_key_not_hidden > 0 AND configured_to_be_hidden_in_data_schema IS TRUE)
 ORDER BY
   entity_name,
   key_configured,
-  configured_to_be_hidden_in_data_schema`)
+  configured_to_be_hidden_in_data_schema`)})
 }
