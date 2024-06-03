@@ -85,6 +85,7 @@ You may in addition to step 8 of the setup instructions wish to configure the fo
 - ```bqDatasetName``` - name of the BigQuery dataset that your events table is located in. Defaults to the same BigQuery dataset configured in your GCP Dataform release configuration (or named in your ```defaultSchema``` parameter in the ```dataform.json``` file in your legacy Dataform project).
 - ```bqEventsTableNameSpace``` - value of the ```namespace``` field in the ```events``` table to filter all data being transformed by before it enters the pipeline. Use this if your dfe-analytics implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table in BigQuery. ```null``` by default. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per possible value of ```namespace``` - this allows configuration options to differ between namespaces.
 - ```transformEntityEvents``` - whether to generate queries that transform entity CRUD events into flattened tables. Boolean (```true``` or ```false```, without quotes). Defaults to ```true``` if not specified.
+- ```hiddenPolicyTagLocation``` - a string, see section "Hidden fields" below.
 - ```enableSessionTables``` - whether to generate the ```sessions``` and ```pageviews_with_funnels``` tables. Boolean (```true``` or ```false```, without quotes). Defaults to ```true``` if not specified.
 - ```enableMonitoring``` - whether to send summary monitoring data to the monitoring.pipeline_snapshots table in the cross-service GCP project. Boolean (```true``` or ```false```, without quotes). Defaults to ```true``` if not specified.
 - ```eventsDataFreshnessDays``` - number of days after which, if no new events have been received, the events_data_not_fresh assertion will fail to alert you to this. Defaults to ```1``` if not specified.
@@ -124,6 +125,9 @@ Once you have updated your dataSchema, commit your changes, merge to main/master
 - ```description``` - a meta description of the table, which can be a blank string: ```''```; mandatory
 - ```keys``` - an array of objects which determines how dfe-analytics-dataform will transform each of the fields in the table. Each table listed within ```dataSchema``` has its own ```keys``` i.e. : ```dataSchema: [{entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}, {entityTableName: '', description: '', keys: {}}...]```.
 - ```primaryKey``` - optional; if the table has a primary key that is not ```id```, then this should contain the name of the field that is the primary key, if it is not ```'id'```.
+- ```hidePrimaryKey``` - boolean, see section "Hidden fields" below
+- ```hideCreatedAt``` - boolean, see section "Hidden fields" below
+- ```hideUpdatedAt``` - boolean, see section "Hidden fields" below
 - ```dataFreshnessDays``` - optional; if set, creates an assertion which fails if no Create, Update or Delete events have been received in the last ```dataFreshnessDays``` days for this entity.
 - ```dataFreshnessDisableDuringRange``` - optional; if set to ```true```, disables this assertion if today's date is currently between one of the ranges in ```assertionDisableDuringDateRanges```
 - ```materialisation``` - optional; may be ```'view'``` or ```'table'```. Defaults to 'table' if not set. Determines whether the ```entity_version```, ```entity_latest``` and ```entity_field_updates``` tables for this entity will be materialised by Dataform as views or tables. Recommended usage is to set this to ```'table'``` if these tables will be used more than once a day, or ```'view'``` if not to save query costs.
@@ -133,6 +137,8 @@ Each object within each table's set of ```keys``` determines how dfe-analytics-d
 - ```dataType``` - determines the output data type for this field, which can be ```'string'```, ```'boolean'```, ```'integer'```, ```'float'```, ```'date'```, ```'timestamp'``` or ```'integer_array'```, but defaults to ```'string'``` if not present)
 - ```isArray``` - ```true``` or ```false```; defaults to ```false```. If ```true``` then the data type will be a ```REPEATED``` field of data type ```dataType```. May not be used with ```dataType: 'integer_array'```.),
 - ```description``` - a meta description of the field
+- ```hidden``` - a boolean, see section "Hidden fields" below
+- ```hiddenPolicyTagLocation``` - a string, see section "Hidden fields" below
 - ```alias``` - a name to give the field in outputs instead of ```keyName```
 - ```pastKeyNames``` - an array of strings, see section "Retaining access to data in renamed fields" below
 - ```historic``` - a boolean, see section "Retaining access to historic fields" below
@@ -239,3 +245,4 @@ The names of these will vary depending on the ```eventSourceName``` you have spe
 - A table called ```sessions_foo```, which contains rows representing user sessions with attribution fields (e.g. medium, referer_domain) for each session. Includes the session_started_at and next_session_started_at timestamps to allow attribution modelling of a goal conversion that occurred between those timestamps. Disabled if ```enableSessionTables``` is ```false```.
 - A table called ```dfe_analytics_configuration_foo``` which contains details of the configuration of dfe-analytics for ```foo``` over time, with ```valid_from``` and ```valid_to``` fields
 - A stored procedure called ```pseudonymise_request_user_ids``` in the same dataset as the events table dfe-analytics streams data into (not necessarily the same dataset that Dataform outputs to). You can invoke this to convert raw user_ids in the events table to pseudonymised user IDs following the instructions in the procedure metadata.
+- Assertions called ```foo_hidden_pii_configuration_does_not_match_events_streamed_yesterday``` and ```foo_hidden_pii_configuration_does_not_match_sample_of_historic_events_streamed```. See section "Hidden fields" above for more information.
