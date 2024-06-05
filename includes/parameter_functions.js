@@ -28,8 +28,6 @@ const validDataSchemaTableParameters = ['entityTableName',
     'keys',
     'primaryKey',
     'hidePrimaryKey',
-    'hideCreatedAt',
-    'hideUpdatedAt',
     'dataFreshnessDays',
     'dataFreshnessDisableDuringRange',
     'materialisation'
@@ -71,12 +69,6 @@ function validateParams(params) {
         }
         if (tableSchema.hidePrimaryKey && !params.hiddenPolicyTagLocation) {
             throw new Error(`hiddenPolicyTagLocation not set at eventDataSource level even though hidePrimaryKey is ${tableSchema.hidePrimaryKey} for the ${tableSchema.entityTableName} table.`);
-        }
-        if (tableSchema.hideCreatedAt && !params.hiddenPolicyTagLocation) {
-            throw new Error(`hiddenPolicyTagLocation not set at eventDataSource level even though hideCreatedAt is ${tableSchema.hideCreatedAt} for the ${tableSchema.entityTableName} table.`);
-        }
-        if (tableSchema.hideUpdatedAt && !params.hiddenPolicyTagLocation) {
-            throw new Error(`hiddenPolicyTagLocation not set at eventDataSource level even though hideUpdatedAt is ${tableSchema.hideUpdatedAt} for the ${tableSchema.entityTableName} table.`);
         }
         tableSchema.keys.forEach(key => {
             Object.keys(key).forEach(param => {

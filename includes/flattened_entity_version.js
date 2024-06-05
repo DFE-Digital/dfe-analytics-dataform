@@ -40,14 +40,8 @@ module.exports = (params) => {
                     description: "ID of this entity from the database.",
                     bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation  ? [params.hiddenPolicyTagLocation] : []
                 },
-                created_at: {
-                    description: "Timestamp this entity was first saved in the database, according to this version of the entity.",
-                    bigqueryPolicyTags: params.hideCreatedAt && params.hiddenPolicyTagLocation  ? [params.hiddenPolicyTagLocation] : []
-                },
-                updated_at: {
-                    description: "Timestamp this entity was last updated in the database, according to this version of the entity.",
-                    bigqueryPolicyTags: params.hideUpdatedAt && params.hiddenPolicyTagLocation  ? [params.hiddenPolicyTagLocation] : []
-                },
+                created_at: "Timestamp this entity was first saved in the database, according to this version of the entity.",
+                updated_at: "Timestamp this entity was last updated in the database, according to this version of the entity.",
                 request_user_id: "If a user was logged in when they sent a web request event that caused this version to be created, then this is the UID of this user.",
                 request_uuid: "UUID of the web request that caused this version to be created.",
                 request_method: "Whether the web request that caused this version to be created was a GET or a POST request.",

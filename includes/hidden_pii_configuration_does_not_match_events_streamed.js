@@ -15,9 +15,7 @@ WITH expected_entity_fields AS (
     return `STRUCT("${tableSchema.entityTableName}" AS entity_name,
         [
             ${tableSchema.keys.filter(key => !(key.historic || (key.keyName == tableSchema.primaryKey))).map(key => { return `STRUCT("${key.keyName}" AS key, ${key.hidden || 'false'} AS configured_to_be_hidden_in_data_schema)`; }).join(', ')},
-            STRUCT("${tableSchema.primaryKey || 'id'}" AS key, ${tableSchema.hidePrimaryKey || 'false'} AS configured_to_be_hidden_in_data_schema),
-            STRUCT("created_at" AS key, ${tableSchema.hideCreatedAt || 'false'} AS configured_to_be_hidden_in_data_schema),
-            STRUCT("updated_at" AS key, ${tableSchema.hideUpdatedAt || 'false'} AS configured_to_be_hidden_in_data_schema)
+            STRUCT("${tableSchema.primaryKey || 'id'}" AS key, ${tableSchema.hidePrimaryKey || 'false'} AS configured_to_be_hidden_in_data_schema)
         ] AS keys
     )`;
   }

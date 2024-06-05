@@ -52,14 +52,8 @@ module.exports = (params) => {
                     description: "ID of this entity from the database.",
                     bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
                 },
-                created_at: {
-                    description: "Timestamp this entity was first saved in the database, according to this version of the entity.",
-                    bigqueryPolicyTags: params.hideCreatedAt && params.hiddenPolicyTagLocation  ? [params.hiddenPolicyTagLocation] : []
-                },
-                updated_at: {
-                    description: "Timestamp this entity was last updated in the database, according to this version of the entity.",
-                    bigqueryPolicyTags: params.hideUpdatedAt && params.hiddenPolicyTagLocation  ? [params.hiddenPolicyTagLocation] : []
-                },
+                created_at: "Timestamp this entity was first saved in the database, according to this version of the entity.",
+                updated_at: "Timestamp this entity was last updated in the database, according to this version of the entity.",
                 data: {
                     description: "ARRAY of STRUCTs containing all data stored against this entity as of the latest version we have. Some fields that are in the database may have been removed or hashed (anonymised) if they contained personally identifiable information (PII) or were not deemed to be useful for analytics. NULL if entity has been deleted from the database.",
                     columns: {

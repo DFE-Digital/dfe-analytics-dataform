@@ -26,14 +26,8 @@ module.exports = (params) => {
                     description: "ID of this entity from the database.",
                     bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
                 },
-                created_at: {
-                    description: "Timestamp this entity was first saved in the database, according to the streamed update event.",
-                    bigqueryPolicyTags: params.hideCreatedAt && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
-                },
-                updated_at: {
-                    description: "Timestamp this entity was last updated in the database, according to the streamed update event. Should be similar to occurred_at.",
-                    bigqueryPolicyTags: params.hideUpdatedAt && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
-                },
+                created_at: "Timestamp this entity was first saved in the database, according to the streamed update event.",
+                updated_at: "Timestamp this entity was last updated in the database, according to the streamed update event. Should be similar to occurred_at.",
                 key_updated: "The name of the field that was updated.",
                 new_value: {
                     description: "The value of this field after it was updated. Hidden because it may contain values of some fields which are configured to be hidden.",

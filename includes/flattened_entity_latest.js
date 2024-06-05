@@ -35,14 +35,8 @@ module.exports = (params) => {
                 description: "ID of this entity from the database.",
                 bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
             },
-            created_at: {
-                description: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
-                bigqueryPolicyTags: params.hideCreatedAt && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
-            },
-            updated_at: {
-                description: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
-                bigqueryPolicyTags: params.hideUpdatedAt && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
-            },
+            created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
+            updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
         }, ...getKeys(tableSchema.keys))
     }).query(ctx => `SELECT
   *
