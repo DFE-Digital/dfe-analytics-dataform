@@ -198,14 +198,31 @@ WHERE
             valid_to = apparently_deleted_before
             FROM (
             WITH
-                complete_import AS (
+                complete_import_with_ids AS (
                 SELECT
-                *
+                    import.import_id,
+                    import.entity_table_name,
+                    import.checksum_calculated_at,
+                    ARRAY_AGG(${data_functions.eventDataExtract("data", "id")} IGNORE NULLS) AS imported_entity_ids
                 FROM
                 ${ctx.ref("entity_table_check_import_" + params.eventSourceName)} AS import
+                LEFT JOIN ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"} AS import_event
+                ON
+                    import.import_id = import_event.event_tags[0]
+                    AND import.entity_table_name = import_event.entity_table_name
                 WHERE
-                database_checksum = bigquery_checksum
-                AND ARRAY_LENGTH(import.imported_entity_ids) > 0)
+                    import.database_checksum = import.bigquery_checksum
+                    AND import_event.event_type = "import_entity"
+                    AND ARRAY_LENGTH(import_event.event_tags) = 1
+                    AND DATE(import_event.occurred_at) >= DATE(event_timestamp_checkpoint)
+                    AND DATE(import.checksum_calculated_at) >= DATE(event_timestamp_checkpoint)
+                GROUP BY
+                    import.import_id,
+                    import.entity_table_name,
+                    import.checksum_calculated_at
+                HAVING
+                    ARRAY_LENGTH(imported_entity_ids) > 0
+                )
             SELECT
                 entity_version.entity_table_name,
                 entity_version.entity_id AS id_that_was_apparently_deleted,
@@ -213,7 +230,7 @@ WHERE
             FROM
                 ${ctx.self()} AS entity_version
             JOIN
-                complete_import AS import
+                complete_import_with_ids AS import
             ON
                 import.entity_table_name = entity_version.entity_table_name
                 AND import.checksum_calculated_at > entity_version.valid_from

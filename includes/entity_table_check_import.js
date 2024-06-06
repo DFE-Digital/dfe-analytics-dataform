@@ -25,11 +25,7 @@ module.exports = (params) => {
                     checksum_calculated_at: "The time that database_checksum was calculated.",
                     final_import_event_received_at: "The time that the final import_entity or import_entity_table_check event was received from dfe-analytics for this import",
                     order_column: "The column used to order entity IDs as part of the checksum calculation algorithm for both database_checksum and bigquery_checksum. May be updated_at (default), created_at or id.",
-                    bigquery_row_count: "The number of unique IDs for this entity in the group of import_entity events with this import_id in the events table. ",
-                    imported_entity_ids: {
-                        description: "Array of UIDs for entities included in this import.",
-                        bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
-                    }
+                    bigquery_row_count: "The number of unique IDs for this entity in the group of import_entity events with this import_id in the events table. "
                 }
             }
         ).tags([params.eventSourceName.toLowerCase()])
@@ -92,7 +88,6 @@ module.exports = (params) => {
             check.import_id,
             check.row_count AS database_row_count,
             COUNT(DISTINCT latest_import_event.id) AS bigquery_row_count,
-            ARRAY_AGG(latest_import_event.id IGNORE NULLS) AS imported_entity_ids,
             check.checksum AS database_checksum,
             check.order_column,
             TO_HEX(MD5(STRING_AGG(${sortField == "id" ? `latest_import_event.id` : `CASE WHEN TIMESTAMP_TRUNC(${sortField}, MILLISECOND) < TIMESTAMP_TRUNC(check.checksum_calculated_at, MILLISECOND) THEN latest_import_event.id END`}, ""
@@ -138,12 +133,7 @@ module.exports = (params) => {
         ELSE
           /* Default to sorting by updated_at for backwards compatibility */
           imports_with_updated_at_metrics.bigquery_checksum
-        END AS bigquery_checksum,
-        CASE check.order_column
-            WHEN "created_at" THEN imports_with_created_at_metrics.imported_entity_ids
-            WHEN "id" THEN imports_with_id_metrics.imported_entity_ids
-            ELSE imports_with_updated_at_metrics.imported_entity_ids
-        END AS imported_entity_ids
+        END AS bigquery_checksum
       FROM
         check
       LEFT JOIN
@@ -157,6 +147,6 @@ module.exports = (params) => {
       USING (entity_table_name, import_id)`
         ).preOps(ctx => `
     DECLARE event_timestamp_checkpoint DEFAULT (
-        ${ctx.when(ctx.incremental(), `SELECT MAX(final_import_event_received_at) FROM ${ctx.self()}`, `SELECT TIMESTAMP("2000-01-01")`)});`
+        ${ctx.when(ctx.incremental(), `SELECT IFNULL(MAX(final_import_event_received_at), TIMESTAMP("2000-01-01")) FROM ${ctx.self()}`, `SELECT TIMESTAMP("2000-01-01")`)});`
   )
 }
