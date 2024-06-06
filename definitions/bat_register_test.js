@@ -4,7 +4,7 @@ const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
     eventSourceName: "register",
-    bqDatasetName: "register_events_production",
+    bqDatasetName: "register_events_qa",
     bqEventsTableName: "events",
     urlRegex: "register-trainee-teachers.service.gov.uk",
     transformEntityEvents: true,
@@ -724,7 +724,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "disability_disclosure",
                 dataType: "string",
-                description: ""
+                description: "",
+                hidden: true
             }, {
                 keyName: "discarded_at",
                 dataType: "timestamp",
@@ -791,7 +792,8 @@ dfeAnalyticsDataform({
                 keyName: "lead_school_id",
                 dataType: "string",
                 description: "Lead school urn",
-                foreignKeyTable: "schools"
+                foreignKeyTable: "schools",
+                hidden: true
             }, {
                 keyName: "lead_school_not_applicable",
                 dataType: "boolean",
@@ -812,7 +814,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "progress",
                 dataType: "string",
-                description: "progress - various JSON pairs"
+                description: "progress - various JSON pairs",
+                hidden: true
             }, {
                 keyName: "provider_id",
                 dataType: "string",
@@ -846,7 +849,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "sex",
                 dataType: "string",
-                description: "Trainee sex"
+                description: "Trainee sex",
+                hidden: true
             }, {
                 keyName: "state",
                 dataType: "string",
