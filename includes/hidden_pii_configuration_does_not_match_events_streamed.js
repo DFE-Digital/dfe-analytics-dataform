@@ -30,7 +30,7 @@ events_to_test AS (
     data,
     hidden_data
   FROM
-    ${ctx.ref("events_" + params.eventSourceName)} ${assertionNamePart == 'hidden_pii_configuration_does_not_match_sample_of_historic_events_streamed' ? `TABLESAMPLE SYSTEM ( 1 PERCENT )` : ``}
+    ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"} ${assertionNamePart == 'hidden_pii_configuration_does_not_match_sample_of_historic_events_streamed' ? `TABLESAMPLE SYSTEM ( 1 PERCENT )` : ``}
   WHERE
     event_type IN ("create_entity", "update_entity", "import_entity")
     ${assertionNamePart == 'hidden_pii_configuration_does_not_match_events_streamed_yesterday' ? `AND DATE(occurred_at) >= CURRENT_DATE - 1` : `AND DATE(occurred_at) < CURRENT_DATE - 1`}
