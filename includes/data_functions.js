@@ -202,7 +202,18 @@ function keyIsInEventData(dataField, keyToLookFor, dynamic = false) {
 
 /* Sets the value of key to value within a DATA struct in a streamed event. */
 
-function eventDataCreateOrReplace(dataField, keyToSet, valueToSet) {
+function eventDataCreateOrReplace(dataField, keyToSet, valueToSet, dynamicKey = false, dynamicValue = false) {
+    var keyCondition = `"""${keyToSet}"""`;
+    if (dynamicKey) {
+        keyCondition = keyToSet;
+        if (keyToSet === 'key') {
+            throw new Error("eventDataCreateOrReplace cannot be used in dynamic mode to modify a value from DATA with a key in DATA that matches a field/variable named key. Try giving your key field/variable an alias first before passing it to keyIsInEventData.");
+        }
+    };
+    var valueCondition = `"""${valueToSet}"""`;
+    if (dynamicValue) {
+        valueCondition = keyToSet;
+    };
     return `ARRAY_CONCAT(
     ARRAY(
       (
@@ -212,13 +223,13 @@ function eventDataCreateOrReplace(dataField, keyToSet, valueToSet) {
         FROM
           UNNEST(${dataField})
         WHERE
-          key != """${keyToSet}"""
+          key != ${keyCondition}
       )
     ),
     [
       STRUCT(
-        """${keyToSet}""" AS key,
-        ["""${valueToSet}"""] AS value
+        ${keyCondition} AS key,
+        [${valueCondition}] AS value
   ) ]
 )`
 };

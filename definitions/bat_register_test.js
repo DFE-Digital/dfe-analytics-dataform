@@ -4,12 +4,13 @@ const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
     eventSourceName: "register",
-    bqDatasetName: "register_events_production",
+    bqDatasetName: "register_events_qa",
     bqEventsTableName: "events",
     urlRegex: "register-trainee-teachers.service.gov.uk",
     transformEntityEvents: true,
     compareChecksums: true,
     enableSessionTables: false,
+    hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     dataSchema: [{
             entityTableName: "academic_cycles",
             description: "",
@@ -723,7 +724,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "disability_disclosure",
                 dataType: "string",
-                description: ""
+                description: "",
+                hidden: true
             }, {
                 keyName: "discarded_at",
                 dataType: "timestamp",
@@ -790,7 +792,8 @@ dfeAnalyticsDataform({
                 keyName: "lead_school_id",
                 dataType: "string",
                 description: "Lead school urn",
-                foreignKeyTable: "schools"
+                foreignKeyTable: "schools",
+                hidden: true
             }, {
                 keyName: "lead_school_not_applicable",
                 dataType: "boolean",
@@ -811,7 +814,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "progress",
                 dataType: "string",
-                description: "progress - various JSON pairs"
+                description: "progress - various JSON pairs",
+                hidden: true
             }, {
                 keyName: "provider_id",
                 dataType: "string",
@@ -845,7 +849,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "sex",
                 dataType: "string",
-                description: "Trainee sex"
+                description: "Trainee sex",
+                hidden: true
             }, {
                 keyName: "state",
                 dataType: "string",
@@ -873,7 +878,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "trn",
                 dataType: "string",
-                description: "Trainees's Teacher Reference Number"
+                description: "Trainees's Teacher Reference Number",
+                hidden: true
             }, {
                 keyName: "withdraw_date",
                 dataType: "date",

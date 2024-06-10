@@ -12,7 +12,7 @@ WITH expected_entity_fields AS (
   UNNEST([
       ${params.dataSchema.map(tableSchema => {
     return `STRUCT("${tableSchema.entityTableName}" AS entity_name,
-        [${tableSchema.keys.filter(key => !key.historic).map(key => { return `"${key.keyName}"`; }).join(', ')}, "${tableSchema.primary_key || 'id'}"] AS keys
+        [${tableSchema.keys.filter(key => !key.historic).map(key => { return `"${key.keyName}"`; }).join(', ')}, "${tableSchema.primaryKey || 'id'}"] AS keys
         )`;
   }
   ).join(',')}  
@@ -30,7 +30,7 @@ FROM
       COUNT(DISTINCT occurred_at) AS updates_made_yesterday_with_this_key
     FROM
       ${ctx.ref("events_" + params.eventSourceName)},
-      UNNEST(DATA)
+      UNNEST(ARRAY_CONCAT(data, hidden_data))
     WHERE
       DATE(occurred_at) >= CURRENT_DATE - 1
       AND event_type IN ("create_entity", "update_entity", "import_entity")

@@ -59,10 +59,10 @@ module.exports = (params) => {
         check AS (
         SELECT
           entity_table_name,
-          ${data_functions.eventDataExtract("data", "row_count", false, "integer")} AS row_count,
-          ${data_functions.eventDataExtract("data", "checksum", false, "string")} AS checksum,
-          ${data_functions.eventDataExtract("data", "checksum_calculated_at", false, "timestamp")} AS checksum_calculated_at,
-          LOWER(${data_functions.eventDataExtract("data", "order_column", false, "string")}) AS order_column
+          ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "row_count", false, "integer")} AS row_count,
+          ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "checksum", false, "string")} AS checksum,
+          ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "checksum_calculated_at", false, "timestamp")} AS checksum_calculated_at,
+          LOWER(${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "order_column", false, "string")}) AS order_column
         FROM
           check_event
         ),

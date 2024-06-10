@@ -1,6 +1,9 @@
 const getColumnDescriptions = (keys) => {
     return keys.map(key => ({
-        [(key.alias || key.keyName)]: "Value immediately before this update of: " + key.description
+        [key.alias || key.keyName]: {
+          description: "Value immediately before this update of: " + key.description,
+          bigqueryPolicyTags: key.hidden && key.hiddenPolicyTagLocation ? [key.hiddenPolicyTagLocation] : []
+        }
     }))
 };
 module.exports = (params) => {
@@ -23,12 +26,21 @@ module.exports = (params) => {
         columns: Object.assign({
             update_id: "UID for the collection of field updates that took place to this entity at this time. One-way hash of entity_id and occurred_at. Useful for COUNT DISTINCTs.",
             occurred_at: "Timestamp of the streamed entity update event that this field update was part of.",
-            entity_id: "ID of this entity from the database, some IDs may have been removed or hashed (anonymised) if they contained personally identifiable information (PII).",
-            created_at: "Timestamp this entity was first saved in the database, according to the streamed entity update event.",
-            updated_at: "Timestamp this entity was last updated in the database, according to the streamed entity update event. Should be similar to occurred_at",
+            entity_id: {
+                description: "ID of this entity from the database.",
+                bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+            },
+            created_at: "Timestamp this entity was first saved in the database, according to the streamed update event.",
+            updated_at: "Timestamp this entity was last updated in the database, according to the streamed update event. Should be similar to occurred_at.",
             key_updated: "The name of the field that was updated.",
-            new_value: "The value of this field after it was updated.",
-            previous_value: "The value of this field before it was updated.",
+            new_value: {
+                description: "The value of this field after it was updated.",
+                bigqueryPolicyTags: tableSchema.keys.map(key => key.hidden).includes(true) && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+            },
+            previous_value: {
+                description: "The value of this field before it was updated.",
+                bigqueryPolicyTags: tableSchema.keys.map(key => key.hidden).includes(true) && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+            },
             previous_occurred_at: "Timestamp this entity was previously updated.",
             seconds_since_previous_update: "The number of seconds between occurred_at and previous_occurred_at.",
             seconds_since_created: "The number of seconds between occurred_at and created_at.",

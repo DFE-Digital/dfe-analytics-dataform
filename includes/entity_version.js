@@ -1,21 +1,21 @@
 module.exports = (params) => {
     function idField(dataSchema) {
-        /* Generates SQL that extracts the primary key from the 'data' array of structs, defaulting to 'id', but using the primary_key configured for each entity_table_name if specified. */
+        /* Generates SQL that extracts the primary key from the 'data' array of structs, defaulting to 'id', but using the primaryKey configured for each entity_table_name if specified. */
         var sqlToReturn = 'CASE\n';
         var allPrimaryKeysAreId = true;
         dataSchema.forEach(tableSchema => {
-            if (!tableSchema.primary_key) {
+            if (!tableSchema.primaryKey) {
 
-            } else if (tableSchema.primary_key == "id") {
-                throw new Error(`primary_key for the ${tableSchema.entityTableName} table is set to 'id', which is the default value for primary_key. If id is the primary key for this table in the database, remove the primary_key configuration for this table in your dataSchema. If id is not the primary key for this table in the database, set primary_key to the correct primary key.`);
+            } else if (tableSchema.primaryKey == "id") {
+                throw new Error(`primaryKey for the ${tableSchema.entityTableName} table is set to 'id', which is the default value for primaryKey. If id is the primary key for this table in the database, remove the primaryKey configuration for this table in your dataSchema. If id is not the primary key for this table in the database, set primaryKey to the correct primary key.`);
             } else {
-                sqlToReturn += `WHEN entity_table_name = '${tableSchema.entityTableName}' THEN ${data_functions.eventDataExtract("data", tableSchema.primary_key)}\n`;
+                sqlToReturn += `WHEN entity_table_name = '${tableSchema.entityTableName}' THEN COALESCE(${data_functions.eventDataExtract("data", tableSchema.primaryKey)}, ${data_functions.eventDataExtract("hidden_data", tableSchema.primaryKey)})\n`;
                 allPrimaryKeysAreId = false;
             }
         })
-        sqlToReturn += `ELSE ${data_functions.eventDataExtract("data", "id")}\nEND\n`;
+        sqlToReturn += `ELSE ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "id")}\nEND\n`;
         if (allPrimaryKeysAreId) {
-            sqlToReturn = data_functions.eventDataExtract("data", "id");
+            sqlToReturn = `${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "id")}`;
         }
         return sqlToReturn;
     }
@@ -31,7 +31,7 @@ module.exports = (params) => {
                     'valid_from < valid_to OR valid_to IS NULL'
                 ]
             },
-            dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
+            dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields", params.eventSourceName + "_hidden_pii_configuration_does_not_match_events_streamed_yesterday", params.eventSourceName + "_hidden_pii_configuration_does_not_match_sample_of_historic_events_streamed"],
             bigquery: {
                 partitionBy: "DATE(valid_to)",
                 clusterBy: ["entity_table_name"],
@@ -48,14 +48,27 @@ module.exports = (params) => {
                 valid_to: "Timestamp until which this version of this entity was valid.",
                 event_type: "Event type of the event that provided us with this version of this entity. Either create_entity, update_entity or import_entity.",
                 entity_table_name: "Indicates which table this entity version came from",
-                entity_id: "Hashed (anonymised) version of the ID of this entity from the database.",
-                created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
-                updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
+                entity_id: {
+                    description: "ID of this entity from the database.",
+                    bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+                },
+                created_at: "Timestamp this entity was first saved in the database, according to this version of the entity.",
+                updated_at: "Timestamp this entity was last updated in the database, according to this version of the entity.",
                 data: {
                     description: "ARRAY of STRUCTs containing all data stored against this entity as of the latest version we have. Some fields that are in the database may have been removed or hashed (anonymised) if they contained personally identifiable information (PII) or were not deemed to be useful for analytics. NULL if entity has been deleted from the database.",
                     columns: {
                         key: "Name of the field in the entity_table_name table in the database after it was created or updated, or just before it was imported or destroyed.",
                         value: "Contents of the field in the database after it was created or updated, or just before it was imported or destroyed."
+                    }
+                },
+                hidden_data: {
+                    description: "The same as 'data', except dfe-analytics-dataform will attach a policy tag to this field and fields in other tables generated by it to allow it to be masked or hidden from users without permission to access it.",
+                    columns: {
+                        key: "Name of the field in the entity_table_name table in the database after it was created or updated, or just before it was imported or destroyed.",
+                        value: {
+                          description: "Contents of the field in the database after it was created or updated, or just before it was imported or destroyed.",
+                          bigqueryPolicyTags: params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+                        }
                     }
                 },
                 request_user_id: "If a user was logged in when they sent a web request event that caused this version to be created, then this is the UID of this user.",
@@ -86,9 +99,10 @@ module.exports = (params) => {
         occurred_at,
         entity_table_name,
         ${idField(params.dataSchema)} AS entity_id,
-        ${data_functions.eventDataExtract("data", "created_at", false, "timestamp")} AS created_at,
-        ${data_functions.eventDataExtract("data", "updated_at", false, "timestamp")} AS updated_at,
-        DATA,
+        ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "created_at", false, "timestamp")} AS created_at,
+        ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "updated_at", false, "timestamp")} AS updated_at,
+        data,
+        hidden_data,
         request_uuid,
         request_path,
         request_user_id,
@@ -119,7 +133,7 @@ module.exports = (params) => {
         AND ${idField(params.dataSchema)} IS NOT NULL
     )
     ${ctx.when(ctx.incremental(),
-    `UNION ALL (SELECT event_type, valid_from AS occurred_at, entity_table_name, entity_id, created_at, updated_at, DATA, request_uuid, request_path, request_user_id, request_method, request_user_agent, request_referer, request_query, response_content_type, response_status, anonymised_user_agent_and_ip, device_category, browser_name, browser_version, operating_system_name, operating_system_vendor, operating_system_version FROM ${ctx.self()} WHERE valid_to IS NULL AND valid_from <= event_timestamp_checkpoint)`)
+    `UNION ALL (SELECT event_type, valid_from AS occurred_at, entity_table_name, entity_id, created_at, updated_at, data, hidden_data, request_uuid, request_path, request_user_id, request_method, request_user_agent, request_referer, request_query, response_content_type, response_status, anonymised_user_agent_and_ip, device_category, browser_name, browser_version, operating_system_name, operating_system_vendor, operating_system_version FROM ${ctx.self()} WHERE valid_to IS NULL AND valid_from <= event_timestamp_checkpoint)`)
     }
 )
 SELECT
@@ -135,7 +149,8 @@ FROM
       entity_id,
       created_at,
       updated_at,
-      DATA,
+      data,
+      hidden_data,
       request_uuid,
       request_path,
       request_user_id,

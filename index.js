@@ -1,4 +1,4 @@
-const version = "1.12.5";
+const version = "1.13.0";
 
 const parameterFunctions = require("./includes/parameter_functions");
 
@@ -21,10 +21,12 @@ const flattenedEntityFieldUpdates = require("./includes/flattened_entity_field_u
 const entityAt = require("./includes/entity_at");
 const entitiesAreMissingExpectedFields = require("./includes/entities_are_missing_expected_fields");
 const unhandledFieldOrEntityIsBeingStreamed = require("./includes/unhandled_field_or_entity_is_being_streamed");
+const hiddenPIIConfigurationDoesNotMatchEventsStreamed = require("./includes/hidden_pii_configuration_does_not_match_events_streamed");
 const referentialIntegrityCheck = require("./includes/referential_integrity_check");
 const dataSchemaJSONLatest = require("./includes/data_schema_json_latest");
 const dfeAnalyticsConfiguration = require("./includes/dfe_analytics_configuration");
 const pseudonymiseRequestUserIds = require("./includes/pseudonymise_request_user_ids");
+const migrateHistoricEventsToCurrentHiddenPIIConfiguration = require("./includes/migrate_historic_events_to_current_hidden_pii_configuration");
 const pipelineSnapshot = require("./includes/pipeline_snapshot");
 
 module.exports = (params) => {
@@ -100,6 +102,7 @@ module.exports = (params) => {
             dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
             entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
             unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
+            hiddenPIIConfigurationDoesNotMatchEventsStreamed: hiddenPIIConfigurationDoesNotMatchEventsStreamed(params),
             referentialIntegrityCheck: referentialIntegrityCheck(params),
             entityVersion: entityVersion(params),
             entityFieldUpdates: entityFieldUpdates(params),
@@ -109,6 +112,7 @@ module.exports = (params) => {
             flattenedEntityLatest: flattenedEntityLatest(params),
             flattenedEntityFieldUpdates: flattenedEntityFieldUpdates(params),
             pseudonymiseRequestUserIds: pseudonymiseRequestUserIds(params),
+            migrateHistoricEventsToCurrentHiddenPIIConfiguration: migrateHistoricEventsToCurrentHiddenPIIConfiguration(params),
             entityAt: entityAt(params),
             pipelineSnapshot: pipelineSnapshot(version, params),
             version: version

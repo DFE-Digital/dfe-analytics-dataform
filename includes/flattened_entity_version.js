@@ -1,6 +1,9 @@
 const getKeys = (keys) => {
     return keys.map(key => ({
-        [key.alias || key.keyName]: key.description
+        [key.alias || key.keyName]: {
+          description: key.description,
+          bigqueryPolicyTags: key.hidden && key.hiddenPolicyTagLocation ? [key.hiddenPolicyTagLocation] : []
+        }
     }))
 };
 module.exports = (params) => {
@@ -33,9 +36,12 @@ module.exports = (params) => {
                 valid_from: "Timestamp from which this version of this entity started to be valid.",
                 valid_to: "Timestamp until which this version of this entity was valid.",
                 type: "Event type of the event that provided us with this version of this entity. Either entity_created, entity_updated or entity_imported.",
-                id: "Hashed (anonymised) version of the ID of this entity from the database.",
-                created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
-                updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",
+                id: {
+                    description: "ID of this entity from the database.",
+                    bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation  ? [params.hiddenPolicyTagLocation] : []
+                },
+                created_at: "Timestamp this entity was first saved in the database, according to this version of the entity.",
+                updated_at: "Timestamp this entity was last updated in the database, according to this version of the entity.",
                 request_user_id: "If a user was logged in when they sent a web request event that caused this version to be created, then this is the UID of this user.",
                 request_uuid: "UUID of the web request that caused this version to be created.",
                 request_method: "Whether the web request that caused this version to be created was a GET or a POST request.",
@@ -109,7 +115,7 @@ module.exports = (params) => {
       }
 FROM (
   SELECT
-    * EXCEPT(DATA),
+    * EXCEPT(data, hidden_data),
     (
     SELECT
       AS STRUCT
@@ -135,7 +141,9 @@ FROM (
           "") AS value,
         ARRAY_CONCAT_AGG(value) AS value_array
       FROM
-        UNNEST(DATA)
+        UNNEST(
+          ARRAY_CONCAT(data, hidden_data)
+          )
       GROUP BY
         key )) AS DATA_struct
 FROM
