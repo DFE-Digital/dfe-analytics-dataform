@@ -33,7 +33,7 @@ UPDATE
   ${eventsTableReference} event
 SET
   data = ARRAY(SELECT AS STRUCT data_combined.key, data_combined.value FROM UNNEST(ARRAY_CONCAT(data, hidden_data)) data_combined WHERE data_combined.key IN UNNEST(entity.visible_keys)),
-  hidden_data = ARRAY(SELECT AS STRUCT data_combined.key, data_combined.value FROM UNNEST(ARRAY_CONCAT(data, hidden_data)) data_combined WHERE data_combined.key IN UNNEST(entity.hidden_keys))
+  hidden_data = ARRAY(SELECT AS STRUCT data_combined.key, data_combined.value FROM UNNEST(ARRAY_CONCAT(data, hidden_data)) data_combined WHERE data_combined.key IN UNNEST(entity.hidden_keys) OR key NOT IN UNNEST(entity.visible_keys))
 FROM (
   SELECT
     entity_name,
