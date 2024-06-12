@@ -75,8 +75,8 @@ function validateParams(params) {
         if (tableSchema.hidePrimaryKey && !params.hiddenPolicyTagLocation) {
             throw new Error(`hiddenPolicyTagLocation not set at eventDataSource level even though hidePrimaryKey is ${tableSchema.hidePrimaryKey} for the ${tableSchema.entityTableName} table.`);
         }
-        if (tableSchema.coalescePrimaryKeyWithLegacyPII && !params.hidePrimaryKey) {
-            throw new Error(`hidePrimaryKey not set at eventDataSource level even though coalescePrimaryKeyWithLegacyPII is ${tableSchema.coalesceIDWithLegacyPII} for the ${tableSchema.entityTableName} table.`);
+        if (tableSchema.coalescePrimaryKeyWithLegacyPII && !tableSchema.hidePrimaryKey) {
+            throw new Error(`hidePrimaryKey not set at table level even though coalescePrimaryKeyWithLegacyPII is ${tableSchema.coalesceIDWithLegacyPII} for the ${tableSchema.entityTableName} table.`);
         }
         tableSchema.keys.forEach(key => {
             Object.keys(key).forEach(param => {
