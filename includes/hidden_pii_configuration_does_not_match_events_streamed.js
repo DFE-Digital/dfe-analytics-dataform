@@ -34,7 +34,7 @@ events_to_test AS (
   WHERE
     event_type IN ("create_entity", "update_entity", "import_entity")
     ${assertionNamePart == 'hidden_pii_configuration_does_not_match_events_streamed_yesterday' ? `AND DATE(occurred_at) >= CURRENT_DATE - 1` : `AND DATE(occurred_at) < CURRENT_DATE - 1`}
-)
+    )
 SELECT
   entity_name,
   key_configured,
@@ -92,6 +92,11 @@ GROUP BY
 HAVING
   (updates_made_with_this_key_hidden > 0 AND configured_to_be_hidden_in_data_schema IS FALSE)
   OR (updates_made_with_this_key_not_hidden > 0 AND configured_to_be_hidden_in_data_schema IS TRUE)
+  ${assertionNamePart == 'hidden_pii_configuration_does_not_match_events_streamed_yesterday' ? `
+    /* Don't fail if a key has started being hidden in streamed data, with no overlap period, and the dataSchema is configured correctly */
+    AND (NOT (configured_to_be_hidden_in_data_schema IS TRUE AND last_update_with_this_key_not_hidden_at < first_update_with_this_key_hidden_at AND first_update_with_this_key_not_hidden_at <= last_update_with_this_key_not_hidden_at AND first_update_with_this_key_hidden_at <= last_update_with_this_key_hidden_at))
+    /* Don't fail if a key has stopped being hidden in streamed data, with no overlap period, and the dataSchema is configured correctly */
+    AND (NOT (configured_to_be_hidden_in_data_schema IS FALSE AND first_update_with_this_key_not_hidden_at > last_update_with_this_key_hidden_at AND first_update_with_this_key_not_hidden_at <= last_update_with_this_key_not_hidden_at AND first_update_with_this_key_hidden_at <= last_update_with_this_key_hidden_at))` : ``}
 ORDER BY
   entity_name,
   key_configured,
