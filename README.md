@@ -206,6 +206,8 @@ Google provides [documentation](https://cloud.google.com/dataform/docs/policy-ta
 To locate fields in your GCP project which have names which indicate that they may be human-readable Personally Identifiable Information (PII) or GDPR special category data, you may wish to execute the Bash shell script below in the GCP cloud console. This will identify all field names anywhere within your GCP project (except datasets beginning ```dataform``` other than the ```dataform``` dataset itself, because these are likely Dataform development or assertion datasets) which contain the patterns ```email```, ```name```, ```dob```, ```birth```, ```national```, ```insurance```, ```trn```, ```phone```, ```postcode```, ```address```, ```mobile```, ```passport```, ```driv```, ```ethni```, ```religio```, ```union```, ```sex```, ```gender```, ```orientation``` or ```disabilit``` (case insensitive), but do not have a policy tag containing ```hidden``` attached.
 
 <details> <summary>scan_for_possible_unhidden_sensitive_pii_in_field_names.sh</summary>
+
+````bash
 #!/bin/bash
 
 # Set variables - please update your-project-id-here before running!
@@ -270,6 +272,7 @@ done
 
 # Disable nocasematch option after script execution
 shopt -u nocasematch
+````
 </details>
 
 #### Migration away from pseudonymisation of fields in streamed data to using hidden fields
