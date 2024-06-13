@@ -22,7 +22,6 @@ const entityAt = require("./includes/entity_at");
 const entitiesAreMissingExpectedFields = require("./includes/entities_are_missing_expected_fields");
 const unhandledFieldOrEntityIsBeingStreamed = require("./includes/unhandled_field_or_entity_is_being_streamed");
 const hiddenPIIConfigurationDoesNotMatchEventsStreamed = require("./includes/hidden_pii_configuration_does_not_match_events_streamed");
-const referentialIntegrityCheck = require("./includes/referential_integrity_check");
 const dataSchemaJSONLatest = require("./includes/data_schema_json_latest");
 const dfeAnalyticsConfiguration = require("./includes/dfe_analytics_configuration");
 const pseudonymiseRequestUserIds = require("./includes/pseudonymise_request_user_ids");
@@ -44,7 +43,6 @@ module.exports = (params) => {
         transformEntityEvents: true, // whether to generate tables that transform entity CRUD events into flattened tables
         enableSessionTables: true, // whether to generate the sessions and pageview_with_funnels tables
         enableMonitoring: true, // whether to send summary monitoring data to the monitoring.pipeline_snapshots table in the cross-service GCP project
-        checkReferentialIntegrity: false, // whether to check referential integrity for all foreign keys in dataSchema
         urlRegex: null, // re-2 formatted regular expression to use to identify whether a URL is this service's own URL or an external one. If your service only has one domain name set this to 'www.yourdomainname.gov.uk' (without the protocol). If you have more than one use something like '(?i)(www.domain1.gov.uk|www.domain2.gov.uk|www.domain3.gov.uk)'
         socialRefererDomainRegex: "(?i)(facebook|twitter|^t.co|linkedin|youtube|pinterest|whatsapp|tumblr|reddit)", // re-2 formatted regular expression to use to work out whether an HTTP referer is a social media site
         searchEngineRefererDomainRegex: "(?i)(google|bing|yahoo|aol|ask.co|baidu|duckduckgo|dogpile|ecosia|exalead|gigablast|hotbot|lycos|metacrawler|mojeek|qwant|searx|swisscows|webcrawler|yandex|yippy)", // re-2 formatted regular expression to use to work out whether an HTTP referer is a search enginer (regardless of whether paid or organic)
@@ -103,7 +101,6 @@ module.exports = (params) => {
             entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
             unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
             hiddenPIIConfigurationDoesNotMatchEventsStreamed: hiddenPIIConfigurationDoesNotMatchEventsStreamed(params),
-            referentialIntegrityCheck: referentialIntegrityCheck(params),
             entityVersion: entityVersion(params),
             entityFieldUpdates: entityFieldUpdates(params),
             dataFunctions,

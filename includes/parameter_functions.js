@@ -20,7 +20,6 @@ const validTopLevelParameters = ['eventSourceName',
     'socialRefererDomainRegex',
     'searchEngineRefererDomainRegex',
     'disabled',
-    'checkReferentialIntegrity',
     'hiddenPolicyTagLocation'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
@@ -42,7 +41,6 @@ const validDataSchemaKeyParameters = ['keyName',
     'historic',
     'foreignKeyName',
     'foreignKeyTable',
-    'checkReferentialIntegrity',
     'hidden',
     'hiddenPolicyTagLocation',
     'coalesceWithLegacyPII'
@@ -95,9 +93,6 @@ function validateParams(params) {
             }
             if (key.hidden && !(key.hidden === true || key.hidden === false)) {
                 throw new Error(`hidden for the ${key.keyName} field in the ${tableSchema.entityTableName} table is not a boolean value. Ensure it is set to true or false, and that it is not in quotes.`);
-            }
-            if (key.checkReferentialIntegrity && !key.foreignKeyTable) {
-                throw new Error(`foreignKeyTable not set for the ${key.keyName} field in the ${tableSchema.entityTableName} table, even though checkReferentialIntegrity is ${key.checkReferentialIntegrity}`);
             }
             if (key.hidden && !(key.hiddenPolicyTagLocation || params.hiddenPolicyTagLocation)) {
                 throw new Error(`hiddenPolicyTagLocation not set at either eventDataSource level or key level for the ${key.keyName} field in the ${tableSchema.entityTableName} table, even though hidden is ${key.hidden}`);
