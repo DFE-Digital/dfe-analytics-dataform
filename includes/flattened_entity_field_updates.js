@@ -28,7 +28,7 @@ module.exports = (params) => {
             occurred_at: "Timestamp of the streamed entity update event that this field update was part of.",
             entity_id: {
                 description: "ID of this entity from the database.",
-                bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+                bigqueryPolicyTags: tableSchema.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
             },
             created_at: "Timestamp this entity was first saved in the database, according to the streamed update event.",
             updated_at: "Timestamp this entity was last updated in the database, according to the streamed update event. Should be similar to occurred_at.",

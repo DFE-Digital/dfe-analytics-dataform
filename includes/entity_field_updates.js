@@ -24,7 +24,7 @@ module.exports = (params) => {
                 entity_table_name: "Indicates which table this entity came from e.g. application_choices",
                 entity_id: {
                     description: "ID of this entity from the database.",
-                    bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+                    bigqueryPolicyTags: params.dataSchema.map(tableSchema => {return tableSchema.hidePrimaryKey;}).includes(true) && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
                 },
                 created_at: "Timestamp this entity was first saved in the database, according to the streamed update event.",
                 updated_at: "Timestamp this entity was last updated in the database, according to the streamed update event. Should be similar to occurred_at.",

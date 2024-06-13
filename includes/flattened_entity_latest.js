@@ -31,9 +31,9 @@ module.exports = (params) => {
         columns: Object.assign({
             last_streamed_event_occurred_at: "Timestamp of the event that we think provided us with the latest version of this entity.",
             last_streamed_event_type: "Event type of the event that we think provided us with the latest version of this entity. Either entity_created, entity_updated, entity_destroyed or entity_imported.",
-            entity_id: {
+            id: {
                 description: "ID of this entity from the database.",
-                bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+                bigqueryPolicyTags: tableSchema.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
             },
             created_at: "Timestamp this entity was first saved in the database, according to the latest version of the data received from the database.",
             updated_at: "Timestamp this entity was last updated in the database, according to the latest version of the data received from the database.",

@@ -128,6 +128,11 @@ function setDefaultDataSchemaParameters(params) {
             if (key.hidden && !key.hiddenPolicyTagLocation) {
                 key.hiddenPolicyTagLocation = params.hiddenPolicyTagLocation;
             }
+        // If a key is the primary key and hidePrimaryKey is true, hide that key - otherwise just the copy of the primary key field that would be in the id field / entity_id field in various tables would be hidden
+            if ((key.keyName == tableSchema.primaryKey) && tableSchema.hidePrimaryKey) {
+                key.hidden = true;
+                key.hiddenPolicyTagLocation = params.hiddenPolicyTagLocation;
+            }
         });
     });
     return params;

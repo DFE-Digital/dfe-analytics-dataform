@@ -38,7 +38,7 @@ module.exports = (params) => {
                 type: "Event type of the event that provided us with this version of this entity. Either entity_created, entity_updated or entity_imported.",
                 id: {
                     description: "ID of this entity from the database.",
-                    bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation  ? [params.hiddenPolicyTagLocation] : []
+                    bigqueryPolicyTags: tableSchema.hidePrimaryKey && params.hiddenPolicyTagLocation  ? [params.hiddenPolicyTagLocation] : []
                 },
                 created_at: "Timestamp this entity was first saved in the database, according to this version of the entity.",
                 updated_at: "Timestamp this entity was last updated in the database, according to this version of the entity.",
