@@ -20,7 +20,6 @@ const validTopLevelParameters = ['eventSourceName',
     'socialRefererDomainRegex',
     'searchEngineRefererDomainRegex',
     'disabled',
-    'checkReferentialIntegrity',
     'hiddenPolicyTagLocation'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
@@ -28,6 +27,7 @@ const validDataSchemaTableParameters = ['entityTableName',
     'keys',
     'primaryKey',
     'hidePrimaryKey',
+    'coalescePrimaryKeyWithLegacyPII',
     'dataFreshnessDays',
     'dataFreshnessDisableDuringRange',
     'materialisation'
@@ -41,9 +41,9 @@ const validDataSchemaKeyParameters = ['keyName',
     'historic',
     'foreignKeyName',
     'foreignKeyTable',
-    'checkReferentialIntegrity',
     'hidden',
-    'hiddenPolicyTagLocation'
+    'hiddenPolicyTagLocation',
+    'coalesceWithLegacyPII'
 ];
 
 function validateParams(params) {
@@ -67,8 +67,14 @@ function validateParams(params) {
         if (tableSchema.materialisation && tableSchema.materialisation != 'view' && tableSchema.materialisation != 'table') {
             throw new Error(`Value of materialisationType ${tableSchema.materialisation} for table ${tableSchema.entityTableName} in dataSchema must be either 'view' or 'table'.`);
         }
+        if (tableSchema.primaryKey == "id") {
+                throw new Error(`primaryKey for the ${tableSchema.entityTableName} table is set to 'id', which is the default value for primaryKey. If id is the primary key for this table in the database, remove the primaryKey configuration for this table in your dataSchema. If id is not the primary key for this table in the database, set primaryKey to the correct primary key.`);
+        }
         if (tableSchema.hidePrimaryKey && !params.hiddenPolicyTagLocation) {
             throw new Error(`hiddenPolicyTagLocation not set at eventDataSource level even though hidePrimaryKey is ${tableSchema.hidePrimaryKey} for the ${tableSchema.entityTableName} table.`);
+        }
+        if (tableSchema.coalescePrimaryKeyWithLegacyPII && !tableSchema.hidePrimaryKey) {
+            throw new Error(`hidePrimaryKey not set at table level even though coalescePrimaryKeyWithLegacyPII is ${tableSchema.coalesceIDWithLegacyPII} for the ${tableSchema.entityTableName} table.`);
         }
         tableSchema.keys.forEach(key => {
             Object.keys(key).forEach(param => {
@@ -88,14 +94,17 @@ function validateParams(params) {
             if (key.hidden && !(key.hidden === true || key.hidden === false)) {
                 throw new Error(`hidden for the ${key.keyName} field in the ${tableSchema.entityTableName} table is not a boolean value. Ensure it is set to true or false, and that it is not in quotes.`);
             }
-            if (key.checkReferentialIntegrity && !key.foreignKeyTable) {
-                throw new Error(`foreignKeyTable not set for the ${key.keyName} field in the ${tableSchema.entityTableName} table, even though checkReferentialIntegrity is ${key.checkReferentialIntegrity}`);
-            }
             if (key.hidden && !(key.hiddenPolicyTagLocation || params.hiddenPolicyTagLocation)) {
                 throw new Error(`hiddenPolicyTagLocation not set at either eventDataSource level or key level for the ${key.keyName} field in the ${tableSchema.entityTableName} table, even though hidden is ${key.hidden}`);
             }
             if ((key.keyName == tableSchema.primaryKey) && (key.hidden === true || key.hidden === false)) {
                 throw new Error(`The ${key.keyName} field in the ${tableSchema.entityTableName} table has 'hidden' parameter set at field level even though it is the primary key. Set the 'hidePrimaryKey' parameter at table level for this table instead.`);
+            }
+            if (key.coalesceWithLegacyPII && !key.hidden) {
+                throw new Error(`The ${key.keyName} field in the ${tableSchema.entityTableName} table has 'coalesceWithLegacyPII' parameter set even though 'hidden' is set to false or not set.`);
+            }
+            if ((key.keyName == tableSchema.primaryKey) && (key.coalesceWithLegacyPII === true || key.coalesceWithLegacyPII === false)) {
+                throw new Error(`The ${key.keyName} field in the ${tableSchema.entityTableName} table has 'coalesceWithLegacyPII' parameter set at field level even though it is the primary key. Set the 'coalescePrimaryKeyWithLegacyPII' parameter at table level for this table instead.`);
             }
         })
     });
@@ -112,6 +121,11 @@ function setDefaultDataSchemaParameters(params) {
         // Set default value of key level hiddenPolicyTagLocation to match event source level hiddenPolicyTagLocation if not set explicitly and the field is actually hidden
         tableSchema.keys.forEach(key => {
             if (key.hidden && !key.hiddenPolicyTagLocation) {
+                key.hiddenPolicyTagLocation = params.hiddenPolicyTagLocation;
+            }
+        // If a key is the primary key and hidePrimaryKey is true, hide that key - otherwise just the copy of the primary key field that would be in the id field / entity_id field in various tables would be hidden
+            if ((key.keyName == tableSchema.primaryKey) && tableSchema.hidePrimaryKey) {
+                key.hidden = true;
                 key.hiddenPolicyTagLocation = params.hiddenPolicyTagLocation;
             }
         });

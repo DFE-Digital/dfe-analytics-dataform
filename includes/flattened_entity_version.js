@@ -38,7 +38,7 @@ module.exports = (params) => {
                 type: "Event type of the event that provided us with this version of this entity. Either entity_created, entity_updated or entity_imported.",
                 id: {
                     description: "ID of this entity from the database.",
-                    bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation  ? [params.hiddenPolicyTagLocation] : []
+                    bigqueryPolicyTags: tableSchema.hidePrimaryKey && params.hiddenPolicyTagLocation  ? [params.hiddenPolicyTagLocation] : []
                 },
                 created_at: "Timestamp this entity was first saved in the database, according to this version of the entity.",
                 updated_at: "Timestamp this entity was last updated in the database, according to this version of the entity.",
@@ -85,10 +85,10 @@ module.exports = (params) => {
   ${tableSchema.keys.map(key => {
       let coalesceSql;
       if (!key.pastKeyNames) {
-        coalesceSql = `DATA_struct.\`${key.keyName}\``;
+        coalesceSql = `data_struct.\`${key.keyName}\``;
       }
       else {
-        coalesceSql = `COALESCE(DATA_struct.\`${key.keyName}\`, DATA_struct.\`${key.pastKeyNames.join('\`, DATA_struct.\`')}\`)`;
+        coalesceSql = `COALESCE(data_struct.\`${key.keyName}\`, data_struct.\`${key.pastKeyNames.join('\`, data_struct.\`')}\`)`;
       }
       let fieldSql;
       if (key.dataType == 'boolean') {
@@ -120,32 +120,40 @@ FROM (
     SELECT
       AS STRUCT
       ${tableSchema.keys.map(key => {
-        let valueField = 'value';
-        if (key.isArray) {
-          valueField = 'value_array';
-        }
-        let pastKeyNamesSql = '';
-        if (key.pastKeyNames) {
-          key.pastKeyNames.forEach(pastKeyName => {
-            pastKeyNamesSql += `ANY_VALUE(IF(key = "${pastKeyName}", ${valueField}, NULL)) AS \`${pastKeyName}\`, \n`;
-          });
-        }
+        let valueField = key.coalesceWithLegacyPII
+                            ? (
+                            key.isArray
+                              ? 'CASE WHEN hidden THEN (SELECT TO_HEX(SHA256(value)) FROM UNNEST(value_array) AS value) ELSE value_array END'
+                              : 'CASE WHEN hidden THEN TO_HEX(SHA256(value)) ELSE value END'
+                            )
+                            : (
+                            key.isArray
+                              ? 'value_array'
+                              : 'value'
+                            );
+        let pastKeyNamesSql = key.pastKeyNames ? key.pastKeyNames.map(pastKeyName => {
+          return `ANY_VALUE(IF(key = "${pastKeyName}", ${valueField}, NULL)) AS \`${pastKeyName}\`, \n`;
+        }).join('') : '';
         return `ANY_VALUE(IF(key = "${key.keyName}", ${valueField}, NULL)) AS \`${key.keyName}\`, \n` + pastKeyNamesSql;
       }
       ).join('')
       }
     FROM (
       SELECT
-        AS STRUCT key,
-        NULLIF(ARRAY_TO_STRING(ARRAY_CONCAT_AGG(value), ","),
+        AS STRUCT data_combined.key,
+        NULLIF(ARRAY_TO_STRING(ARRAY_CONCAT_AGG(data_combined.value), ","),
           "") AS value,
-        ARRAY_CONCAT_AGG(value) AS value_array
+        ARRAY_CONCAT_AGG(data_combined.value) AS value_array,
+        LOGICAL_OR(hidden_data.value IS NOT NULL) AS hidden
       FROM
         UNNEST(
           ARRAY_CONCAT(data, hidden_data)
-          )
+          ) AS data_combined
+      LEFT JOIN
+        UNNEST(hidden_data) AS hidden_data USING(key)
       GROUP BY
-        key )) AS DATA_struct
+        key )
+    ) AS data_struct
 FROM
   ${ctx.ref(params.eventSourceName + "_entity_version")}
 WHERE

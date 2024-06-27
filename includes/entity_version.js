@@ -1,24 +1,4 @@
 module.exports = (params) => {
-    function idField(dataSchema) {
-        /* Generates SQL that extracts the primary key from the 'data' array of structs, defaulting to 'id', but using the primaryKey configured for each entity_table_name if specified. */
-        var sqlToReturn = 'CASE\n';
-        var allPrimaryKeysAreId = true;
-        dataSchema.forEach(tableSchema => {
-            if (!tableSchema.primaryKey) {
-
-            } else if (tableSchema.primaryKey == "id") {
-                throw new Error(`primaryKey for the ${tableSchema.entityTableName} table is set to 'id', which is the default value for primaryKey. If id is the primary key for this table in the database, remove the primaryKey configuration for this table in your dataSchema. If id is not the primary key for this table in the database, set primaryKey to the correct primary key.`);
-            } else {
-                sqlToReturn += `WHEN entity_table_name = '${tableSchema.entityTableName}' THEN COALESCE(${data_functions.eventDataExtract("data", tableSchema.primaryKey)}, ${data_functions.eventDataExtract("hidden_data", tableSchema.primaryKey)})\n`;
-                allPrimaryKeysAreId = false;
-            }
-        })
-        sqlToReturn += `ELSE ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "id")}\nEND\n`;
-        if (allPrimaryKeysAreId) {
-            sqlToReturn = `${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "id")}`;
-        }
-        return sqlToReturn;
-    }
     return publish(params.eventSourceName + "_entity_version", {
             ...params.defaultConfig,
             type: "incremental",
@@ -50,7 +30,7 @@ module.exports = (params) => {
                 entity_table_name: "Indicates which table this entity version came from",
                 entity_id: {
                     description: "ID of this entity from the database.",
-                    bigqueryPolicyTags: params.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+                    bigqueryPolicyTags: params.dataSchema.map(tableSchema => {return tableSchema.hidePrimaryKey;}).includes(true) && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
                 },
                 created_at: "Timestamp this entity was first saved in the database, according to this version of the entity.",
                 updated_at: "Timestamp this entity was last updated in the database, according to this version of the entity.",
@@ -66,8 +46,8 @@ module.exports = (params) => {
                     columns: {
                         key: "Name of the field in the entity_table_name table in the database after it was created or updated, or just before it was imported or destroyed.",
                         value: {
-                          description: "Contents of the field in the database after it was created or updated, or just before it was imported or destroyed.",
-                          bigqueryPolicyTags: params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+                            description: "Contents of the field in the database after it was created or updated, or just before it was imported or destroyed.",
+                            bigqueryPolicyTags: params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
                         }
                     }
                 },
@@ -94,43 +74,55 @@ module.exports = (params) => {
     *
   FROM
     (
-      SELECT
-        event_type,
-        occurred_at,
-        entity_table_name,
-        ${idField(params.dataSchema)} AS entity_id,
-        ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "created_at", false, "timestamp")} AS created_at,
-        ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "updated_at", false, "timestamp")} AS updated_at,
-        data,
-        hidden_data,
-        request_uuid,
-        request_path,
-        request_user_id,
-        request_method,
-        request_user_agent,
-        request_referer,
-        request_query,
-        response_content_type,
-        response_status,
-        anonymised_user_agent_and_ip,
-        device_category,
-        browser_name,
-        browser_version,
-        operating_system_name,
-        operating_system_vendor,
-        operating_system_version
-      FROM
-        ${ctx.ref("events_" + params.eventSourceName)}
-      WHERE
-        occurred_at > event_timestamp_checkpoint
-        AND event_type IN (
-          "create_entity",
-          "update_entity",
-          "delete_entity",
-          "import_entity"
+    SELECT
+        *
+        FROM (
+            SELECT
+                event_type,
+                occurred_at,
+                entity_table_name,
+                /* Extracts the primary key from the 'data' array of structs, defaulting to 'id', but using the primaryKey configured for each entity_table_name if specified. */
+                CASE
+                    ${params.dataSchema.map(tableSchema => {
+                        return `WHEN entity_table_name = '${tableSchema.entityTableName}' THEN COALESCE(${data_functions.eventDataExtract("data", tableSchema.primaryKey || "id")},
+                            ${tableSchema.coalescePrimaryKeyWithLegacyPII ?
+                                `TO_HEX(SHA256(${data_functions.eventDataExtract("hidden_data", tableSchema.primaryKey || "id")}))`
+                                : data_functions.eventDataExtract("hidden_data", tableSchema.primaryKey || "id")})\n`;
+                    }).join('\n')}
+                END AS entity_id,
+                ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "created_at", false, "timestamp")} AS created_at,
+                ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "updated_at", false, "timestamp")} AS updated_at,
+                data,
+                hidden_data,
+                request_uuid,
+                request_path,
+                request_user_id,
+                request_method,
+                request_user_agent,
+                request_referer,
+                request_query,
+                response_content_type,
+                response_status,
+                anonymised_user_agent_and_ip,
+                device_category,
+                browser_name,
+                browser_version,
+                operating_system_name,
+                operating_system_vendor,
+                operating_system_version
+            FROM
+                ${ctx.ref("events_" + params.eventSourceName)}
+            WHERE
+                occurred_at > event_timestamp_checkpoint
+                AND event_type IN (
+                "create_entity",
+                "update_entity",
+                "delete_entity",
+                "import_entity"
+                )
+                AND entity_table_name IS NOT NULL
         )
-        AND entity_table_name IS NOT NULL
-        AND ${idField(params.dataSchema)} IS NOT NULL
+        WHERE entity_id IS NOT NULL
     )
     ${ctx.when(ctx.incremental(),
     `UNION ALL (SELECT event_type, valid_from AS occurred_at, entity_table_name, entity_id, created_at, updated_at, data, hidden_data, request_uuid, request_path, request_user_id, request_method, request_user_agent, request_referer, request_query, response_content_type, response_status, anonymised_user_agent_and_ip, device_category, browser_name, browser_version, operating_system_name, operating_system_vendor, operating_system_version FROM ${ctx.self()} WHERE valid_to IS NULL AND valid_from <= event_timestamp_checkpoint)`)

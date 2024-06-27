@@ -114,6 +114,7 @@ dfeAnalyticsDataform({
         {
             entityTableName: "courses",
             description: "",
+            hidePrimaryKey: true,
             keys: [{
                 keyName: "accredited_body_code",
                 dataType: "string",
@@ -134,7 +135,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "level",
                 dataType: "string",
-                description: "level of the course"
+                description: "level of the course",
+                hidden: true
             }, {
                 keyName: "min_age",
                 dataType: "integer",
@@ -162,7 +164,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "full_time_start_date",
                 dataType: "date",
-                description: "Full time start date"
+                description: "Full time start date",
+                hidden: true
             }, {
                 keyName: "full_time_end_date",
                 dataType: "date",
@@ -190,7 +193,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "summary",
                 dataType: "string",
-                description: "summary description of the course"
+                description: "summary description of the course",
+                hidden: true
             }, {
                 keyName: "uuid",
                 dataType: "string",
