@@ -1,9 +1,9 @@
 module.exports = (version, params) => {
-   // if ((!params.enableMonitoring) || dataform.projectConfig.schemaSuffix) {
+    if ((!params.enableMonitoring) || dataform.projectConfig.schemaSuffix) {
         /* Don't send pipeline snapshot if monitoring is disabled (enableMonitoring is true by default)
         or if we're in a Dataform development workspace (schemaSuffix is null if we're in a development workspace) */
-    //    return true;
-    //}
+        return true;
+    }
     return operate("pipeline_snapshot_" + params.eventSourceName, ctx => [`
 BEGIN
 INSERT \`cross-teacher-services.monitoring.pipeline_snapshots\` (
