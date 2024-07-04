@@ -19,7 +19,16 @@ INSERT \`cross-teacher-services.monitoring.pipeline_snapshots\` (
     number_of_rows,
     number_of_missing_rows,
     number_of_extra_rows,
-    dfe_analytics_dataform_parameters
+    dfe_analytics_dataform_parameters,
+    hidden_pii_streamed_within_the_last_week,
+    hidden_pii_configured,
+    weekly_change_in_number_of_rows,
+    weekly_change_in_number_of_missing_rows,
+    weekly_change_in_number_of_extra_rows,
+    largest_error_rate_for_any_table,
+    table_with_largest_error_rate,
+    largest_twelve_week_projected_error_rate_for_any_table,
+    table_with_largest_twelve_week_projected_error_rate
     )
 WITH
   ${params.transformEntityEvents ? `
@@ -29,7 +38,7 @@ WITH
   FROM
     ${ctx.ref("entity_table_check_scheduled_" + params.eventSourceName)}
   QUALIFY
-    ROW_NUMBER() OVER (PARTITION BY entity_table_name ORDER BY checksum_calculated_at ASC) = 1
+    ROW_NUMBER() OVER (PARTITION BY entity_table_name ORDER BY checksum_calculated_at DESC) = 1
   ),
   entity_table_check_scheduled_metrics AS (
   SELECT
