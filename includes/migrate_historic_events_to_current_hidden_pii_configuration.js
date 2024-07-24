@@ -1,7 +1,7 @@
 module.exports = (params) => {
   return operate(params.eventSourceName + "_migrate_historic_events_to_current_hidden_pii_configuration", ctx => [`
 CREATE OR REPLACE PROCEDURE
-  \`${dataform.projectConfig.defaultDatabase}.${dataform.projectConfig.defaultSchema + (dataform.projectConfig.schemaSuffix ? "_" + dataform.projectConfig.schemaSuffix : "")}.migrate_historic_events_to_current_hidden_pii_configuration\`() OPTIONS(description="Migrates historic events in the source events table and events_${params.eventSourceName} table such that fields in the data and hidden_data array fields are in the array they are currently expected to be in by dfe-analytics-dataform. Fails if any events from the last day are not in the expected array field.")
+  \`${dataform.projectConfig.defaultDatabase}.${dataform.projectConfig.defaultSchema + (dataform.projectConfig.schemaSuffix ? "_" + dataform.projectConfig.schemaSuffix : "")}.migrate_historic_${params.eventSourceName}_events_to_current_hidden_pii_configuration\`() OPTIONS(description="Migrates historic events in the source events table and events_${params.eventSourceName} table such that fields in the data and hidden_data array fields are in the array they are currently expected to be in by dfe-analytics-dataform. Fails if any events from the last day are not in the expected array field.")
 BEGIN
 BEGIN TRANSACTION;
 /* Series of IF... RAISE... statements that prevent the procedure running if it detects that certain unsupported scenarios are the case */
