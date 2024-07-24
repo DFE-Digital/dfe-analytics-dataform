@@ -12,7 +12,7 @@ IF EXISTS
   SELECT
     *
   FROM
-    ${ctx.ref(params.eventSourceName + "_hidden_pii_configuration_does_not_match_events_streamed_yesterday")}
+    ${ctx.resolve(params.eventSourceName + "_hidden_pii_configuration_does_not_match_events_streamed_yesterday")}
   )
   THEN RAISE USING MESSAGE = "Events have been streamed since the beginning of yesterday with data in the wrong field (data or hidden_data). Please ensure the ${params.eventSourceName}_hidden_pii_configuration_does_not_match_events_streamed_yesterday assertion passes before running this procedure.";
 END IF;
@@ -23,7 +23,7 @@ IF NOT EXISTS
   SELECT
     *
   FROM
-    ${ctx.ref(params.eventSourceName + "_hidden_pii_configuration_does_not_match_sample_of_historic_events_streamed")}
+    ${ctx.resolve(params.eventSourceName + "_hidden_pii_configuration_does_not_match_sample_of_historic_events_streamed")}
   )
   THEN RAISE USING MESSAGE = "No events with hidden PII field configuration that doesn't match current dfe-analytics-dataform were found in a sample of 1% of historic events streamed before the beginning of yesterday. You probably don't need to run this procedure.";
 END IF;
