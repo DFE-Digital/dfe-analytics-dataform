@@ -93,10 +93,20 @@ HAVING
   (updates_made_with_this_key_hidden > 0 AND configured_to_be_hidden_in_data_schema IS FALSE)
   OR (updates_made_with_this_key_not_hidden > 0 AND configured_to_be_hidden_in_data_schema IS TRUE)
   ${assertionNamePart == 'hidden_pii_configuration_does_not_match_events_streamed_yesterday' ? `
-    /* Don't fail if a key has started being hidden in streamed data, with no overlap period, and the dataSchema is configured correctly */
-    AND (NOT (configured_to_be_hidden_in_data_schema IS TRUE AND last_update_with_this_key_not_hidden_at < first_update_with_this_key_hidden_at AND first_update_with_this_key_not_hidden_at <= last_update_with_this_key_not_hidden_at AND first_update_with_this_key_hidden_at <= last_update_with_this_key_hidden_at))
-    /* Don't fail if a key has stopped being hidden in streamed data, with no overlap period, and the dataSchema is configured correctly */
-    AND (NOT (configured_to_be_hidden_in_data_schema IS FALSE AND first_update_with_this_key_not_hidden_at > last_update_with_this_key_hidden_at AND first_update_with_this_key_not_hidden_at <= last_update_with_this_key_not_hidden_at AND first_update_with_this_key_hidden_at <= last_update_with_this_key_hidden_at))` : ``}
+    /* Don't fail if a key has started being hidden in streamed data, with <60s overlap period, and the dataSchema is configured correctly */
+    AND (NOT (
+        configured_to_be_hidden_in_data_schema IS TRUE
+        AND TIMESTAMP_DIFF(first_update_with_this_key_hidden_at, last_update_with_this_key_not_hidden_at, SECOND) BETWEEN 0 AND 60
+        AND first_update_with_this_key_not_hidden_at <= last_update_with_this_key_not_hidden_at
+        AND first_update_with_this_key_hidden_at <= last_update_with_this_key_hidden_at
+        ))
+    /* Don't fail if a key has stopped being hidden in streamed data, with <60s overlap period, and the dataSchema is configured correctly */
+    AND (NOT (
+        configured_to_be_hidden_in_data_schema IS FALSE
+        AND TIMESTAMP_DIFF(first_update_with_this_key_not_hidden_at, last_update_with_this_key_hidden_at, SECOND) BETWEEN 0 AND 60
+        AND first_update_with_this_key_not_hidden_at <= last_update_with_this_key_not_hidden_at
+        AND first_update_with_this_key_hidden_at <= last_update_with_this_key_hidden_at
+        ))` : ``}
 ORDER BY
   entity_name,
   key_configured,

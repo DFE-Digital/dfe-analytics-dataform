@@ -55,7 +55,7 @@ FROM (
 WHERE
   event.entity_table_name = entity.entity_name
   AND event_type IN ("create_entity", "update_entity", "delete_entity", "import_entity")
-  AND DATE(occurred_at) < CURRENT_DATE - 1 ;
+  AND DATE(occurred_at) <= CURRENT_DATE - 1 ;
 `;}).join('\n')}
 
 COMMIT TRANSACTION;
