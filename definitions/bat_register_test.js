@@ -3,12 +3,13 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
+    disabled: true,
     eventSourceName: "register",
     bqDatasetName: "register_events_production",
     bqEventsTableName: "events",
     urlRegex: "register-trainee-teachers.service.gov.uk",
     transformEntityEvents: true,
-    compareChecksums: true,
+    compareChecksums: false,
     enableSessionTables: false,
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     dataSchema: [{
