@@ -8,8 +8,8 @@ module.exports = (params) => {
                 nonNull: ["entity_id", "occurred_at", "key_updated", "entity_table_name"]
             },
             bigquery: {
-                partitionBy: "DATE(occurred_at)",
-                clusterBy: ["entity_table_name", "key_updated"],
+                partitionBy: "RANGE_BUCKET(entity_table_name_partition_number, GENERATE_ARRAY(0, 1000, 1))",
+                clusterBy: ["key_updated"],
                 labels: {
                     eventsource: params.eventSourceName.toLowerCase(),
                     sourcedataset: params.bqDatasetName.toLowerCase()
@@ -89,7 +89,8 @@ module.exports = (params) => {
                 browser_version: "The version of the browser that caused this update.",
                 operating_system_name: "The name of the operating system that caused this update.",
                 operating_system_vendor: "The vendor of the operating system that caused this update.",
-                operating_system_version: "The version of the operating system that caused this update."
+                operating_system_version: "The version of the operating system that caused this update.",
+                entity_table_name_partition_number: "Partition number between 0 and 999 generated from entity_table_name. To filter by a specific entity_table_name use ABS(MOD(FARM_FINGERPRINT(entity_table_name), 999)). You may wish to use the relevant flattened field updates table for this entity instead, however!"
             }
         }).query(ctx => `WITH instance_updates AS (
   SELECT
@@ -129,6 +130,7 @@ module.exports = (params) => {
 )
 SELECT
   instance_updates.*,
+  ABS(MOD(FARM_FINGERPRINT(entity_table_name), 999)) AS entity_table_name_partition_number,
   FARM_FINGERPRINT(entity_id || entity_table_name || CAST(occurred_at AS STRING)) AS update_id,
   new_data_combined.key AS key_updated,
   ARRAY_TO_STRING(new_data_combined.value,",") AS new_value,
