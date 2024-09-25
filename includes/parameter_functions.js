@@ -65,6 +65,16 @@ const validCustomEventSchemaKeyParameters = ['keyName',
     'hiddenPolicyTagLocation'
 ];
 
+const invalidCustomEventTypes = ['create_entity',
+    'update_entity',
+    'delete_entity',
+    'import_entity',
+    'initialise_analytics',
+    'entity_table_check',
+    'import_entity_table_check',
+    'web_request'
+];
+
 function validateParams(params) {
     Object.keys(params).forEach(key => {
         if (!validTopLevelParameters.includes(key)) {
@@ -87,7 +97,7 @@ function validateParams(params) {
             throw new Error(`Value of materialisationType ${tableSchema.materialisation} for table ${tableSchema.entityTableName} in dataSchema must be either 'view' or 'table'.`);
         }
         if (tableSchema.primaryKey == "id") {
-                throw new Error(`primaryKey for the ${tableSchema.entityTableName} table is set to 'id', which is the default value for primaryKey. If id is the primary key for this table in the database, remove the primaryKey configuration for this table in your dataSchema. If id is not the primary key for this table in the database, set primaryKey to the correct primary key.`);
+            throw new Error(`primaryKey for the ${tableSchema.entityTableName} table is set to 'id', which is the default value for primaryKey. If id is the primary key for this table in the database, remove the primaryKey configuration for this table in your dataSchema. If id is not the primary key for this table in the database, set primaryKey to the correct primary key.`);
         }
         if (tableSchema.hidePrimaryKey && !params.hiddenPolicyTagLocation) {
             throw new Error(`hiddenPolicyTagLocation not set at eventDataSource level even though hidePrimaryKey is ${tableSchema.hidePrimaryKey} for the ${tableSchema.entityTableName} table.`);
@@ -129,6 +139,9 @@ function validateParams(params) {
     });
     // Loop through customEventSchema to handle errors
     params.customEventSchema.forEach(customEvent => {
+        if (invalidCustomEventTypes.includes(customEvent.eventType)) {
+            throw new Error(`Custom event type ${customEvent.eventType} is an event type streamed by dfe-analytics by default, so it is not a custom event`);
+        };
         Object.keys(customEvent).forEach(param => {
             if (!validCustomEventSchemaEventParameters.includes(param)) {
                 throw new Error(`Invalid event level parameter in customEventSchema passed to dfeAnalyticsDataform() for the ${customEvent.eventType} custom event: ${param}. Valid event level parameters are: ${validcustomEventSchemaTableParameters.sort().join(', ')}`);
@@ -168,7 +181,7 @@ function setDefaultSchemaParameters(params) {
             if (key.hidden && !key.hiddenPolicyTagLocation) {
                 key.hiddenPolicyTagLocation = params.hiddenPolicyTagLocation;
             }
-        // If a key is the primary key and hidePrimaryKey is true, hide that key - otherwise just the copy of the primary key field that would be in the id field / entity_id field in various tables would be hidden
+            // If a key is the primary key and hidePrimaryKey is true, hide that key - otherwise just the copy of the primary key field that would be in the id field / entity_id field in various tables would be hidden
             if ((key.keyName == tableSchema.primaryKey) && tableSchema.hidePrimaryKey) {
                 key.hidden = true;
                 key.hiddenPolicyTagLocation = params.hiddenPolicyTagLocation;

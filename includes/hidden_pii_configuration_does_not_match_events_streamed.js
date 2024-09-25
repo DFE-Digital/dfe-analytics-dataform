@@ -1,5 +1,5 @@
 module.exports = (params) => {
-  const customEventAssertions = params.customEventSchema.length > 0 ?
+  const customEventAssertions = params.customEventSchema.length > 0 && (params.customEventSchema.some(customEvent => customEvent.keys.length > 0)) ?
     ["hidden_pii_configuration_does_not_match_custom_events_streamed_yesterday",
     "hidden_pii_configuration_does_not_match_sample_of_historic_custom_events_streamed"
     ] : [];
@@ -17,7 +17,7 @@ WITH expected_fields AS (
   SELECT DISTINCT
     ${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
     this_key.key AS key_configured,
-    this_key.configured_to_be_hidden_in_schema AS configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom event`}_schema
+    this_key.configured_to_be_hidden_in_schema AS configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom_event`}_schema
   FROM
   UNNEST([
       ${(assertionNamePart.includes('entity') ? params.dataSchema : params.customEventSchema).map(schema => {
@@ -102,21 +102,21 @@ FROM
 GROUP BY
   ${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
   key_configured,
-  configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom event`}_schema
+  configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom_event`}_schema
 HAVING
-  (updates_made_with_this_key_hidden > 0 AND configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom event`}_schema IS FALSE)
-  OR (updates_made_with_this_key_not_hidden > 0 AND configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom event`}_schema IS TRUE)
+  (updates_made_with_this_key_hidden > 0 AND configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom_event`}_schema IS FALSE)
+  OR (updates_made_with_this_key_not_hidden > 0 AND configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom_event`}_schema IS TRUE)
   ${assertionNamePart.includes('yesterday') ? `
     /* Don't fail if a key has started being hidden in streamed data, with <60s overlap period, and the schema is configured correctly */
     AND (NOT (
-        configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom event`}_schema IS TRUE
+        configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom_event`}_schema IS TRUE
         AND TIMESTAMP_DIFF(first_update_with_this_key_hidden_at, last_update_with_this_key_not_hidden_at, SECOND) BETWEEN 0 AND 60
         AND first_update_with_this_key_not_hidden_at <= last_update_with_this_key_not_hidden_at
         AND first_update_with_this_key_hidden_at <= last_update_with_this_key_hidden_at
         ))
     /* Don't fail if a key has stopped being hidden in streamed data, with <60s overlap period, and the schema is configured correctly */
     AND (NOT (
-        configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom event`}_schema IS FALSE
+        configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom_event`}_schema IS FALSE
         AND TIMESTAMP_DIFF(first_update_with_this_key_not_hidden_at, last_update_with_this_key_hidden_at, SECOND) BETWEEN 0 AND 60
         AND first_update_with_this_key_not_hidden_at <= last_update_with_this_key_not_hidden_at
         AND first_update_with_this_key_hidden_at <= last_update_with_this_key_hidden_at
@@ -124,5 +124,5 @@ HAVING
 ORDER BY
   ${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
   key_configured,
-  configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom event`}_schema`)})
+  configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom_event`}_schema`)})
 }

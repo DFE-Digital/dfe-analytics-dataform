@@ -11,10 +11,10 @@ module.exports = (params) => {
         publish(customEvent.eventType + "_" + params.eventSourceName, {
             ...params.defaultConfig,
             type: "incremental",
-            dependencies: [
+            dependencies: params.customEventSchema.some(customEvent => customEvent.keys.length > 0) ? [
                 params.eventSourceName + "_" + "hidden_pii_configuration_does_not_match_custom_events_streamed_yesterday",
                 params.eventSourceName + "_" + "hidden_pii_configuration_does_not_match_sample_of_historic_custom_events_streamed"
-            ],
+            ]: [],
             assertions: {
                 nonNull: ["occurred_at"]
             },
