@@ -67,12 +67,12 @@ module.exports = (params) => {
 WITH field_update AS (
   /* Pre filter field updates before the LEFT JOIN further down, reducing bytes processed */
   SELECT
-      * EXCEPT(new_DATA, previous_DATA, entity_table_name, updated_at)
+      * EXCEPT(new_DATA, previous_DATA, entity_table_name, updated_at, entity_table_name_partition_number)
   FROM
     ${ctx.ref(params.eventSourceName + "_entity_field_updates")}
   WHERE
-    entity_table_name = "${tableSchema.entityTableName}")
-
+    entity_table_name_partition_number = ABS(MOD(FARM_FINGERPRINT("${tableSchema.entityTableName}"), 999))
+  )
 SELECT
   field_update.*,
     ${tableSchema.keys.map(key => {

@@ -115,7 +115,6 @@ dfeAnalyticsDataform({
         {
             entityTableName: "courses",
             description: "",
-            hidePrimaryKey: false,
             keys: [{
                 keyName: "accredited_body_code",
                 dataType: "string",
@@ -136,8 +135,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "level",
                 dataType: "string",
-                description: "level of the course",
-                hidden: false
+                description: "level of the course"
             }, {
                 keyName: "min_age",
                 dataType: "integer",
@@ -165,8 +163,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "full_time_start_date",
                 dataType: "date",
-                description: "Full time start date",
-                hidden: false
+                description: "Full time start date"
             }, {
                 keyName: "full_time_end_date",
                 dataType: "date",
@@ -194,8 +191,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "summary",
                 dataType: "string",
-                description: "summary description of the course",
-                hidden: false
+                description: "summary description of the course"
             }, {
                 keyName: "uuid",
                 dataType: "string",
@@ -461,6 +457,59 @@ dfeAnalyticsDataform({
             }]
         },
         {
+            entityTableName: "lead_partners",
+            description: "",
+            keys: [{
+                    keyName: "urn",
+                    dataType: "string",
+                    description: ""
+                },
+                {
+                    keyName: "record_type",
+                    dataType: "string",
+                    description: ""
+                },
+                {
+                    keyName: "name",
+                    dataType: "string",
+                    description: ""
+                },
+                {
+                    keyName: "ukprn",
+                    dataType: "string",
+                    description: "United Kingdom Provider Reference Number"
+                },
+                {
+                    keyName: "school_id",
+                    dataType: "string",
+                    description: ""
+                },
+                {
+                    keyName: "provider_id",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "discarded_at",
+                    dataType: "timestamp",
+                    description: "Timestamp at which a lead partner was discarded"
+                }
+            ]
+        },
+        {
+            entityTableName: "lead_partner_users",
+            description: "Contains information on association of service users with lead partners.",
+            keys: [{
+                    keyName: "lead_partner_id",
+                    dataType: "string",
+                    description: "Unique id of the lead partner."
+                },
+                {
+                    keyName: "user_id",
+                    dataType: "string",
+                    description: "Unique id of the user."
+                }]
+        },
+        {
             entityTableName: "lead_school_users",
             description: "",
             keys: [{
@@ -556,6 +605,10 @@ dfeAnalyticsDataform({
                 keyName: "accreditation_id",
                 dataType: "string",
                 description: "accreditation id allocated when a body becomes accredited"
+            }, {
+                keyName: "accredited",
+                dataType: "boolean",
+                description: "Indicates whether the provider is currently accredited."
             }, {
                 keyName: "code",
                 dataType: "string",
@@ -729,8 +782,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "disability_disclosure",
                 dataType: "string",
-                description: "",
-                hidden: false
+                description: ""
             }, {
                 keyName: "discarded_at",
                 dataType: "timestamp",
@@ -794,11 +846,18 @@ dfeAnalyticsDataform({
                 dataType: "date",
                 description: "ITT course start date"
             }, {
+                keyName: "lead_partner_id",
+                dataType: "string",
+                description: "Lead partner",
+            }, {
+                keyName: "lead_partner_not_applicable",
+                dataType: "boolean",
+                description: "Lead partner not applicable, true or false",
+            }, {
                 keyName: "lead_school_id",
                 dataType: "string",
                 description: "Lead school urn",
-                foreignKeyTable: "schools",
-                hidden: false
+                foreignKeyTable: "schools"
             }, {
                 keyName: "lead_school_not_applicable",
                 dataType: "boolean",
@@ -819,8 +878,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "progress",
                 dataType: "string",
-                description: "progress - various JSON pairs",
-                hidden: false
+                description: "progress - various JSON pairs"
             }, {
                 keyName: "provider_id",
                 dataType: "string",
@@ -854,8 +912,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "sex",
                 dataType: "string",
-                description: "Trainee sex",
-                hidden: false
+                description: "Trainee sex"
             }, {
                 keyName: "state",
                 dataType: "string",
@@ -884,7 +941,7 @@ dfeAnalyticsDataform({
                 keyName: "trn",
                 dataType: "string",
                 description: "Trainees's Teacher Reference Number",
-                hidden: false
+                hidden: true
             }, {
                 keyName: "withdraw_date",
                 dataType: "date",

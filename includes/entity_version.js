@@ -13,9 +13,8 @@ module.exports = (params) => {
             },
             dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields", params.eventSourceName + "_hidden_pii_configuration_does_not_match_entity_events_streamed_yesterday", params.eventSourceName + "_hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed"],
             bigquery: {
-                partitionBy: "DATE(valid_to)",
-                clusterBy: ["entity_table_name"],
-                updatePartitionFilter: "valid_to IS NULL",
+                partitionBy: "RANGE_BUCKET(entity_table_name_and_valid_to_partition_number, GENERATE_ARRAY(0, 2000, 1))",
+                updatePartitionFilter: "entity_table_name_and_valid_to_partition_number < 1000",
                 labels: {
                     eventsource: params.eventSourceName.toLowerCase(),
                     sourcedataset: params.bqDatasetName.toLowerCase()
@@ -66,7 +65,8 @@ module.exports = (params) => {
                 browser_version: "The version of the browser that caused this version to be created.",
                 operating_system_name: "The name of the operating system that caused this version to be created.",
                 operating_system_vendor: "The vendor of the operating system that caused this version to be created.",
-                operating_system_version: "The version of the operating system that caused this version to be created."
+                operating_system_version: "The version of the operating system that caused this version to be created.",
+                entity_table_name_and_valid_to_partition_number: "Partition number between 0 and 1999 generated from a combination of entity_table_name and whether or not valid_to IS NULL. <1000 if valid_to IS NULL, >= 1000 if valid_to IS NOT NULL. For a specific entity_table_name use ABS(MOD(FARM_FINGERPRINT(entity_table_name), 999)) + IF(valid_to IS NULL,0,1000). You may wish to use the relevant flattened version/latest table for this entity instead, however!"
             }
         }).query(ctx => `WITH entity_events AS (
   /* all entity events that have been streamed since we last ran this query, UNION ALLed with the latest events only for events that this query already processed in the past - this avoids having to process any unnecessary entity events later in the query */
@@ -125,11 +125,12 @@ module.exports = (params) => {
         WHERE entity_id IS NOT NULL
     )
     ${ctx.when(ctx.incremental(),
-    `UNION ALL (SELECT event_type, valid_from AS occurred_at, entity_table_name, entity_id, created_at, updated_at, data, hidden_data, request_uuid, request_path, request_user_id, request_method, request_user_agent, request_referer, request_query, response_content_type, response_status, anonymised_user_agent_and_ip, device_category, browser_name, browser_version, operating_system_name, operating_system_vendor, operating_system_version FROM ${ctx.self()} WHERE valid_to IS NULL AND valid_from <= event_timestamp_checkpoint)`)
+    `UNION ALL (SELECT event_type, valid_from AS occurred_at, entity_table_name, entity_id, created_at, updated_at, data, hidden_data, request_uuid, request_path, request_user_id, request_method, request_user_agent, request_referer, request_query, response_content_type, response_status, anonymised_user_agent_and_ip, device_category, browser_name, browser_version, operating_system_name, operating_system_vendor, operating_system_version FROM ${ctx.self()} WHERE entity_table_name_and_valid_to_partition_number < 1000 AND valid_from <= event_timestamp_checkpoint)`)
     }
 )
 SELECT
-  *
+  *,
+  ABS(MOD(FARM_FINGERPRINT(entity_table_name), 999)) + IF(valid_to IS NULL,0,1000) AS entity_table_name_and_valid_to_partition_number
 FROM
   (
     /* for each event, work out the valid_from and valid_to timestamps for the version of the entity it represents by working out the next value of occurred_at for this instance of this entity */
@@ -187,7 +188,8 @@ WHERE
             UPDATE
             ${ctx.self()} AS entity_version
             SET
-            valid_to = apparently_deleted_before
+            valid_to = apparently_deleted_before,
+            entity_table_name_and_valid_to_partition_number = ABS(MOD(FARM_FINGERPRINT(apparently_deleted_entity.entity_table_name), 999)) + IF(apparently_deleted_entity.apparently_deleted_before IS NULL,0,1000)
             FROM (
             WITH
                 complete_import_with_ids AS (
@@ -227,13 +229,13 @@ WHERE
                 import.entity_table_name = entity_version.entity_table_name
                 AND import.checksum_calculated_at > entity_version.valid_from
             WHERE
-                entity_version.valid_to IS NULL
+                entity_version.entity_table_name_and_valid_to_partition_number < 1000
                 AND entity_version.entity_id NOT IN UNNEST(import.imported_entity_ids)
             GROUP BY
                 entity_version.entity_table_name,
                 entity_version.entity_id) AS apparently_deleted_entity
             WHERE
-            entity_version.valid_to IS NULL
+            entity_version.entity_table_name_and_valid_to_partition_number < 1000
             AND entity_version.entity_table_name = apparently_deleted_entity.entity_table_name
             AND entity_version.entity_id = apparently_deleted_entity.id_that_was_apparently_deleted
     `)
