@@ -72,6 +72,7 @@ WITH field_update AS (
     ${ctx.ref(params.eventSourceName + "_entity_field_updates")}
   WHERE
     entity_table_name_partition_number = ABS(MOD(FARM_FINGERPRINT("${tableSchema.entityTableName}"), 999))
+    AND entity_table_name = "${tableSchema.entityTableName}"
   )
 SELECT
   field_update.*,
