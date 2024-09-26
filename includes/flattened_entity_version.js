@@ -159,6 +159,7 @@ FROM
 WHERE
   entity_table_name_and_valid_to_partition_number IN (ABS(MOD(FARM_FINGERPRINT("${tableSchema.entityTableName}"), 999)),
     ABS(MOD(FARM_FINGERPRINT("${tableSchema.entityTableName}"), 999)) + 1000)
+    AND entity_table_name = "${tableSchema.entityTableName}"
   )`)
 .postOps(ctx => tableSchema.materialisation == "table" ? data_functions.setKeyConstraints(ctx, dataform, {
     primaryKey: "id, valid_from"
