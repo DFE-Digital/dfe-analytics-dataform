@@ -21,8 +21,8 @@ INSERT \`cross-teacher-services.monitoring.pipeline_snapshots\` (
     number_of_extra_rows,
     dfe_analytics_dataform_parameters,
     hidden_pii_streamed_within_the_last_week,
-    hidden_pii_configured,
-    ${params.transformEntityEvents ? `weekly_change_in_number_of_rows,
+    hidden_pii_configured
+    ${params.transformEntityEvents ? `, weekly_change_in_number_of_rows,
     weekly_change_in_number_of_missing_rows,
     weekly_change_in_number_of_extra_rows,
     largest_error_rate_for_any_table,
@@ -98,8 +98,8 @@ SELECT
   """${JSON.stringify(params)}""" AS dfe_analytics_dataform_parameters,
   /* New parameters from dfe-analytics-dataform v2.0.0 below */
   events_table_metrics.hidden_pii_streamed_within_the_last_week,
-  ${params.hiddenPolicyTagLocation ? "TRUE" : "FALSE"} AS hidden_pii_configured,
-  ${params.transformEntityEvents ? `entity_table_check_scheduled_metrics.weekly_change_in_number_of_rows,
+  ${params.hiddenPolicyTagLocation ? "TRUE" : "FALSE"} AS hidden_pii_configured
+  ${params.transformEntityEvents ? `, entity_table_check_scheduled_metrics.weekly_change_in_number_of_rows,
   entity_table_check_scheduled_metrics.weekly_change_in_number_of_missing_rows,
   entity_table_check_scheduled_metrics.weekly_change_in_number_of_extra_rows,
   entity_table_check_scheduled_metrics.largest_error_rate_for_any_table,
