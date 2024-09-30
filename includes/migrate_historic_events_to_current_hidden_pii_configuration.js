@@ -98,9 +98,9 @@ FROM (
   }
   ).join(',')}  
   ])
-) AS entity
+) AS custom_event
 WHERE
-  event.event_type = entity.event_type
+  event.event_type = custom_event.event_type
   AND event_type IN (
     ${params.customEventSchema.map(customEvent => {
     return `"${customEvent.eventType}"`}).join(`, `)}
