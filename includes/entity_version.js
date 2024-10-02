@@ -85,9 +85,7 @@ module.exports = (params) => {
                 CASE
                     ${params.dataSchema.map(tableSchema => {
                         return `WHEN entity_table_name = '${tableSchema.entityTableName}' THEN COALESCE(${data_functions.eventDataExtract("data", tableSchema.primaryKey || "id")},
-                            ${tableSchema.coalescePrimaryKeyWithLegacyPII ?
-                                `TO_HEX(SHA256(${data_functions.eventDataExtract("hidden_data", tableSchema.primaryKey || "id")}))`
-                                : data_functions.eventDataExtract("hidden_data", tableSchema.primaryKey || "id")})\n`;
+                            ${data_functions.eventDataExtract("hidden_data", tableSchema.primaryKey || "id")})\n`;
                     }).join('\n')}
                 END AS entity_id,
                 ${data_functions.eventDataExtract("ARRAY_CONCAT(data, hidden_data)", "created_at", false, "timestamp")} AS created_at,

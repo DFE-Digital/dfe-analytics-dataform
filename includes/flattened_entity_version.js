@@ -120,17 +120,7 @@ FROM (
     SELECT
       AS STRUCT
       ${tableSchema.keys.map(key => {
-        let valueField = key.coalesceWithLegacyPII
-                            ? (
-                            key.isArray
-                              ? 'CASE WHEN hidden THEN (SELECT TO_HEX(SHA256(value)) FROM UNNEST(value_array) AS value) ELSE value_array END'
-                              : 'CASE WHEN hidden THEN TO_HEX(SHA256(value)) ELSE value END'
-                            )
-                            : (
-                            key.isArray
-                              ? 'value_array'
-                              : 'value'
-                            );
+        let valueField = key.isArray ? 'value_array' : 'value';
         let pastKeyNamesSql = key.pastKeyNames ? key.pastKeyNames.map(pastKeyName => {
           return `ANY_VALUE(IF(key = "${pastKeyName}", ${valueField}, NULL)) AS \`${pastKeyName}\`, \n`;
         }).join('') : '';

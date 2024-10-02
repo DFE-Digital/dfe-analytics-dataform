@@ -27,7 +27,6 @@ const validDataSchemaTableParameters = ['entityTableName',
     'keys',
     'primaryKey',
     'hidePrimaryKey',
-    'coalescePrimaryKeyWithLegacyPII',
     'dataFreshnessDays',
     'dataFreshnessDisableDuringRange',
     'materialisation'
@@ -42,8 +41,7 @@ const validDataSchemaKeyParameters = ['keyName',
     'foreignKeyName',
     'foreignKeyTable',
     'hidden',
-    'hiddenPolicyTagLocation',
-    'coalesceWithLegacyPII'
+    'hiddenPolicyTagLocation'
 ];
 
 function validateParams(params) {
@@ -73,9 +71,6 @@ function validateParams(params) {
         if (tableSchema.hidePrimaryKey && !params.hiddenPolicyTagLocation) {
             throw new Error(`hiddenPolicyTagLocation not set at eventDataSource level even though hidePrimaryKey is ${tableSchema.hidePrimaryKey} for the ${tableSchema.entityTableName} table.`);
         }
-        if (tableSchema.coalescePrimaryKeyWithLegacyPII && !tableSchema.hidePrimaryKey) {
-            throw new Error(`hidePrimaryKey not set at table level even though coalescePrimaryKeyWithLegacyPII is ${tableSchema.coalesceIDWithLegacyPII} for the ${tableSchema.entityTableName} table.`);
-        }
         tableSchema.keys.forEach(key => {
             Object.keys(key).forEach(param => {
                 if (!validDataSchemaKeyParameters.includes(param)) {
@@ -99,12 +94,6 @@ function validateParams(params) {
             }
             if ((key.keyName == tableSchema.primaryKey) && (key.hidden === true || key.hidden === false)) {
                 throw new Error(`The ${key.keyName} field in the ${tableSchema.entityTableName} table has 'hidden' parameter set at field level even though it is the primary key. Set the 'hidePrimaryKey' parameter at table level for this table instead.`);
-            }
-            if (key.coalesceWithLegacyPII && !key.hidden) {
-                throw new Error(`The ${key.keyName} field in the ${tableSchema.entityTableName} table has 'coalesceWithLegacyPII' parameter set even though 'hidden' is set to false or not set.`);
-            }
-            if ((key.keyName == tableSchema.primaryKey) && (key.coalesceWithLegacyPII === true || key.coalesceWithLegacyPII === false)) {
-                throw new Error(`The ${key.keyName} field in the ${tableSchema.entityTableName} table has 'coalesceWithLegacyPII' parameter set at field level even though it is the primary key. Set the 'coalescePrimaryKeyWithLegacyPII' parameter at table level for this table instead.`);
             }
         })
     });
