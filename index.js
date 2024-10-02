@@ -26,7 +26,6 @@ const unhandledFieldOrEntityIsBeingStreamed = require("./includes/unhandled_fiel
 const hiddenPIIConfigurationDoesNotMatchEventsStreamed = require("./includes/hidden_pii_configuration_does_not_match_events_streamed");
 const dataSchemaJSONLatest = require("./includes/data_schema_json_latest");
 const dfeAnalyticsConfiguration = require("./includes/dfe_analytics_configuration");
-const pseudonymiseRequestUserIds = require("./includes/pseudonymise_request_user_ids");
 const migrateHistoricEventsToCurrentHiddenPIIConfiguration = require("./includes/migrate_historic_events_to_current_hidden_pii_configuration");
 const pipelineSnapshot = require("./includes/pipeline_snapshot");
 
@@ -113,7 +112,6 @@ module.exports = (params) => {
             flattenedCustomEvent: flattenedCustomEvent(params),
             flattenedEntityLatest: flattenedEntityLatest(params),
             flattenedEntityFieldUpdates: flattenedEntityFieldUpdates(params),
-            pseudonymiseRequestUserIds: pseudonymiseRequestUserIds(params),
             migrateHistoricEventsToCurrentHiddenPIIConfiguration: migrateHistoricEventsToCurrentHiddenPIIConfiguration(params),
             entityAt: entityAt(params),
             pipelineSnapshot: pipelineSnapshot(version, params),
