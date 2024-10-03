@@ -99,7 +99,7 @@ module.exports = (params) => {
 FROM (
   SELECT
     * EXCEPT(data, hidden_data),
-    ${customEvent.keys > 0 ?
+    ${customEvent.keys.length > 0 ?
       `(
       SELECT
         AS STRUCT
