@@ -133,7 +133,7 @@ function validateParams(params) {
         };
         Object.keys(customEvent).forEach(param => {
             if (!validCustomEventSchemaEventParameters.includes(param)) {
-                throw new Error(`Invalid event level parameter in customEventSchema passed to dfeAnalyticsDataform() for the ${customEvent.eventType} custom event: ${param}. Valid event level parameters are: ${validcustomEventSchemaTableParameters.sort().join(', ')}`);
+                throw new Error(`Invalid event level parameter in customEventSchema passed to dfeAnalyticsDataform() for the ${customEvent.eventType} custom event: ${param}. Valid event level parameters are: ${validCustomEventSchemaEventParameters.sort().join(', ')}`);
             }
         });
         customEvent.keys.forEach(key => {
