@@ -9,6 +9,7 @@ const getColumnDescriptions = (keys) => {
 module.exports = (params) => {
     return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_field_updates_" + params.eventSourceName, {
         ...params.defaultConfig,
+        dependencies: [tableSchema.entityTableName + "_latest_" + params.eventSourceName],
         type: tableSchema.materialisation,
         bigquery: {
             labels: {

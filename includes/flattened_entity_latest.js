@@ -9,6 +9,7 @@ const getKeys = (keys) => {
 module.exports = (params) => {
     return params.dataSchema.forEach(tableSchema => publish(tableSchema.entityTableName + "_latest_" + params.eventSourceName, {
         ...params.defaultConfig,
+        dependencies: tableSchema.keys.filter(key => key.foreignKeyTable && (key.foreignKeyName == "id" || !key.foreignKeyName)).map(key => {return key.foreignKeyTable + "_latest_" + params.eventSourceName}),
         type: tableSchema.materialisation,
         ...(tableSchema.materialisation == "table" ? {
             assertions: {
