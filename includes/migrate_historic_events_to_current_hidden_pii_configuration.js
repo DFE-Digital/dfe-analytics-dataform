@@ -17,7 +17,7 @@ IF EXISTS
   THEN RAISE USING MESSAGE = "Entity create, update, delete and/or import events have been streamed since the beginning of yesterday with data in the wrong field (data or hidden_data). Please ensure the ${params.eventSourceName}_hidden_pii_configuration_does_not_match_entity_events_streamed_yesterday assertion passes before running this procedure.";
 END IF;
 
-IF EXISTS
+${params.customEventSchema.some(customEvent => customEvent.keys.length > 0) ? `IF EXISTS
   (
   /* Detect whether all custom events from the last day have been in the array fields expected by dfe-analytics-dataform */
   SELECT
@@ -26,7 +26,7 @@ IF EXISTS
     ${ctx.resolve(params.eventSourceName + "_hidden_pii_configuration_does_not_match_custom_events_streamed_yesterday")}
   )
   THEN RAISE USING MESSAGE = "Custom events have been streamed since the beginning of yesterday with data in the wrong field (data or hidden_data). Please ensure the ${params.eventSourceName}_hidden_pii_configuration_does_not_match_custom_events_streamed_yesterday assertion passes before running this procedure.";
-END IF;
+END IF;` : ``}
 
 IF NOT EXISTS
   (
@@ -36,13 +36,13 @@ IF NOT EXISTS
   FROM
     ${ctx.resolve(params.eventSourceName + "_hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed")}
   )
-  OR NOT EXISTS
+  ${params.customEventSchema.some(customEvent => customEvent.keys.length > 0) ? `OR NOT EXISTS
   (
   SELECT
     *
   FROM
     ${ctx.resolve(params.eventSourceName + "_hidden_pii_configuration_does_not_match_sample_of_historic_custom_events_streamed")}
-  )
+  )` : ``}
   THEN RAISE USING MESSAGE = "No events with hidden PII field configuration that doesn't match current dfe-analytics-dataform were found in a sample of 1% of historic events streamed before the beginning of yesterday. You probably don't need to run this procedure.";
 END IF;
 
