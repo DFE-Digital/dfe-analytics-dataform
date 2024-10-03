@@ -47,7 +47,7 @@ events_to_test AS (
         : params.customEventSchema.map(schema => {return `"${schema.eventType}"`}).join(', ')
         }
       )
-    ${assertionNamePart == assertionNamePart.includes('yesterday') ? `AND DATE(occurred_at) >= CURRENT_DATE - 1` : `AND DATE(occurred_at) < CURRENT_DATE - 1`}
+    ${assertionNamePart.includes('yesterday') ? `AND DATE(occurred_at) >= CURRENT_DATE - 1` : `AND DATE(occurred_at) < CURRENT_DATE - 1`}
     )
 SELECT
   ${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
