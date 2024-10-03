@@ -52,7 +52,7 @@ events_to_test AS (
 SELECT
   expected_fields.${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
   key_configured,
-  configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom event`}_schema,
+  configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom_event`}_schema,
   COUNT(
     IF(
       ${data_functions.keyIsInEventData("data", "key_configured", true)},
