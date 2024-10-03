@@ -3,7 +3,8 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
-    disabled: true,
+    disabled: false,
+    transformEntityEvents: false,
     eventSourceName: "apply",
     bqProjectName: "rugged-abacus-218110",
     bqDatasetName: "apply_events_production",
@@ -11,17 +12,23 @@ dfeAnalyticsDataform({
     urlRegex: "apply-for-teacher-training.service.gov.uk",
     compareChecksums: true,
     enableSessionTables: false,
+    hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     dataSchema: [{
             entityTableName: "application_choices",
             description: "",
-            materialisation: "table",
+            dataFreshnessDays: 3,
             keys: [{
                 keyName: "accepted_at",
                 dataType: "timestamp",
                 description: ""
             }, {
                 keyName: "application_form_id",
-                dataType: "integer",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "application_forms"
+            }, {
+                keyName: "conditions_not_met_at",
+                dataType: "timestamp",
                 description: ""
             }, {
                 keyName: "course_changed_at",
@@ -29,12 +36,14 @@ dfeAnalyticsDataform({
                 description: ""
             }, {
                 keyName: "course_option_id",
-                dataType: "integer",
-                description: ""
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "course_options"
             }, {
                 keyName: "current_course_option_id",
-                dataType: "integer",
-                description: ""
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "course_options"
             }, {
                 keyName: "decline_by_default_at",
                 dataType: "timestamp",
@@ -52,6 +61,10 @@ dfeAnalyticsDataform({
                 dataType: "boolean",
                 description: ""
             }, {
+                keyName: "inactive_at",
+                dataType: "timestamp",
+                description: "Timestamp that this application choice was made inactive at."
+            }, {
                 keyName: "offer_changed_at",
                 dataType: "timestamp",
                 description: ""
@@ -60,17 +73,26 @@ dfeAnalyticsDataform({
                 dataType: "timestamp",
                 description: ""
             }, {
+                keyName: "offer_withdrawal_reason",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "offer_withdrawn_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
                 keyName: "offered_at",
                 dataType: "timestamp",
                 description: ""
             }, {
                 keyName: "original_course_option_id",
-                dataType: "integer",
-                description: ""
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "course_options"
             }, {
                 keyName: "personal_statement",
                 dataType: "string",
-                description: ""
+                description: "Version of the personal statement sent to the provider with the application choice. Not the same as the personal_statement on the application form, which may have changed since this application choice was sent to the provider."
             }, {
                 keyName: "recruited_at",
                 dataType: "timestamp",
@@ -82,6 +104,10 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "reject_by_default_days",
                 dataType: "integer",
+                description: ""
+            }, {
+                keyName: "reject_by_default_feedback_sent_at",
+                dataType: "timestamp",
                 description: ""
             }, {
                 keyName: "rejected_at",
@@ -116,11 +142,6 @@ dfeAnalyticsDataform({
                 dataType: "string",
                 description: ""
             }, {
-                keyName: "structured_withdrawal_reasons",
-                dataType: "string",
-                isArray: true,
-                description: ""
-            }, {
                 keyName: "withdrawal_feedback",
                 dataType: "string",
                 description: ""
@@ -132,17 +153,953 @@ dfeAnalyticsDataform({
                 keyName: "withdrawn_or_declined_for_candidate_by_provider",
                 dataType: "boolean",
                 description: ""
+            }, {
+                keyName: "structured_withdrawal_reasons",
+                dataType: "string",
+                isArray: true,
+                description: ""
+            }, {
+                keyName: "school_placement_auto_selected",
+                dataType: "boolean",
+                description: "Indicates if the school placement for the application was automatically chosen by the Apply service."
+            }]
+        },
+        {
+            entityTableName: "application_experiences",
+            description: "",
+            dataFreshnessDays: 3,
+            keys: [{
+                keyName: "experienceable_id",
+                dataType: "string",
+                foreignKeyTable: "application_forms",
+                description: "To join to application_forms use this field with experienceable_type, joining experienceable_type on 'ApplicationForm' and experienceable_id on application_form.id"
+            }, {
+                keyName: "experienceable_type",
+                dataType: "string",
+                foreignKeyTable: "application_forms",
+                description: "To join to application_forms use this field with experienceable_id, joining experienceable_type on 'ApplicationForm' and experienceable_id on application_form.id"
+            }, {
+                keyName: "commitment",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "currently_working",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "details",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "end_date",
+                dataType: "date",
+                description: ""
+            }, {
+                keyName: "end_date_unknown",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "organisation",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "relevant_skills",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "role",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "start_date",
+                dataType: "date",
+                description: ""
+            }, {
+                keyName: "start_date_unknown",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "type",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "working_pattern",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "working_with_children",
+                dataType: "boolean",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "application_feedback",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "application_form_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "application_forms"
+            }, {
+                keyName: "consent_to_be_contacted",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "feedback",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "page_title",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "path",
+                dataType: "string",
+                description: ""
+            }]
+        }, {
+            entityTableName: "application_forms",
+            description: "",
+            dataFreshnessDays: 3,
+            keys: [{
+                keyName: "becoming_a_teacher",
+                alias: "personal_statement",
+                dataType: "string",
+                description: "Latest version of the personal statement included on this candidate's application form. Not necessarily the same as the application choice personal_statement which is the version submitted to the provider. Does not include content which was stored in subject_knowledge for forms created before April 2023."
+            }, {
+                keyName: "becoming_a_teacher_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "becoming_a_teacher_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "candidate_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "candidates",
+                hidden: true
+            }, {
+                keyName: "contact_details_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "contact_details_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "country",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "course_choices_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "course_choices_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "date_of_birth",
+                dataType: "date",
+                description: ""
+            }, {
+                keyName: "degrees_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "degrees_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "disability_disclosure",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "disclose_disability",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "edit_by",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "editable_sections",
+                dataType: "string",
+                description: "Array of sections that the candidate is allowed to edit after their first submission"
+            }, {
+                keyName: "editable_until",
+                dataType: "date",
+                description: "The max date when the candidate can change the editable sections"
+            }, {
+                keyName: "efl_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "efl_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "english_gcse_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "english_gcse_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "english_language_details",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "english_main_language",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "equality_and_diversity",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "equality_and_diversity_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "equality_and_diversity_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "feedback_satisfaction_level",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "feedback_suggestions",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "fifth_nationality",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "first_nationality",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "fourth_nationality",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "further_information",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "immigration_status",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "international_address",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "interview_preferences",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "interview_preferences_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "interview_preferences_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "maths_gcse_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "maths_gcse_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "no_other_qualifications",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "other_language_details",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "other_qualifications_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "other_qualifications_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "personal_details_completed",
+                dataType: "boolean",
+                description: "",
+                alias: "personal_information_completed"
+            }, {
+                keyName: "personal_details_completed_at",
+                dataType: "timestamp",
+                description: "",
+                alias: "personal_information_completed_at"
+            }, {
+                keyName: "phase",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "postcode",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "previous_application_form_id",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "recruitment_cycle_year",
+                dataType: "integer",
+                description: ""
+            }, {
+                keyName: "references_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "references_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "region_code",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "right_to_work_or_study",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "right_to_work_or_study_details",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "safeguarding_issues_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "safeguarding_issues_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "safeguarding_issues_status",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "science_gcse_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "science_gcse_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "adviser_status",
+                dataType: "string",
+                description: "Status of whether the applicant has engaged with the adviser service i.e. 'assigned', 'waiting_to_be_assigned' or 'unassigned'."
+            }, {
+                keyName: "second_nationality",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "subject_knowledge",
+                dataType: "string",
+                description: "Component of the personal statement for application forms created before April 2023 only.",
+                historic: true
+            }, {
+                keyName: "subject_knowledge_completed",
+                dataType: "boolean",
+                description: "",
+                historic: true
+            }, {
+                keyName: "subject_knowledge_completed_at",
+                dataType: "timestamp",
+                description: "",
+                historic: true
+            }, {
+                keyName: "submitted_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "support_reference",
+                dataType: "string",
+                description: "",
+                hidden: true
+            }, {
+                keyName: "third_nationality",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "training_with_a_disability_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "training_with_a_disability_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "volunteering_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "volunteering_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "volunteering_experience",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "work_history_breaks",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "work_history_completed",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "work_history_completed_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "work_history_explanation",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "work_history_status",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "university_degree",
+                dataType: "boolean",
+                description: "Indicates whether the candidate has a university degree."
+            }]
+        },
+        {
+            entityTableName: "application_qualifications",
+            description: "",
+            dataFreshnessDays: 3,
+            keys: [{
+                    keyName: "application_form_id",
+                    dataType: "string",
+                    description: "",
+                    foreignKeyTable: "application_forms"
+                }, {
+                    keyName: "award_year",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "comparable_uk_degree",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "comparable_uk_qualification",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "constituent_grades",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "currently_completing_qualification",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "degree_grade_uuid",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "degree_institution_uuid",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "degree_subject_uuid",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "degree_type_uuid",
+                    dataType: "string",
+                    description: ""
+                },
+                {
+                    keyName: "enic_reason",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "enic_reference",
+                    dataType: "string",
+                    description: ""
+                },
+                {
+                    keyName: "grade",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "grade_hesa_code",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "institution_country",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "institution_hesa_code",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "institution_name",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "international",
+                    dataType: "boolean",
+                    description: ""
+                }, {
+                    keyName: "level",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "missing_explanation",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "non_uk_qualification_type",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "not_completed_explanation",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "other_uk_qualification_type",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "predicted_grade",
+                    dataType: "boolean",
+                    description: ""
+                }, {
+                    keyName: "public_id",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "qualification_level",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "qualification_level_uuid",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "qualification_type",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "qualification_type_hesa_code",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "start_year",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "subject",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "subject_hesa_code",
+                    dataType: "string",
+                    description: ""
+                }
+            ]
+        },
+        {
+            entityTableName: "application_work_history_breaks",
+            description: "",
+            dataFreshnessDays: 3,
+            keys: [{
+                keyName: "breakable_id",
+                dataType: "string",
+                foreignKeyTable: "application_forms",
+                description: "To join to application_forms use this field with breakable_type, joining breakable_type on 'ApplicationForm' and breakable_id on application_form.id"
+            }, {
+                keyName: "breakable_type",
+                dataType: "string",
+                foreignKeyTable: "application_forms",
+                description: "To join to application_forms use this field with breakable_id, joining breakable_type on 'ApplicationForm' and breakable_id on application_form.id"
+            }, {
+                keyName: "end_date",
+                dataType: "date",
+                description: ""
+            }, {
+                keyName: "reason",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "start_date",
+                dataType: "date",
+                description: ""
+            }, ]
+        },
+        {
+            entityTableName: "candidates",
+            description: "",
+            dataFreshnessDays: 3,
+            hidePrimaryKey: true,
+            keys: [{
+                keyName: "candidate_api_updated_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "course_from_find_id",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "hide_in_reporting",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "last_signed_in_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "magic_link_token_sent_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "sign_up_email_bounced",
+                dataType: "boolean",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "chasers_sent",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "chased_id",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "chased_type",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "chaser_type",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "course_options",
+            description: "",
+            keys: [{
+                keyName: "course_id",
+                dataType: "string",
+                description: "UID of this course from the database. To match up with Publish data, use UUID.",
+                foreignKeyTable: "courses"
+            }, {
+                keyName: "site_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "sites"
+            }, {
+                keyName: "site_still_valid",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "study_mode",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "vacancy_status",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "course_subjects",
+            description: "",
+            keys: [{
+                keyName: "course_id",
+                dataType: "string",
+                description: "UID of this course from the database. To match up with Publish data, use UUID.",
+                foreignKeyTable: "courses"
+            }, {
+                keyName: "subject_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "subjects"
+            }]
+        },
+        {
+            entityTableName: "courses",
+            description: "",
+            keys: [{
+                keyName: "accept_english_gcse_equivalency",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "accept_gcse_equivalency",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "accept_maths_gcse_equivalency",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "accept_pending_gcse",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "accept_science_gcse_equivalency",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "accredited_provider_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "providers"
+            }, {
+                keyName: "additional_gcse_equivalencies",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "age_range",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "application_status",
+                dataType: "string",
+                description: "Status of whether the course is open or closed. Note that this does not necessarily mean that the course is appliable - an appliable course must have an 'open' application status, be findable on Find (has been published and is not withdrawn), and has an applications_open_from date that has been met. See 'appliable' field.",
+                alias: "provider_opened_course"
+            }, {
+                keyName: "applications_open_from",
+                dataType: "string",
+                description: "Date that this course could accept applications from as set by the provider on the 'Applications open date' field within the basic details of the Publish course page. This does not necessarily mean that this course was findable on the Find postgraduate teacher training service on this date."
+            }, {
+                keyName: "code",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "course_length",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "degree_grade",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "degree_subject_requirements",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "description",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "exposed_in_find",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "fee_details",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "fee_domestic",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "fee_international",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "financial_support",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "funding_type",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "level",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "program_type",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "provider_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "providers"
+            }, {
+                keyName: "qualifications",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "recruitment_cycle_year",
+                dataType: "integer",
+                description: ""
+            }, {
+                keyName: "salary_details",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "start_date",
+                dataType: "date",
+                description: ""
+            }, {
+                keyName: "study_mode",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "uuid",
+                dataType: "string",
+                description: "UUID of the course. Differs from course_id in that the course_id for a given course in Apply data will not match that of the same course in Publish data. UUID serves as a universal identified to link the the two."
+            }, {
+                keyName: "withdrawn",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "can_sponsor_skilled_worker_visa",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "can_sponsor_student_visa",
+                dataType: "boolean",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "email_clicks",
+            description: "",
+            dataFreshnessDays: 3,
+            keys: [{
+                keyName: "email_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "emails"
+            }, {
+                keyName: "path",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "emails",
+            description: "",
+            dataFreshnessDays: 3,
+            keys: [{
+                keyName: "application_form_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "application_forms"
+            }, {
+                keyName: "delivery_status",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "mail_template",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "mailer",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "notify_reference",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "subject",
+                dataType: "string",
+                description: "",
+                hidden: true
+            }]
+        },
+        {
+            entityTableName: "english_proficiencies",
+            description: "",
+            dataFreshnessDays: 3,
+            keys: [{
+                keyName: "application_form_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "application_forms"
+            }, {
+                keyName: "efl_qualification_id",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "efl_qualification_type",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "qualification_status",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "find_feedback",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "feedback",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "find_controller",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "path",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "ielts_qualifications",
+            description: "",
+            keys: [{
+                keyName: "award_year",
+                dataType: "integer",
+                description: ""
+            }, {
+                keyName: "band_score",
+                dataType: "float",
+                description: ""
+            }, {
+                keyName: "trf_number",
+                dataType: "string",
+                description: ""
             }]
         },
         {
             entityTableName: "interviews",
             description: "",
+            materialisation: "view",
             keys: [{
                 keyName: "application_choice_id",
                 dataType: "string",
                 description: "",
-                foreignKeyTable: "application_choices",
-                checkReferentialIntegrity: true
+                foreignKeyTable: "application_choices"
             }, {
                 keyName: "cancelled_at",
                 dataType: "timestamp",
@@ -158,8 +1115,606 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "provider_id",
                 dataType: "string",
+                description: "",
+                foreignKeyTable: "providers"
+            }]
+        },
+        {
+            entityTableName: "notes",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "application_choice_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "application_choices"
+            }, {
+                keyName: "message",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "provider_user_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "provider_users"
+            }, {
+                keyName: "user_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "users"
+            }, {
+                keyName: "user_type",
+                dataType: "string",
                 description: ""
             }]
         },
+        {
+            entityTableName: "offer_conditions",
+            description: "",
+            keys: [{
+                keyName: "offer_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "offers"
+            }, {
+                keyName: "type",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "status",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "text",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "details",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "offers",
+            description: "",
+            keys: [{
+                keyName: "application_choice_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "application_choices"
+            }]
+        },
+        {
+            entityTableName: "other_efl_qualifications",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "award_year",
+                dataType: "integer",
+                description: ""
+            }, {
+                keyName: "grade",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "provider_agreements",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "accepted_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "agreement_type",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "provider_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "providers"
+            }, {
+                keyName: "provider_user_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "provider_users"
+            }]
+        },
+        {
+            entityTableName: "provider_relationship_permissions",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "ratifying_provider_can_make_decisions",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "ratifying_provider_can_view_diversity_information",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "ratifying_provider_can_view_safeguarding_information",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "ratifying_provider_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "providers"
+            }, {
+                keyName: "setup_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "training_provider_can_make_decisions",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "training_provider_can_view_diversity_information",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "training_provider_can_view_safeguarding_information",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "training_provider_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "providers"
+            }]
+        },
+        {
+            entityTableName: "provider_user_notifications",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "application_received",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "application_rejected_by_default",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "application_withdrawn",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "provider_user_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "provider_users"
+            }, {
+                keyName: "offer_accepted",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "offer_declined",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "chase_provider_decision",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "reference_received",
+                dataType: "boolean",
+                description: "TRUE if the provider user wants to receive an email after the reference has been given"
+            }]
+        },
+        {
+            entityTableName: "provider_users_providers",
+            description: "",
+            keys: [{
+                keyName: "make_decisions",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "manage_organisations",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "manage_users",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "provider_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "providers"
+            }, {
+                keyName: "provider_user_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "provider_users"
+            }, {
+                keyName: "set_up_interviews",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "view_diversity_information",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "view_safeguarding_information",
+                dataType: "boolean",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "provider_users",
+            description: "",
+            dataFreshnessDays: 3,
+            keys: [{
+                keyName: "dfe_sign_in_uid",
+                dataType: "string",
+                description: "DfE Sign-in UID. It can be joined on dfe_sign_in_uid fields in the Register users table and Apply support_users table.",
+                hidden: true
+            }, {
+                keyName: "last_signed_in_at",
+                dataType: "timestamp",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "providers",
+            description: "",
+            keys: [{
+                keyName: "code",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "latitude",
+                dataType: "float",
+                description: ""
+            }, {
+                keyName: "longitude",
+                dataType: "float",
+                description: ""
+            }, {
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "postcode",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "provider_type",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "region_code",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "can_sponsor_skilled_worker_visa",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "can_sponsor_student_visa",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "selectable_school",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "vendor_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "vendors"
+            }]
+        },
+        {
+            entityTableName: "reference_tokens",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "application_reference_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "application_references"
+            }, {
+                keyName: "hashed_token",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "references",
+            description: "",
+            dataFreshnessDays: 3,
+            keys: [{
+                keyName: "application_form_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "application_forms"
+            }, {
+                keyName: "cancelled_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "cancelled_at_end_of_cycle_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "consent_to_be_contacted",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "duplicate",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "email_bounced_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "feedback",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "feedback_provided_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "feedback_refused_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "feedback_status",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "hashed_sign_in_token",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "questionnaire",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "referee_type",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "refused",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "reminder_sent_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "replacement",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "requested_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "safeguarding_concerns_status",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "selected",
+                dataType: "boolean",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "rejection_feedbacks",
+            dataFreshnessDays: 3,
+            description: "Feedback on whether the rejection reason provided to the applicant was useful or was not useful to them. This is done by selecting YES or NO.",
+            keys: [{
+                keyName: "helpful",
+                dataType: "boolean",
+                description: "TRUE if the candidate indicated that the rejection reason provided was useful"
+            }, {
+                keyName: "application_choice_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "application_choices"
+            }]
+        },
+        {
+            entityTableName: "sites",
+            description: "",
+            keys: [{
+                keyName: "address_line1",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "address_line2",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "address_line3",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "address_line4",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "code",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "uuid",
+                dataType: "string",
+                description: "New site identifier. Value is taken from publish TTAPI"
+            }, {
+                keyName: "uuid_generated_by_apply",
+                dataType: "boolean",
+                description: "Boolean field to identify uuids that were generated in Apply. Some sites are without uuids, as they were removed from TTAPI"
+            }, {
+                keyName: "latitude",
+                dataType: "float",
+                description: ""
+            }, {
+                keyName: "longitude",
+                dataType: "float",
+                description: ""
+            }, {
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "postcode",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "provider_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "providers"
+            }, {
+                keyName: "region",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "subjects",
+            description: "",
+            keys: [{
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "code",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "toefl_qualifications",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "award_year",
+                dataType: "integer",
+                description: ""
+            }, {
+                keyName: "registration_number",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "total_score",
+                dataType: "integer",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "validation_errors",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "form_object",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "request_path",
+                dataType: "string",
+                description: "",
+                alias: "path"
+            }, {
+                keyName: "service",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "user_id",
+                dataType: "string",
+                description: "",
+                hidden: true
+            }, {
+                keyName: "user_type",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "vendor_api_tokens",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "last_used_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "provider_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "providers"
+            }]
+        },
+        {
+            entityTableName: "vendors",
+            description: "",
+            keys: [{
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "vendor_api_requests",
+            description: "API requests made to Manage by training providers' systems procured from vendors.",
+            dataFreshnessDays: 3,
+            keys: [{
+                keyName: "provider_id",
+                dataType: "string",
+                description: "The provider whose system was the origin of the API request",
+                foreignKeyTable: "providers"
+            }, {
+                keyName: "request_path",
+                dataType: "string",
+                description: "The path that the API request was sent to.",
+                alias: "api_request_path"
+            }, {
+                keyName: "request_method",
+                dataType: "string",
+                description: "Whether the API request was a GET or POST request.",
+                alias: "api_request_method"
+            }, {
+                keyName: "request_headers",
+                dataType: "string",
+                description: "The headers of the request the system sent to Manage."
+            }, {
+                keyName: "response_body",
+                dataType: "string",
+                description: "The body of the response Manage sent back to the system."
+            }, {
+                keyName: "response_headers",
+                dataType: "string",
+                description: "The headers of the response Manage sent back to the system."
+            }, {
+                keyName: "status_code",
+                dataType: "string",
+                description: "The HTTP status code Manage sent back to the system that sent it the request."
+            }]
+        }
+    ],
+    customEventSchema: [
+        {
+            eventType: "candidate_signed_up_for_adviser",
+            description: "Occasions on which the candidate with ID user_id signed up for a Teacher Training advisor via a link in Apply for ITT",
+            keys: []
+        },
+        {
+            eventType: "candidate_offered_adviser",
+            description: "",
+            keys: []
+        }
     ]
 });
