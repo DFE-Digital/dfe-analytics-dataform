@@ -76,6 +76,7 @@ WHERE
   AND DATE(occurred_at) <= CURRENT_DATE - 1 ;
 `;}).join('\n')}
 
+${params.customEventSchema.some(customEvent => customEvent.keys.length > 0) ? `
 ${["`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`", ctx.ref("events_" + params.eventSourceName)].map(eventsTableReference => {return `
 UPDATE
   ${eventsTableReference} event
@@ -106,7 +107,7 @@ WHERE
     return `"${customEvent.eventType}"`}).join(`, `)}
     )
   AND DATE(occurred_at) <= CURRENT_DATE - 1 ;
-`;}).join('\n')}
+`;}).join('\n')}` : ``}
 
 COMMIT TRANSACTION;
 END`]).tags([params.eventSourceName.toLowerCase()])
