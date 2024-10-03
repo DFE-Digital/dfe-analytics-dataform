@@ -50,7 +50,7 @@ events_to_test AS (
     ${assertionNamePart.includes('yesterday') ? `AND DATE(occurred_at) >= CURRENT_DATE - 1` : `AND DATE(occurred_at) < CURRENT_DATE - 1`}
     )
 SELECT
-  ${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
+  expected_fields.${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
   key_configured,
   configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom event`}_schema,
   COUNT(
@@ -100,7 +100,7 @@ FROM
   events_to_test
   JOIN expected_fields ON expected_fields.${assertionNamePart.includes('entity') ? `entity_name` : `event_type`} = events_to_test.${assertionNamePart.includes('entity') ? `entity_table_name` : `event_type`}
 GROUP BY
-  ${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
+  expected_fields.${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
   key_configured,
   configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom_event`}_schema
 HAVING
@@ -122,7 +122,7 @@ HAVING
         AND first_update_with_this_key_hidden_at <= last_update_with_this_key_hidden_at
         ))` : ``}
 ORDER BY
-  ${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
+  expected_fields.${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
   key_configured,
   configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom_event`}_schema`)})
 }
