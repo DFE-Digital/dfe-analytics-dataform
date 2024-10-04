@@ -186,55 +186,70 @@ WHERE
             UPDATE
             ${ctx.self()} AS entity_version
             SET
-            valid_to = apparently_deleted_before,
-            entity_table_name_and_valid_to_partition_number = ABS(MOD(FARM_FINGERPRINT(apparently_deleted_entity.entity_table_name), 999)) + IF(apparently_deleted_entity.apparently_deleted_before IS NULL,0,1000)
+                valid_to = apparently_deleted_before,
+                entity_table_name_and_valid_to_partition_number = ABS(MOD(FARM_FINGERPRINT(apparently_deleted_entity.entity_table_name), 999)) + IF(apparently_deleted_entity.apparently_deleted_before IS NULL,0,1000)
             FROM (
-            WITH
-                complete_import_with_ids AS (
+                WITH
+                    imported_entity AS (
+                    /* All entities in all imports that have not yet been processed, where checksums match for the given entity_table_name */
+                    SELECT
+                        import.import_id,
+                        import.entity_table_name,
+                        import.checksum_calculated_at,
+                        imported_entity_id
+                    FROM
+                        ${ctx.ref("entity_table_check_import_" + params.eventSourceName)} AS import
+                    LEFT JOIN
+                        ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"} AS import_event
+                    ON
+                        import.import_id = import_event.event_tags[0]
+                        AND import.entity_table_name = import_event.entity_table_name
+                    LEFT JOIN
+                        UNNEST(import_event.DATA) AS DATA
+                    LEFT JOIN
+                        UNNEST(data.value) AS imported_entity_id
+                    ON
+                        data.KEY = "id"
+                    WHERE
+                        import.database_checksum = import.bigquery_checksum
+                        AND import_event.event_type = "import_entity"
+                        AND ARRAY_LENGTH(import_event.event_tags) = 1
+                        AND DATE(import_event.occurred_at) >= DATE(event_timestamp_checkpoint)
+                        AND DATE(import.checksum_calculated_at) >= DATE(event_timestamp_checkpoint)
+                        AND imported_entity_id IS NOT NULL
+                    )
                 SELECT
-                    import.import_id,
-                    import.entity_table_name,
-                    import.checksum_calculated_at,
-                    ARRAY_AGG(${data_functions.eventDataExtract("data", "id")} IGNORE NULLS) AS imported_entity_ids
+                    entity_version.entity_table_name,
+                    entity_version.entity_id AS id_that_was_apparently_deleted,
+                    MIN(IF(entity_version.valid_from < import.checksum_calculated_at,import.checksum_calculated_at,NULL)) AS apparently_deleted_before
                 FROM
-                ${ctx.ref("entity_table_check_import_" + params.eventSourceName)} AS import
-                LEFT JOIN ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"} AS import_event
+                    ${ctx.self()} AS entity_version
+                /* Join to all imports of this table with matching checksums that took place after this version started to be valid */
+                LEFT JOIN
+                    ${ctx.ref("entity_table_check_import_" + params.eventSourceName)} AS import
                 ON
-                    import.import_id = import_event.event_tags[0]
-                    AND import.entity_table_name = import_event.entity_table_name
+                    import.entity_table_name = entity_version.entity_table_name
+                    AND entity_version.valid_from < import.checksum_calculated_at
+                /* Join to zero entity versions in each import for this entity version because we only include ones that *are not* in any imports after the valid_from */
+                /* The WHERE imported_entity.imported_entity_id IS NULL below ensures this */
+                LEFT JOIN
+                    imported_entity
+                ON
+                    imported_entity.entity_table_name = entity_version.entity_table_name
+                    AND entity_version.entity_id = imported_entity.imported_entity_id
+                    AND import.import_id = imported_entity.import_id
                 WHERE
-                    import.database_checksum = import.bigquery_checksum
-                    AND import_event.event_type = "import_entity"
-                    AND ARRAY_LENGTH(import_event.event_tags) = 1
-                    AND DATE(import_event.occurred_at) >= DATE(event_timestamp_checkpoint)
-                    AND DATE(import.checksum_calculated_at) >= DATE(event_timestamp_checkpoint)
+                    entity_version.valid_to IS NULL
+                    AND entity_version.entity_table_name_and_valid_to_partition_number < 1000
+                    AND import.database_checksum = import.bigquery_checksum
+                    AND imported_entity.imported_entity_id IS NULL
                 GROUP BY
-                    import.import_id,
-                    import.entity_table_name,
-                    import.checksum_calculated_at
-                HAVING
-                    ARRAY_LENGTH(imported_entity_ids) > 0
-                )
-            SELECT
-                entity_version.entity_table_name,
-                entity_version.entity_id AS id_that_was_apparently_deleted,
-                MIN(import.checksum_calculated_at) AS apparently_deleted_before
-            FROM
-                ${ctx.self()} AS entity_version
-            JOIN
-                complete_import_with_ids AS import
-            ON
-                import.entity_table_name = entity_version.entity_table_name
-                AND import.checksum_calculated_at > entity_version.valid_from
+                    entity_version.entity_table_name,
+                    entity_version.entity_id
+                ) AS apparently_deleted_entity
             WHERE
                 entity_version.entity_table_name_and_valid_to_partition_number < 1000
-                AND entity_version.entity_id NOT IN UNNEST(import.imported_entity_ids)
-            GROUP BY
-                entity_version.entity_table_name,
-                entity_version.entity_id) AS apparently_deleted_entity
-            WHERE
-            entity_version.entity_table_name_and_valid_to_partition_number < 1000
-            AND entity_version.entity_table_name = apparently_deleted_entity.entity_table_name
-            AND entity_version.entity_id = apparently_deleted_entity.id_that_was_apparently_deleted
+                AND entity_version.entity_table_name = apparently_deleted_entity.entity_table_name
+                AND entity_version.entity_id = apparently_deleted_entity.id_that_was_apparently_deleted
     `)
 }
