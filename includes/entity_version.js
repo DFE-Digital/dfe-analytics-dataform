@@ -190,6 +190,17 @@ WHERE
                 entity_table_name_and_valid_to_partition_number = ABS(MOD(FARM_FINGERPRINT(apparently_deleted_entity.entity_table_name), 999)) + IF(apparently_deleted_entity.apparently_deleted_before IS NULL,0,1000)
             FROM (
                 WITH
+                    entity_table_name_with_primary_key AS (
+                        SELECT
+                            entity_table_name,
+                            primary_key
+                        FROM
+                            UNNEST([
+                                ${params.dataSchema.map(tableSchema => {
+                                    return `STRUCT("${tableSchema.entityTableName}" AS entity_table_name, "${tableSchema.primaryKey || "id"}" AS primary_key)`;
+                                }).join(',\n')}
+                            ])
+                    ),
                     imported_entity AS (
                     /* All entities in all imports that have not yet been processed, where checksums match for the given entity_table_name */
                     SELECT
@@ -200,16 +211,18 @@ WHERE
                     FROM
                         ${ctx.ref("entity_table_check_import_" + params.eventSourceName)} AS import
                     LEFT JOIN
+                        entity_table_name_with_primary_key USING(entity_table_name)
+                    LEFT JOIN
                         ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"} AS import_event
                     ON
                         import.import_id = import_event.event_tags[0]
                         AND import.entity_table_name = import_event.entity_table_name
                     LEFT JOIN
-                        UNNEST(import_event.DATA) AS DATA
+                        UNNEST(ARRAY_CONCAT(import_event.DATA, import_event.hidden_DATA)) AS combined_data
                     LEFT JOIN
-                        UNNEST(data.value) AS imported_entity_id
+                        UNNEST(combined_data.value) AS imported_entity_id
                     ON
-                        data.KEY = "id"
+                        combined_data.KEY = entity_table_name_with_primary_key.primary_key
                     WHERE
                         import.database_checksum = import.bigquery_checksum
                         AND import_event.event_type = "import_entity"
