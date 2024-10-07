@@ -4,7 +4,7 @@ const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
     disabled: false,
-    transformEntityEvents: false,
+    transformEntityEvents: true,
     eventSourceName: "apply",
     bqProjectName: "rugged-abacus-218110",
     bqDatasetName: "apply_events_production",
@@ -47,11 +47,13 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "decline_by_default_at",
                 dataType: "timestamp",
-                description: ""
+                description: "",
+                historic: true
             }, {
                 keyName: "decline_by_default_days",
                 dataType: "integer",
-                description: ""
+                description: "",
+                historic: true
             }, {
                 keyName: "declined_at",
                 dataType: "timestamp",
@@ -1140,8 +1142,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "user_id",
                 dataType: "string",
-                description: "",
-                foreignKeyTable: "users"
+                description: ""
             }, {
                 keyName: "user_type",
                 dataType: "string",
@@ -1421,7 +1422,7 @@ dfeAnalyticsDataform({
                 keyName: "application_reference_id",
                 dataType: "string",
                 description: "",
-                foreignKeyTable: "application_references"
+                foreignKeyTable: "references"
             }, {
                 keyName: "hashed_token",
                 dataType: "string",
