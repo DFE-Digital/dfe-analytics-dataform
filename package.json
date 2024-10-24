@@ -1,10 +1,6 @@
 {
     "name": "dfe-analytics-dataform",
     "dependencies": {
-<<<<<<< HEAD
-        "@dataform/core": "3.0.4"
-=======
         "@dataform/core": "3.0.7"
->>>>>>> refs/heads/master
     }
 }
