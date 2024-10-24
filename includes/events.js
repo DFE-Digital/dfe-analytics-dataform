@@ -56,7 +56,7 @@ module.exports = (params) => {
         }
     }).query(ctx => `WITH
   earliest_web_request_event_for_request AS (
-  SELECT
+  SELECT DISTINCT
     occurred_at,
     request_uuid,
     request_path,
@@ -80,7 +80,7 @@ module.exports = (params) => {
     ROW_NUMBER() OVER (PARTITION BY request_uuid ORDER BY occurred_at ASC) = 1
 ),
 event_with_web_request_data AS (
-  SELECT
+  SELECT DISTINCT
     event.occurred_at,
     event.request_uuid,
     event.event_type,
