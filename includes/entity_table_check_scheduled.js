@@ -9,6 +9,8 @@ module.exports = (params) => {
                 },
                 dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
                 bigquery: {
+                    partitionBy: "checksum_calculated_on",
+                    partitionExpirationDays: params.expirationDays,
                     labels: {
                         eventsource: params.eventSourceName.toLowerCase(),
                         sourcedataset: params.bqDatasetName.toLowerCase()

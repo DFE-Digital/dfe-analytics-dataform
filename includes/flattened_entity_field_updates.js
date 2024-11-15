@@ -19,6 +19,7 @@ module.exports = (params) => {
             },
             ...(tableSchema.materialisation == "table" ? {
                 partitionBy: "DATE(occurred_at)",
+                partitionExpirationDays: tableSchema.expirationDays || params.expirationDays,
                 clusterBy: ["key_updated"]
             } : {})
         },

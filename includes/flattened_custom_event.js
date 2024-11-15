@@ -24,7 +24,8 @@ module.exports = (params) => {
                     sourcedataset: params.bqDatasetName.toLowerCase(),
                     entitytabletype: "custom_event"
                 },
-                partitionBy: "DATE(occurred_at)"
+                partitionBy: "DATE(occurred_at)",
+                partitionExpirationDays: customEvent.expirationDays || params.expirationDays,
             },
             tags: [params.eventSourceName.toLowerCase()],
             description: "Custom events with type " + customEvent.eventType + " streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project. Description of these custom events is: " + customEvent.description,

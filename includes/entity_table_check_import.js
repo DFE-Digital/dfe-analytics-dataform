@@ -9,6 +9,8 @@ module.exports = (params) => {
                 },
                 dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields", params.eventSourceName + "_hidden_pii_configuration_does_not_match_entity_events_streamed_yesterday", params.eventSourceName + "_hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed"],
                 bigquery: {
+                    partitionBy: "DATE(checksum_calculated_at)",
+                    partitionExpirationDays: params.expirationDays,
                     labels: {
                         eventsource: params.eventSourceName.toLowerCase(),
                         sourcedataset: params.bqDatasetName.toLowerCase()

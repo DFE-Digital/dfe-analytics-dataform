@@ -75,6 +75,7 @@ module.exports = (params) => {
     protected: false,
     bigquery: {
       partitionBy: "DATE(occurred_at)",
+      partitionExpirationDays: params.webRequestEventExpirationDays || params.expirationDays,
       clusterBy: ["newly_arrived"], /* This table includes certain fields which are only non-null for newly arrived traffic. Clustering by newly_arrived allows only newly arrived traffic to be queried in this table without having to process all the other traffic at the same time */
       labels: {
         eventsource: params.eventSourceName.toLowerCase(),

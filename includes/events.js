@@ -5,6 +5,7 @@ module.exports = (params) => {
         protected: false,
         bigquery: {
             partitionBy: "DATE(occurred_at)",
+            partitionExpirationDays: params.expirationDays,
             clusterBy: ["event_type", "request_uuid"],
             labels: {
                 eventsource: params.eventSourceName.toLowerCase(),
@@ -127,6 +128,41 @@ FROM
   `).preOps(ctx => `
     DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(), `SELECT MAX(occurred_at) FROM ${ctx.self()}`, `SELECT TIMESTAMP("2000-01-01")`)});
+    /* Update the data retention schedule for the source events table if one is specified */
+    ALTER TABLE ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"} SET OPTIONS (partition_expiration_days = ${params.expirationDays ? params.expirationDays : `NULL`});
+    /* Delete web requests from the source events table which are older than the specified web request event data retention schedule if it is shorter than the top level schedule */
+    ${params.webRequestEventExpirationDays ? `
+        DELETE FROM ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"} WHERE event_type = "web_request" AND DATE(occurred_at) < CURRENT_DATE - ${params.webRequestEventExpirationDays};
+        ${ctx.when(ctx.incremental(), `DELETE FROM ${ctx.self()} WHERE event_type = "web_request" AND DATE(occurred_at) < CURRENT_DATE - ${params.webRequestEventExpirationDays};`, ``)}
+    ` : ``}
+    /* Delete data for the configured table level retention schedule if one is specified and it is shorter than the top level schedule */
+    ${params.dataSchema.map(tableSchema => {
+        return tableSchema.expirationDays ? `DELETE FROM ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
+                WHERE
+                    entity_table_name = "${tableSchema.entityTableName}"
+                    AND event_type IN ("create_entity", "update_entity", "delete_entity", "import_entity", "entity_table_check_scheduled", "entity_table_check_import")
+                    AND DATE(occurred_at) < CURRENT_DATE - ${tableSchema.expirationDays};
+            ${ctx.when(ctx.incremental(), `DELETE FROM ${ctx.self()}
+                  WHERE
+                    entity_table_name = "${tableSchema.entityTableName}"
+                    AND event_type IN ("create_entity", "update_entity", "delete_entity", "import_entity", "entity_table_check_scheduled", "entity_table_check_import")
+                    AND DATE(occurred_at) < CURRENT_DATE - ${tableSchema.expirationDays};
+            `)}
+          ` : ``;}
+        ).join(``)}
+    /* Delete data for the configured custom event level retention schedule if one is specified and it is shorter than the top level schedule */
+    ${params.customEventSchema.map(customEvent => {
+        return customEvent.expirationDays ? `DELETE FROM ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
+                WHERE
+                    event_type = "${customEvent.eventType}"
+                    AND DATE(occurred_at) < CURRENT_DATE - ${customEvent.expirationDays};
+            ${ctx.when(ctx.incremental(), `DELETE FROM ${ctx.self()}
+                  WHERE
+                    event_type = "${customEvent.eventType}"
+                    AND DATE(occurred_at) < CURRENT_DATE - ${customEvent.expirationDays};
+            `)}
+          ` : ``;}
+        ).join(``)}
     /* Uses the Woothee Javascript library to categorise user agents by user category (PC i.e. desktop, smartphone, mobile phone, crawler, applicance, unknown or misc), browser name, browser version, operating system, browser vendor and operating system version. To function correctly this script needs to be stored in Google Cloud Storage at the public URL below. The latest version of this script can be found at https://github.com/woothee/woothee-js/blob/master/release/woothee.js .*/
     CREATE TEMP FUNCTION parseUserAgent(user_agent STRING)
     RETURNS STRUCT < category STRING, name STRING, version STRING, os STRING, vendor STRING, os_version STRING >

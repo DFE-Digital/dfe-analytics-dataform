@@ -6,6 +6,7 @@ dfeAnalyticsDataform({
   eventSourceName: "Short name for your event source here - this might be a short name for your service, for example",
   bqEventsTableName: "Your BigQuery events table name here - usually just 'events'",
   hiddenPolicyTagLocation: "Location of the policy tag used to hide the hidden_data field in your events table, for example projects/your-project-name/locations/europe-west2/taxonomies/your-taxonomy-id/policyTags/your-policy-tag-id, where your taxonomy and policy tag IDs are likely very long integers.",
+  expirationDays: 2555, // 7 years
   urlRegex: "www.yourdomainname.gov.uk", // re-2 formatted regular expression to use to identify whether a URL is this service's own URL or an external one. If your service only has one domain name set this to 'www.yourdomainname.gov.uk' (without the protocol). If you have more than one use something like '(?i)(www.domain1.gov.uk|www.domain2.gov.uk|www.domain3.gov.uk)'
   dataSchema: [{
     entityTableName: "Your entity table name here from your production database analytics.yml",
