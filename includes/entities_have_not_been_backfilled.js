@@ -29,11 +29,18 @@ import_counts AS (
     GROUP BY entity_table_name
   )
 SELECT
-    expected_entity.*
+    expected_entity.*,
+    latest_check.bigquery_row_count,
+    latest_check.database_row_count
 FROM
     expected_entity
 LEFT JOIN
     import_counts USING(entity_table_name)
+LEFT JOIN
+    ${ctx.ref("entity_table_check_scheduled_" + params.eventSourceName)} AS latest_check
+    ON
+      expected_entity.entity_table_name = latest_check.entity_table_name
+      AND DATE(latest_check.checksum_calculated_at) = CURRENT_DATE
 WHERE
     number_of_import_events = 0
 ORDER BY
