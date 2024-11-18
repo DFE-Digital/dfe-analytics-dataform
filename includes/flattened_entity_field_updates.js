@@ -19,7 +19,6 @@ module.exports = (params) => {
             },
             ...(tableSchema.materialisation == "table" ? {
                 partitionBy: "DATE(occurred_at)",
-                partitionExpirationDays: tableSchema.expirationDays || params.expirationDays,
                 clusterBy: ["key_updated"]
             } : {})
         },
@@ -98,5 +97,7 @@ ON
                 {keyInThisTable: "entity_id", foreignTable: tableSchema.entityTableName + "_latest_" + params.eventSourceName, keyInForeignTable: "id"},
                 {keyInThisTable: "entity_id, occurred_at", foreignTable: tableSchema.entityTableName + "_version_" + params.eventSourceName, keyInForeignTable: "id, valid_from"}
                 ]})}
-    ` : ``))
+        ALTER TABLE ${ctx.self()} SET OPTIONS (partition_expiration_days = ${tableSchema.expirationDays || params.expirationDays || `NULL`});
+    ` : ``)    
+    )
 }

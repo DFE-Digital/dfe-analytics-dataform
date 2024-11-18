@@ -10,7 +10,6 @@ module.exports = (params) => {
                 dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
                 bigquery: {
                     partitionBy: "checksum_calculated_on",
-                    partitionExpirationDays: params.expirationDays,
                     labels: {
                         eventsource: params.eventSourceName.toLowerCase(),
                         sourcedataset: params.bqDatasetName.toLowerCase()
@@ -170,4 +169,7 @@ module.exports = (params) => {
         tables_with_insight_metrics
       WINDOW same_table_one_week_ago AS (PARTITION BY entity_table_name ORDER BY checksum_calculated_on ASC ROWS BETWEEN 7 PRECEDING AND 7 PRECEDING)`
         )
+  .postOps(ctx => `
+    ALTER TABLE ${ctx.self()} SET OPTIONS (partition_expiration_days = ${params.expirationDays || `NULL`});
+    `)
 }
