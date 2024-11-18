@@ -181,15 +181,15 @@ WHERE
             })}
             /* Delete data older than the configured retention schedule if one is specified */
             ${params.expirationDays && ctx.incremental() ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${params.expirationDays};` : ``}
-            /* Delete data for the configured table level retention schedule if one is specified and it is shorter than the top level schedule */
-            ${params.dataSchema.filter(tableSchema => tableSchema.expirationDays && tableSchema.entityTableName).map(tableSchema => {
-            return tableSchema.expirationDays && ctx.incremental() ? `
+            /* Delete data for the configured table level retention schedule if one is specified */
+            ${params.dataSchema.some(tableSchema => tableSchema.expirationDays && tableSchema.entityTableName) && ctx.incremental() ? `
                 DELETE FROM ${ctx.self()}
                     WHERE
-                        entity_table_name = "${tableSchema.entityTableName}"
-                        AND DATE(valid_from) < CURRENT_DATE - ${tableSchema.expirationDays};
-                ` : ``;}
-            ).join(``)}
+                        (${params.dataSchema.filter(tableSchema => tableSchema.expirationDays && tableSchema.entityTableName).map(tableSchema => `
+                        (entity_table_name = "${tableSchema.entityTableName}"
+                        AND DATE(valid_from) < CURRENT_DATE - ${tableSchema.expirationDays})`).join(' OR ')})
+                        ;
+                ` : ``}
             /* On occasion there is no entity deletion event present in the events table for entities which have in fact been deleted from the application database.
             This UPDATE statement corrects this using import_entity events when it is possible to be certain that a table has been fully and accurately loaded from its post-import checksum.
             Entities with IDs which were not included in these imports but where the latest version in entity_version does not have a valid_to timestamp are assumed to have been deleted
