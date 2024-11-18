@@ -182,7 +182,7 @@ WHERE
             /* Delete data older than the configured retention schedule if one is specified */
             ${params.expirationDays && ctx.incremental() ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${params.expirationDays};` : ``}
             /* Delete data for the configured table level retention schedule if one is specified and it is shorter than the top level schedule */
-            ${params.dataSchema.map(tableSchema => {
+            ${params.dataSchema.filter(tableSchema => tableSchema.expirationDays && tableSchema.entityTableName).map(tableSchema => {
             return tableSchema.expirationDays && ctx.incremental() ? `
                 DELETE FROM ${ctx.self()}
                     WHERE
