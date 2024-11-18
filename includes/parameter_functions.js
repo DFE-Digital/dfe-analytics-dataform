@@ -23,8 +23,7 @@ const validTopLevelParameters = ['eventSourceName',
     'disabled',
     'hiddenPolicyTagLocation',
     'expirationDays',
-    'webRequestEventExpirationDays',
-    'tableDeletionWarningDays'
+    'webRequestEventExpirationDays'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
     'description',
@@ -93,8 +92,6 @@ function validateParams(params) {
         throw new Error (`webRequestEventExpirationDays is not a positive integer.`)
     } else if (params.webRequestEventExpirationDays > params.expirationDays) {
         throw new Error (`${params.webRequestEventExpirationDays} day data retention schedule set in webRequestEventExpirationDays would result in a longer data retention schedule than the top level expirationDays parameter, so would do nothing. Set it to a shorter time period, or do not set it all.`)
-    } else if (params.tableDeletionWarningDays && !(Number.isInteger(params.tableDeletionWarningDays) && params.tableDeletionWarningDays > 0)) {
-        throw new Error (`tableDeletionWarningDays is not a positive integer.`)
     }
 
     // Loop through dataSchema to handle errors
