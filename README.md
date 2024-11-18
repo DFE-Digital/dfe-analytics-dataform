@@ -33,6 +33,7 @@ dfeAnalyticsDataform({
   eventSourceName: "Short name for your event source here - this might be a short name for your service, for example",
   bqEventsTableName: "Your BigQuery events table name here - usually just 'events'",
   urlRegex: "www.yourdomainname.gov.uk", // re-2 formatted regular expression to use to identify whether a URL is this service's own URL or an external one. If your service only has one domain name set this to 'www.yourdomainname.gov.uk' (without the protocol). If you have more than one use something like '(?i)(www.domain1.gov.uk|www.domain2.gov.uk|www.domain3.gov.uk)'
+  expirationDays: false, // replace with the integer number of days you want to delete data in your BigQuery project after, or leave as false if you don't want to enforce a project-wide data retention schedule
   dataSchema: [{
     entityTableName: "Your entity table name here from your production database analytics.yml",
     description: "Description of this entity to include in metadata of denormalised tables produced for this entity.",
@@ -99,6 +100,8 @@ You may in addition to step 8 of the setup instructions wish to configure the fo
 - ```socialRefererDomainRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to work out whether an HTTP referer's domain name is a social media site. Defaults to ```'(?i)(facebook|twitter|^t.co|linkedin|youtube|pinterest|whatsapp|tumblr|reddit)'``` if not specified.
 - ```searchEngineRefererDomainRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to work out whether an HTTP referer's domain name is a search engine (regardless of whether paid or organic). Defaults to ```'(?i)(google|bing|yahoo|aol|ask.co|baidu|duckduckgo|dogpile|ecosia|exalead|gigablast|hotbot|lycos|metacrawler|mojeek|qwant|searx|swisscows|webcrawler|yandex|yippy)'``` if not specified.
 - ```disabled``` - ```true``` or ```false```. Defaults to ```false```. If set to ```true``` then calling the package will not do anything.
+- ```webRequestEventExpirationDays``` - integer number of days after which ```dfe-analytics-dataform``` will delete web request events from your events tables, pageview table and sessions table
+- ```tableDeletionWarningDays``` - integer number of days' warning that will be given by a failing assertion to indicate that a table will be deleted because it has not been updated for ```expirationDays``` days
 
 ## Updating to a new version
 Users are notified through internal channels when a new version of ```dfe-analytics-dataform``` is released. To update:
@@ -131,6 +134,7 @@ If you update your ```customEventSchema```, this pipeline run must 'full refresh
 - ```dataFreshnessDays``` - optional; if set, creates an assertion which fails if no Create, Update or Delete events have been received in the last ```dataFreshnessDays``` days for this entity.
 - ```dataFreshnessDisableDuringRange``` - optional; if set to ```true```, disables this assertion if today's date is currently between one of the ranges in ```assertionDisableDuringDateRanges```
 - ```materialisation```* - optional; may be ```'view'``` or ```'table'```. Defaults to 'table' if not set. Determines whether the ```entity_version```, ```entity_latest``` and ```entity_field_updates``` tables for this entity will be materialised by Dataform as views or tables. Recommended usage is to set this to ```'table'``` if these tables will be used more than once a day, or ```'view'``` if not to save query costs.
+- ```expirationDays``` - optional; integer number of days after which entity events for this table, or custom events with type, will be deleted.
 
 Each object within each table's set of ```keys``` determines how ```dfe-analytics-dataform``` will transform a field within a table in your schema. It has the following attributes:
 - ```keyName``` - name of the field in your database; mandatory
@@ -232,6 +236,18 @@ To configure these, add parameters to the configuration for that key in your dat
 
 If ```foreignKeyName``` is omitted, it defaults to ```id```.
 
+### Data retention schedules
+If a data retention schedule has been configured via the top-level, custom event-level or entity-level ```expirationDays``` parameter and/or ```webRequestEventExpirationDays``` parameter, ```dfe-analytics-dataform``` will delete data within the configured BigQuery project to the extent that it is possible to prove that the data was last updated the appropriate number of days ago. This includes deleting:
+- Entire tables anywhere in the source BigQuery project which have not been updated within the last ```expirationDays``` days
+- Events in the source events table or output events table which are older than ```expirationDays```, which are entity create/update/delete/import events for an entity which are older than ```expirationDays``` for that entity, or which are custom events which are older than ```expirationDays``` for that custom event type, or which are web request events which are older than ```webRequestEventExpirationDays```
+- Versions of entities in the ```entity_version``` table which are older than either the top-level or entity-level ```expirationDays``` parameter (whichever is more recent)
+- Updates to fields and versions of entities in the flattened entity field updates, version and latest tables which are older than either the top-level or entity-level ```expirationDays``` parameter (whichever is more recent)
+- Custom events in flattened custom events tables which are older than either the top-level or custom event-level ```expirationDays``` parameter (whichever is more recent)
+- Pageviews and sessions in the ```pageview_with_funnels``` and ```sessions``` tables which are older than ```expirationDays``` or ```webRequestEventExpirationDays``` (whichever is more recent)
+- Checksum calculations in the ```entity_table_check_import``` and ```entity_table_check_scheduled``` tables which are older than ```expirationDays```
+
+Where possible deletion occurs via means of partition or table expiry to ensure that data deletion occurs even if the Dataform pipeline does not run. If this is not possible then in many cases tables are recreated from source each night, which has the effect of deleting data where it has been deleted from source. In the remaining cases ```dfe-analytics-dataform``` will run ```DELETE``` DML statements to achieve this. 
+
 ## Tables, assertions, and declarations this will create
 For each occurrence of ```dfeAnalyticsDataform()``` in ```definitions/dfe_analytics_dataform.js``` this package will create the following automatically in your Dataform project. You can view and manage these within the Dataform UI by opening ```definitions/dfe_analytics_dataform.js```.
 
@@ -256,3 +272,4 @@ The names of these will vary depending on the ```eventSourceName``` you have spe
 - A stored procedure called ```pseudonymise_request_user_ids``` in the same dataset as the events table ```dfe-analytics``` streams data into (not necessarily the same dataset that Dataform outputs to). You can invoke this to convert raw user_ids in the events table to pseudonymised user IDs following the instructions in the procedure metadata.
 - A stored procedure called ```migrate_foo_historic_events_to_current_hidden_pii_configuration``` in your output Dataform dataset. You can invoke this to migrate past entity CRUD/import events to ensure that fields in the ```data``` and ```hidden_data``` arrays in your source events table and ```events_foo``` table are in the array field that matches the hidden field configuration in your ```dataSchema```.
 - Assertions called ```foo_hidden_pii_configuration_does_not_match_entity_events_streamed_yesterday``` and ```foo_hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed```. See section "Hidden fields" above for more information.
+- An assertion called ```foo_entities_have_not_been_backfilled``` which fails if no ```import_entity_table_check``` or ```import_entity``` events exist in the source events table for a particular ```entity_table_name``` configured in ```dataSchema```. Likely causes of this are not running an import as part of ```dfe-analytics``` installation, not running an import on a newly created table in the application database, or deletion of the latest import of the table due to enforcement of a data retention schedule
