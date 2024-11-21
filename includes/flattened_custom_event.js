@@ -24,7 +24,7 @@ module.exports = (params) => {
                     sourcedataset: params.bqDatasetName.toLowerCase(),
                     entitytabletype: "custom_event"
                 },
-                partitionBy: "DATE(occurred_at)"
+                partitionBy: "DATE(occurred_at)",
             },
             tags: [params.eventSourceName.toLowerCase()],
             description: "Custom events with type " + customEvent.eventType + " streamed into the events table in the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project. Description of these custom events is: " + customEvent.description,
@@ -144,9 +144,14 @@ FROM
 WHERE
   event_type = "${customEvent.eventType}"
   AND DATE(occurred_at) >= DATE(event_timestamp_checkpoint))`)
-.preOps(ctx => `
-    DECLARE event_timestamp_checkpoint DEFAULT (
-        ${ctx.when(ctx.incremental(), `SELECT MAX(occurred_at) FROM ${ctx.self()}`, `SELECT TIMESTAMP("2000-01-01")`)})`)
+    .preOps(ctx => `
+        DECLARE event_timestamp_checkpoint DEFAULT (
+            ${ctx.when(ctx.incremental(), `SELECT MAX(occurred_at) FROM ${ctx.self()}`, `SELECT TIMESTAMP("2000-01-01")`)})
+    `)
+    .postOps(ctx => `
+        ALTER TABLE ${ctx.self()} SET OPTIONS (partition_expiration_days = ${customEvent.expirationDays || params.expirationDays || `NULL`});
+    `)
 })
+
 }
     

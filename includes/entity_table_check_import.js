@@ -9,6 +9,7 @@ module.exports = (params) => {
                 },
                 dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields", params.eventSourceName + "_hidden_pii_configuration_does_not_match_entity_events_streamed_yesterday", params.eventSourceName + "_hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed"],
                 bigquery: {
+                    partitionBy: "DATE(checksum_calculated_at)",
                     labels: {
                         eventsource: params.eventSourceName.toLowerCase(),
                         sourcedataset: params.bqDatasetName.toLowerCase()
@@ -149,4 +150,7 @@ module.exports = (params) => {
     DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(), `SELECT IFNULL(MAX(final_import_event_received_at), TIMESTAMP("2000-01-01")) FROM ${ctx.self()}`, `SELECT TIMESTAMP("2000-01-01")`)});`
   )
+  .postOps(ctx => `
+    ALTER TABLE ${ctx.self()} SET OPTIONS (partition_expiration_days = ${params.expirationDays || `NULL`});
+    `)
 }

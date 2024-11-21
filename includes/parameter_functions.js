@@ -21,7 +21,9 @@ const validTopLevelParameters = ['eventSourceName',
     'socialRefererDomainRegex',
     'searchEngineRefererDomainRegex',
     'disabled',
-    'hiddenPolicyTagLocation'
+    'hiddenPolicyTagLocation',
+    'expirationDays',
+    'webRequestEventExpirationDays'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
     'description',
@@ -30,13 +32,15 @@ const validDataSchemaTableParameters = ['entityTableName',
     'hidePrimaryKey',
     'dataFreshnessDays',
     'dataFreshnessDisableDuringRange',
-    'materialisation'
+    'materialisation',
+    'expirationDays'
 ];
 const validCustomEventSchemaEventParameters = ['eventType',
     'description',
     'keys',
     'dataFreshnessDays',
-    'dataFreshnessDisableDuringRange'
+    'dataFreshnessDisableDuringRange',
+    'expirationDays'
 ];
 const validDataSchemaKeyParameters = ['keyName',
     'dataType',
@@ -82,6 +86,12 @@ function validateParams(params) {
 
     if (!/^[A-Za-z0-9_]*$/.test(params.eventSourceName)) {
         throw new Error(`eventSourceName ${params.eventSourceName} contains characters that are not alphanumeric or an underscore`);
+    } else if ((!(Number.isInteger(params.expirationDays) || params.expirationDays == false)) || params.expirationDays < 0) {
+        throw new Error(`No valid top level expirationDays parameter specified. expirationDays must be a positive integer or false.`)
+    } else if (params.webRequestEventExpirationDays && !(Number.isInteger(params.webRequestEventExpirationDays) && params.webRequestEventExpirationDays > 0)) {
+        throw new Error (`webRequestEventExpirationDays is not a positive integer.`)
+    } else if (params.webRequestEventExpirationDays > params.expirationDays) {
+        throw new Error (`${params.webRequestEventExpirationDays} day data retention schedule set in webRequestEventExpirationDays would result in a longer data retention schedule than the top level expirationDays parameter, so would do nothing. Set it to a shorter time period, or do not set it all.`)
     }
 
     // Loop through dataSchema to handle errors
@@ -99,6 +109,12 @@ function validateParams(params) {
         }
         if (tableSchema.hidePrimaryKey && !params.hiddenPolicyTagLocation) {
             throw new Error(`hiddenPolicyTagLocation not set at eventDataSource level even though hidePrimaryKey is ${tableSchema.hidePrimaryKey} for the ${tableSchema.entityTableName} table.`);
+        }
+        if (tableSchema.expirationDays && (tableSchema.expirationDays < 0 || !Number.isInteger(tableSchema.expirationDays))) {
+            throw new Error (`expirationDays for the ${tableSchema.entityTableName} table is not a positive integer.`)
+        }
+        if (tableSchema.expirationDays > params.expirationDays) {
+            throw new Error (`${tableSchema.expirationDays} day data retention schedule set in expirationDays for the ${tableSchema.entityTableName} table would result in a longer data retention schedule than the top level expirationDays parameter (${params.expirationDays} days), so would do nothing. Set it to a shorter time period, or do not set it all.`)
         }
         tableSchema.keys.forEach(key => {
             Object.keys(key).forEach(param => {
@@ -130,6 +146,12 @@ function validateParams(params) {
     params.customEventSchema.forEach(customEvent => {
         if (invalidCustomEventTypes.includes(customEvent.eventType)) {
             throw new Error(`Custom event type ${customEvent.eventType} is an event type streamed by dfe-analytics by default, so it is not a custom event`);
+        };
+        if (customEvent.expirationDays && (customEvent.expirationDays < 0 || !Number.isInteger(customEvent.expirationDays))) {
+            throw new Error (`expirationDays for the ${customEvent.eventType} custom event is not a positive integer.`)
+        };
+        if (customEvent.expirationDays > params.expirationDays) {
+            throw new Error (`${customEvent.expirationDays} day data retention schedule set in expirationDays for the ${customEvent.eventType} custom event would result in a longer data retention schedule than the top level expirationDays parameter (${params.expirationDays} days), so would do nothing. Set it to a shorter time period, or do not set it all.`)
         };
         Object.keys(customEvent).forEach(param => {
             if (!validCustomEventSchemaEventParameters.includes(param)) {

@@ -7,12 +7,13 @@ dfeAnalyticsDataform({
     transformEntityEvents: true,
     eventSourceName: "apply",
     bqProjectName: "rugged-abacus-218110",
-    bqDatasetName: "apply_events_production",
+    bqDatasetName: "apply_events_production_data_retention_schedule_test",
     bqEventsTableName: "events",
     urlRegex: "apply-for-teacher-training.service.gov.uk",
     compareChecksums: true,
     enableSessionTables: false,
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
+    expirationDays: 50000,
     dataSchema: [{
             entityTableName: "application_choices",
             description: "",
@@ -1672,6 +1673,7 @@ dfeAnalyticsDataform({
             entityTableName: "vendor_api_requests",
             description: "API requests made to Manage by training providers' systems procured from vendors.",
             dataFreshnessDays: 3,
+            expirationDays: 3000,
             keys: [{
                 keyName: "provider_id",
                 dataType: "string",
@@ -1710,6 +1712,7 @@ dfeAnalyticsDataform({
         {
             eventType: "candidate_signed_up_for_adviser",
             description: "Occasions on which the candidate with ID user_id signed up for a Teacher Training advisor via a link in Apply for ITT",
+            expirationDays: 50000,
             keys: []
         },
         {
