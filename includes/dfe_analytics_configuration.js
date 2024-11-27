@@ -26,7 +26,7 @@ module.exports = (params) => {
       ${data_functions.eventDataExtract("data", "analytics_version")} AS version,
       CAST(JSON_VALUE(${data_functions.eventDataExtract("data", "config")}, "$.pseudonymise_web_request_user_id") AS BOOLEAN) AS pseudonymise_web_request_user_id
     FROM
-      ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
+      ${ctx.ref("events_" + params.eventSourceName)}
     WHERE
       event_type = "initialise_analytics"
     UNION ALL
@@ -35,13 +35,13 @@ module.exports = (params) => {
         SELECT
           MIN(occurred_at)
         FROM
-          ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
+          ${ctx.ref("events_" + params.eventSourceName)}
       ) AS valid_from,
       (
         SELECT
           MIN(occurred_at)
         FROM
-          ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
+          ${ctx.ref("events_" + params.eventSourceName)}
         WHERE
           event_type = "initialise_analytics"
       ) AS valid_to,
@@ -50,19 +50,19 @@ module.exports = (params) => {
         SELECT
         /* Attempt to work out whether all user_ids match SHA256 output format or are null; if so set pseudonymise_web_request_user_id to TRUE */
           LOGICAL_AND(
-            REGEXP_CONTAINS(user_id, r"^[0-9a-z]*$")
-            AND REGEXP_CONTAINS(user_id, r"[a-z]")
-            AND REGEXP_CONTAINS(user_id, r"[0-9]")
+            REGEXP_CONTAINS(request_user_id, r"^[0-9a-z]*$")
+            AND REGEXP_CONTAINS(request_user_id, r"[a-z]")
+            AND REGEXP_CONTAINS(request_user_id, r"[0-9]")
           )
         FROM
-          ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
+          ${ctx.ref("events_" + params.eventSourceName)}
         WHERE
           occurred_at <
             (
               SELECT
                 MIN(occurred_at)
               FROM
-                ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"}
+                ${ctx.ref("events_" + params.eventSourceName)}
               WHERE
                 event_type = "initialise_analytics"
             )
