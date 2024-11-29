@@ -39,7 +39,7 @@ events_to_test AS (
     data,
     hidden_data
   FROM
-    ${"`" + params.bqProjectName + "." + params.bqDatasetName + "." + params.bqEventsTableName + "`"} ${assertionNamePart.includes('historic') ? `TABLESAMPLE SYSTEM ( 1 PERCENT )` : ``}
+    ${ctx.ref("events_" + params.eventSourceName)} ${assertionNamePart.includes('historic') ? `TABLESAMPLE SYSTEM ( 1 PERCENT )` : ``}
   WHERE
     event_type IN (
       ${
