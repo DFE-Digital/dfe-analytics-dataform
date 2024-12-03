@@ -71,10 +71,10 @@ module.exports = (params) => {
             }
         },
         assertions: {
-                uniqueKey: ["session_id"]
+                uniqueKey: [["session_id"], ["session_id", "user_id"]]
         },
         tags: [params.eventSourceName.toLowerCase()],
-        description: "This table contains data on sessions and accompanying metrics. The session_details table is an alternative to the standard sessions table that is produced as part of the dfe-analytics dataform pipeline. This table uses the Google Analytics definition of a session: A session is a group of user interactions with the website that that occur continuously without a break of more than 30 minutes of inactivity or until the user navigates away from the site. Therefore it will not align with the sessions_itt_mentor table. Each row is a single session. This table is used to calculate the fact_session and fact_page visit tables. These are calculated as a single table first in order to ensure the session_id aligns between the two tables. This does not include sessions or page visits from bots.",
+        description: "This table contains data on sessions and accompanying metrics. Each row is a single session. This table uses the Google Analytics definition of a session: A session is a group of user interactions with the website that that occur continuously without a break of more than 30 minutes of inactivity or until the user navigates away from the site. This does not include sessions or page visits from bots.",
         dependencies: params.dependencies,
         columns: {
           session_id: "The unique ID of the session",
@@ -118,9 +118,7 @@ module.exports = (params) => {
   5. Page duration
   6. User Journeys
 
-  This table is used to produce the fact_session_started tables and the fact_page_visit tables. These are underpinned by the same table to ensure that the session_id is consistent between the two tables.
-
-  */
+*/
 
   -- Define the base CTE with necessary fields and filters from the events dataset
 WITH
@@ -197,8 +195,7 @@ WITH
 The events_with_next_visit_to_url CTE left joins, to each page, all the pages that directly follow a page visit. Importantly, multiple future pages DO NOT indicate a journey of page visits but instead suggest 'branching' page visits (the user visited visited multiple following pages from the current page.)
 
 A following page is identified by a referer_path_and_query that matches the current pages page_path_and_query AND meets the following criteria:
-1. The anonymised_user_agent is the same for both pages
-2. The request_user_id is the same for both pages. This captures time-outs which are indicated by a user beging returned to the sign in page after 30 mins of inactivity. In this instance, the referral page at sign-in will show the last page the user visited, but the user_id will be set to NULL so the page will not be counted as a following page visit. 
+1. The anonymised_user_agent OR request_user_id is the same for both pages. 
 3. The page visits occurred on the same day.
 4. The following page visit ocurred AFTER the current page. 
 5. The following page visit occurred after the current page, but BEFORE the next page with the same URL. This is to ensure that if a user visits a page multiple time, following pages are assigned to the most recent prior visit to that page. 
@@ -252,7 +249,7 @@ The above join to create the events_with_next_page_details CTE results in some p
 
 The events_with_following_pages CTE groups all the individual page visits into a single row and creates a STRUCT ARRAY of each of the following page visits. 
 
-Importantly, multiple future pages IS NOT a journey of consecutive page visits. It is instead a series of branching page visits following the current page. 
+Importantly, in this CTE, multiple future pages IS NOT a journey of consecutive page visits. It is instead a series of branching page visits following the current page. 
 
 */ 
 
@@ -282,6 +279,7 @@ events_with_following_pages AS (
     occurred_at),
 
 /*
+
   The preferred identifier for a session is a user_id as this will remain consistent until the user times out or signs out. 
 
   However, there are instances where a page visit will not have a user_id:
