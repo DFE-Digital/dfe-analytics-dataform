@@ -11,7 +11,8 @@ dfeAnalyticsDataform({
     bqEventsTableName: "events",
     urlRegex: "apply-for-teacher-training.service.gov.uk",
     compareChecksums: true,
-    enableSessionTables: false,
+    enableSessionTables: true,
+    enableSessionDetailsTable:true,
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     expirationDays: 50000,
     dataSchema: [{
