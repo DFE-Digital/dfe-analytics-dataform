@@ -258,6 +258,14 @@ dfeAnalyticsDataform({
       keyName: "inventor_email_address",
       dataType: "date"
     }]
+  }],
+  customEventSchema: [{
+    eventType: "view_picture",
+    expirationDays: 365, // set to the integer number of days you want to delete custom events for this eventType after
+    keys: [{
+      keyName: "biscuit_type_id",
+      dataType: "string"
+    }]
   }]
 });
 ```
