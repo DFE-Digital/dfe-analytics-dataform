@@ -1,20 +1,4 @@
-// Referer URLs in events include URI-formatted codes for some characters e.g. '%20' for ' '. This JS function parses them.
-function decodeUriComponent(url) {
-  return `
-    (
-      SELECT
-        STRING_AGG(
-          IF(
-            REGEXP_CONTAINS(y, r'^%[0-9a-fA-F]{2}'),
-            SAFE_CONVERT_BYTES_TO_STRING(FROM_HEX(REPLACE(y, '%', ''))),
-            y
-          ),
-          '' ORDER BY i
-        )
-      FROM UNNEST(REGEXP_EXTRACT_ALL(${url}, r"%[0-9a-fA-F]{2}(?:%[0-9a-fA-F]{2})*|[^%]+")) y WITH OFFSET AS i
-    )
-  `;
-}
+const {decodeUriComponent} = require('./data_functions');
 
 /*
 
