@@ -1,6 +1,3 @@
-const {decodeUriComponent} = require('./data_functions');
-const {standardisePathQuery} = require('./data_functions');
-
 module.exports = (params) => {
   if (!params.enableSessionDetailsTable) {
     return true;
@@ -79,16 +76,13 @@ WITH
     -- Timestamp of the web request
     request_path,
     -- Path requested by the user
-    REGEXP_EXTRACT(request_referer, r'https?:\/\/([^\/]+)') AS request_referer_domain,
-    REGEXP_EXTRACT(request_referer, r'https?:\/\/[^\/]+(\/.*)') AS request_referer_path_and_query,
-    -- Where the refererer URL contains 'gov' THEN extract the path and query from the referer url and decode the referer URL to keep consistent with the page_path_and_query. This is to ensure it is consistent for linking pages in sessions together. If it does not contain 'gov', then we assume this is an external page so the full url is kept. 
-    REPLACE((
-      SELECT
-        STRING_AGG(CONCAT(rq.key, '=', value), '&')
-      FROM
-        UNNEST(request_query) AS rq,
-        UNNEST(rq.value) AS value), ' ', '+') AS request_query_string
-    -- Concatenate all key and value pairs from the request_query arrays into a single query string. This also replaces the spaces in the newly created string with '+'.
+    request_path_and_query AS page_path_and_query,
+    -- Path and query requested by the user
+    request_referer_domain,
+    -- domain of the referer URL
+    IF
+      (SUBSTR(request_referer_path_and_query, -1) = '?', SPLIT(request_referer_path_and_query, "?")[0], request_referer_path_and_query) AS referer_path_and_query,
+    -- path and query of the referer URL: Formatting to remove "?" if it is the last character. For consistency with page_path_and_query.
   FROM
     ${ctx.ref("events_" + params.eventSourceName)}
     -- Source table containing web event data
@@ -102,41 +96,7 @@ WITH
     -- Do not include redirects 
     AND occurred_at > event_timestamp_checkpoint),
     -- only events that occurred within 24 hours of the latest session start,
-  events_with_decoded_url AS (
-  SELECT 
-    *,
-    ${decodeUriComponent("request_referer_path_and_query")} AS referer_path_and_query
-  FROM 
-    events),
-  events_with_url AS (
-  SELECT
-    anonymised_user_agent_and_ip,
-    request_user_id,
-    occurred_at,
-    request_path,
-    CONCAT(request_path,
-    IF
-      (request_query_string IS NOT NULL
-        AND request_query_string != '', CONCAT('?', request_query_string), '')) AS page_path_and_query,
-    -- If a request_query_string exists, append the query string to the request_path to form the full page url.
-    request_referer_domain,
-    IF
-    (SUBSTR(referer_path_and_query, -1) = '?', SPLIT(referer_path_and_query, "?")[0], referer_path_and_query) AS referer_path_and_query,
-    -- Formatting to remove "?" if it is the last character. For consistency with page_path_and_query.
-  FROM
-    events_with_decoded_url
-  ),
-   events_with_standardised_url AS (
-    select 
-    anonymised_user_agent_and_ip,
-    request_user_id,
-    occurred_at,
-    request_path,
-    ${standardisePathQuery("page_path_and_query")} AS page_path_and_query,
-    request_referer_domain,
-    ${standardisePathQuery("referer_path_and_query")} AS referer_path_and_query
-    from events_with_url
-  ),
+
   /*
 
 The events_with_next_visit_to_url CTE left joins, to each page, all the pages that directly follow a page visit. Importantly, multiple future pages DO NOT indicate a journey of page visits but instead suggest 'branching' page visits (the user visited visited multiple following pages from the current page.)
@@ -162,7 +122,7 @@ events_with_next_visit_to_url AS (
       AS next_same_page_path_and_query_occurred_at
       -- This identifies the time of the users next visit to the current page url on the same day. IF the user does not visit the same page, then the next visit to the same page by the anonymised_user_agent_and_ip is used instead.
   FROM
-    events_with_standardised_url ),
+    events ),
   events_with_next_page_details AS (
   SELECT
     e1.*,
@@ -180,7 +140,7 @@ events_with_next_visit_to_url AS (
       request_user_id AS next_page_user_id,
       occurred_at AS next_page_timestamp
     FROM
-      events_with_standardised_url) e2
+      events) e2
   ON
     ((e1.anonymised_user_agent_and_ip = e2.anonymised_user_agent_and_ip)
       OR (e1.request_user_id = e2.next_page_user_id))
