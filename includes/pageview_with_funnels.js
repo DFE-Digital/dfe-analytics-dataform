@@ -335,6 +335,10 @@ ${stepFields(params.funnelDepth)}
     WHEN REGEXP_CONTAINS(request_referer, "${params.urlRegex}") THEN NULL
     ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN utm_medium = "cpc" THEN "PPC"`, ``)}
     ${ctx.when(params.attributionParameters.includes('gclid'), `WHEN gclid IS NOT NULL THEN "PPC"`, ``)}
+    ${ctx.when(params.attributionParameters.includes('dclid'), `WHEN dclid IS NOT NULL THEN "PPC"`, ``)}
+    ${ctx.when(params.attributionParameters.includes('msclkid'), `WHEN msclkid IS NOT NULL THEN "PPC"`, ``)}
+    ${ctx.when(params.attributionParameters.includes('gbraid'), `WHEN gbraid IS NOT NULL THEN "PPC"`, ``)}
+    ${ctx.when(params.attributionParameters.includes('fbclid'), `WHEN fbclid IS NOT NULL THEN "PPC"`, ``)}
     ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN REGEXP_CONTAINS(utm_medium, "(?i)(email)") THEN "Email"`, ``)}
     WHEN REGEXP_CONTAINS(SPLIT(request_referer, "/")[SAFE_OFFSET(2)], "${params.socialRefererDomainRegex}") THEN "Social"
     ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN REGEXP_CONTAINS(utm_medium, "(?i)(social)") THEN "Social"`, ``)}
