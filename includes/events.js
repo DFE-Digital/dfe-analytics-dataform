@@ -1,3 +1,6 @@
+const {decodeUriComponent} = require('./data_functions');
+const {standardisePathQuery} = require('./data_functions');
+
 module.exports = (params) => {
     return publish("events_" + params.eventSourceName, {
         ...params.defaultConfig,
@@ -23,9 +26,12 @@ module.exports = (params) => {
             request_uuid: "UUID of the web request that either is this event, or that caused this event.",
             request_method: "Whether the web request that either is this event, or caused this event, was a GET or a POST request.",
             request_path: "The path, starting with a / and excluding any query parameters, of the web request that either is this event, or caused this event.",
+            request_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters that were sent to the application as part of the web request that was this event or caused this event.",
+            request_path_and_query: "This is a string containing both the request path and request query. The request query is ordered alphabetically to ensure consistency between the request_path_and_query and referer_request_path_and_query fields.",
             request_user_agent: "The user agent of the web request that either is this event or caused this event. Allows a user's browser and operating system to be identified.",
             request_referer: "The URL of any page the user was viewing when they initiated the web request that either is this event or caused this event. This is the full URL, including protocol (https://) and any query parameters, if the browser shared these with our application as part of the web request. It is very common for this referer to be truncated for referrals from external sites.",
-            request_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters that were sent to the application as part of the web request that was this event or caused this event.",
+            request_referer_domain: "This is a string containing the domain extracted from the request referer URL.",
+            request_referer_path_and_query: "This is a string containing both the referer request path and referer request query extracted from the request referer URL. The request query is ordered alphabetically to ensure consistency between the referer_request_path_and_query and request_path_and_query fields.",
             response_content_type: "Content type of any data that was returned to the browser following the web request that either was this event or caused this event. For example, 'text/html; charset=utf-8'. Image views, for example, may have a non-text/html content type.",
             response_status: "HTTP response code returned by the application in response to the web request that either was this event or caused this event. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status.",
             data: {
@@ -105,9 +111,44 @@ event_with_web_request_data AS (
     AND event.event_type != "web_request"
   WHERE
     event.occurred_at > event_timestamp_checkpoint
-  ${params.bqEventsTableNameSpace ? `AND namespace = '${params.bqEventsTableNameSpace}'` : ``})
+  ${params.bqEventsTableNameSpace ? `AND namespace = '${params.bqEventsTableNameSpace}'` : ``}),
+events_with_path_and_query AS (
+  SELECT *,
+  -- The purpose of the below block is to produce the request_path_and_query using CONCAT(request_path, '?', request_query). As CONCAT will return NULL if the request_query is NULL, we use COALESCE to replace a NULL query with ''. This ensures this field is never NULL if a request_path exists. 
+  CONCAT(
+  request_path,
+  COALESCE(
+    CONCAT('?', 
+      REPLACE((
+        SELECT STRING_AGG(CONCAT(rq.key, '=', value), '&')
+        FROM UNNEST(event_with_web_request_data.request_query) AS rq,
+             UNNEST(rq.value) AS value
+      ), ' ', '+')), '')) AS request_path_and_query,
+  REGEXP_EXTRACT(request_referer, r'https?:\/\/([^\/]+)') AS request_referer_domain,
+  ${decodeUriComponent("REGEXP_EXTRACT(request_referer, r'https?:\/\/[^\/]+(\/.*)')")} AS request_referer_path_and_query,
+  FROM event_with_web_request_data
+)
 SELECT
-  event_with_web_request_data.*,
+  events_with_path_and_query.occurred_at,
+  events_with_path_and_query.request_uuid,
+  events_with_path_and_query.event_type,
+  events_with_path_and_query.environment,
+  events_with_path_and_query.namespace,
+  events_with_path_and_query.data,
+  events_with_path_and_query.hidden_data,
+  events_with_path_and_query.entity_table_name,
+  events_with_path_and_query.request_path,
+  events_with_path_and_query.request_query,
+  ${standardisePathQuery("events_with_path_and_query.request_path_and_query")} AS request_path_and_query,
+  events_with_path_and_query.request_user_id,
+  events_with_path_and_query.request_method,
+  events_with_path_and_query.request_user_agent,
+  events_with_path_and_query.request_referer,
+  events_with_path_and_query.request_referer_domain,
+  ${standardisePathQuery("events_with_path_and_query.request_referer_path_and_query")} AS request_referer_path_and_query,
+  events_with_path_and_query.response_status,
+  events_with_path_and_query.response_content_type,
+  events_with_path_and_query.anonymised_user_agent_and_ip,
   IF(REGEXP_CONTAINS(request_user_agent, '(?i)(bot|http|python|scan|check|spider|curl|trend|ruby|bash|batch|verification|qwantify|nuclei|ai|crawler|perl|java|test|scoop|fetch|adreview|cortex|nessus|bitdiscovery|postplanner|faraday|restsharp|hootsuite|mattermost|shortlink|retriever|auto|scrper|alyzer|dispatch|traackr|fiddler|crowsnest|gigablast|wakelet|installatron|intently|openurl|anthill|curb|trello|inject|ahc|sleep|sysdate|=|cloudinary|statuscake|cloudfront|archive|sleuth|bingpreview|facebookexternalhit|newspaper|econtext|postmanruntime|probe)'),"bot",
   CASE parseUserAgent(request_user_agent).category
     WHEN "smartphone" THEN "mobile"
@@ -123,7 +164,7 @@ SELECT
   REPLACE(parseUserAgent(request_user_agent).vendor,"UNKNOWN","unknown") AS operating_system_vendor,
   REPLACE(parseUserAgent(request_user_agent).os_version,"UNKNOWN","unknown") AS operating_system_version
 FROM
-  event_with_web_request_data
+  events_with_path_and_query
   `).preOps(ctx => `
     DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.incremental() ? `
