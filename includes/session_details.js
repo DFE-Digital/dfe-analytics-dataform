@@ -15,7 +15,7 @@ module.exports = (params) => {
             }
         },
         assertions: {
-                uniqueKey: [["session_id"], ["session_id", "user_id"]]
+                uniqueKey: [["session_id"]]
         },
         tags: [params.eventSourceName.toLowerCase()],
         description: "This table contains data on sessions and accompanying metrics. Each row is a single session. This table uses the Google Analytics definition of a session: A session is a group of user interactions with the website that that occur continuously without a break of more than 30 minutes of inactivity or until the user navigates away from the site. This does not include sessions or page visits from bots.",
@@ -498,16 +498,11 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     pages_visited_details
   FROM
     session_metrics
-  `).preOps((ctx) => {
+  `).preOps(ctx => {
     // This pre operation is used to filter the events table to only events that started AFTER the maximum event start time in the current session_details table. 
-    const isIncremental = ctx.incremental(); // Check if the run is incremental
-    const eventTimestampCheckpoint = isIncremental
-    ? `SELECT MAX(session_start_timestamp) FROM ${ctx.self()}`
-    : `SELECT TIMESTAMP("2000-01-01")`;
     return `
-    -- Declare variable for filtering events
     DECLARE event_timestamp_checkpoint TIMESTAMP DEFAULT (
-      ${eventTimestampCheckpoint}
+      ${ctx.incremental() ? `SELECT MAX(session_start_timestamp) FROM ${ctx.self()}` : `SELECT TIMESTAMP("2000-01-01")`}
     );
   `;
 })
