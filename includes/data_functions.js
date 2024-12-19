@@ -315,6 +315,64 @@ function setKeyConstraints(ctx, dataform, constraints) {
   `;
 }
 
+
+// Referer URLs in events include URI-formatted codes for some characters e.g. '%20' for ' '. This JS function parses them.
+function decodeUriComponent(url) {
+  return `
+    (
+      SELECT
+        STRING_AGG(
+          IF(
+            REGEXP_CONTAINS(y, r'^%[0-9a-fA-F]{2}'),
+            SAFE_CONVERT_BYTES_TO_STRING(FROM_HEX(REPLACE(y, '%', ''))),
+            y
+          ),
+          '' ORDER BY i
+        )
+      FROM UNNEST(REGEXP_EXTRACT_ALL(${url}, r"%[0-9a-fA-F]{2}(?:%[0-9a-fA-F]{2})*|[^%]+")) y WITH OFFSET AS i
+    )
+  `;
+}
+
+
+/*
+
+This function is designed to standardise the request query section of urls (path and query part) to allow for accurate comparison between page_path_and_query and referer_path_and_query. 
+
+There are two parts to the standardisation:
+1. Remove duplicate key value pairs
+2. Organise key value pairs alphabetically
+
+The process is as follows:
+1. IF the path_query is NULL then return NULL (necessary as the function would otherwise return a blank string)
+2. IF the path_query contains a string after the '?' then process it, otherwise return a blank string. 
+3. SPLIT the query section of the path_query (string following '?') into key_value_pairs (separated by '&')
+4. SELECT DISTINCT key_value_pairs. This removes duplicates. It is necessary to unnest the array of key_value_pairs for this purpose. 
+5. ORDER the key_value_pairs (alphabetically) and combine them into a single string (STRING_AGG)
+6. CONCAT the standardised string of key_value_pairs with '?' to make it the complete query part of the url.
+7. CONCAT the standardised query with the path to form the complete url (path and query part)
+* SAFE_OFFSET is used wherever possible to avoid errors preventing the script from running
+
+This function is applied to both the path url and the referer url to ensure they are formatted consistently.
+
+ */
+
+function standardisePathQuery(path_query) {
+  return `
+    CASE WHEN ${path_query} IS NOT NULL THEN
+      SPLIT(${path_query}, '?')[SAFE_OFFSET(0)] || 
+      IF(
+        ARRAY_LENGTH(SPLIT(${path_query}, '?')) > 1,
+        '?' || (
+          SELECT STRING_AGG(DISTINCT key_value_pair, '&' ORDER BY key_value_pair)
+          FROM UNNEST(SPLIT(SPLIT(${path_query}, '?')[SAFE_OFFSET(1)], '&')) AS key_value_pair
+        ),
+        ''
+      )
+    END
+  `;
+}
+
 module.exports = {
     stringToTimestamp,
     stringToDate,
@@ -327,5 +385,7 @@ module.exports = {
     keyIsInEventData,
     eventDataCreateOrReplace,
     wait,
-    setKeyConstraints
+    setKeyConstraints,
+    decodeUriComponent,
+    standardisePathQuery
 };
