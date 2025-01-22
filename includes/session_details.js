@@ -23,7 +23,11 @@ module.exports = (params) => {
         columns: {
           session_id: "The unique ID of the session",
           user_id: "UUID of the user. This is only available for users who have signed into the service during their session.",
+          session_namespace: "The namespace of the instance of dfe-analytics that streamed the first web visit event in this session. For example this might identify the name of the service that streamed the event.",
           start_page: "The page URL of the first page visited in the session",
+          utm_source: "Identifies the specific source of the traffic (e.g., marketing campaign, newsletter) as part of the UTM tag used for campaign tracking.",
+          utm_medium: "Indicates the marketing channel or medium through which the traffic originated (e.g., email, social) using a UTM tag.",
+          utm_campaign: "Specifies the name or identifier of the marketing campaign driving the traffic (e.g. marketing_campaign_summer_2024), tracked via a UTM tag.",
           exit_page: "The page URL of the last page visited in the session",
           session_start_timestamp: "Timestamp of the first page visit in the session",
           final_session_page_timestamp: "Timestamp of the last page visit in the session",
@@ -74,6 +78,8 @@ WITH
     -- User ID for the session (only available if the user signs in)
     occurred_at,
     -- Timestamp of the web request
+    namespace,
+    -- The namespace of the instance of dfe-analytics that streamed this event.
     request_path,
     -- Path requested by the user
     request_path_and_query AS page_path_and_query,
@@ -164,6 +170,7 @@ events_with_following_pages AS (
   SELECT
     anonymised_user_agent_and_ip,
     request_user_id,
+    namespace,
     request_path,
     page_path_and_query,
     request_referer_domain,
@@ -179,6 +186,7 @@ events_with_following_pages AS (
   GROUP BY
     request_user_id,
     anonymised_user_agent_and_ip,
+    namespace,
     request_path,
     page_path_and_query,
     request_referer_domain,
@@ -263,6 +271,7 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
       -- Third preference: use the most recent past user_id within 30 mins
       ) AS estimated_user_id,
     -- The final estimated user_id based on the conditions
+    namespace,
     request_path,
     page_path_and_query,
     request_referer_domain,
@@ -322,7 +331,14 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     anonymised_user_agent_and_ip,
     estimated_user_id AS user_id,
     occurred_at AS page_visit_at,
+    namespace,
     request_path AS page_path,
+    REGEXP_EXTRACT(page_path_and_query, r'utm_source=([^&]*)') AS utm_source,
+    -- Extract the UTM Source
+    REGEXP_EXTRACT(page_path_and_query, r'utm_medium=([^&]*)') AS utm_medium,
+    -- Extract the UTM Medium
+    REGEXP_EXTRACT(page_path_and_query, r'utm_campaign=([^&]*)') AS utm_campaign,
+    -- Extract the UTM Campaign
     request_referer_domain,
     REGEXP_EXTRACT(referer_path_and_query, r'^([^?]+)') AS previous_page_path,
     next_step,
@@ -378,7 +394,14 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     anonymised_user_agent_and_ip,
     estimated_user_id AS user_id,
     occurred_at AS page_visit_at,
+    namespace,
     request_path AS page_path,
+    REGEXP_EXTRACT(page_path_and_query, r'utm_source=([^&]*)') AS utm_source,
+    -- Extract the UTM Source
+    REGEXP_EXTRACT(page_path_and_query, r'utm_medium=([^&]*)') AS utm_medium,
+    -- Extract the UTM Medium
+    REGEXP_EXTRACT(page_path_and_query, r'utm_campaign=([^&]*)') AS utm_campaign,
+    -- Extract the UTM Campaign
     request_referer_domain,
     REGEXP_EXTRACT(referer_path_and_query, r'^([^?]+)') AS previous_page_path,
     next_step,
@@ -413,7 +436,11 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     anonymised_user_agent_and_ip,
     user_id,
     page_visit_at,
+    namespace,
     page_path,
+    utm_source,
+    utm_medium,
+    utm_campaign,
     request_referer_domain,
     previous_page_path,
     next_step,
@@ -425,7 +452,11 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     anonymised_user_agent_and_ip,
     user_id,
     page_visit_at,
+    namespace,
     page_path,
+    utm_source,
+    utm_medium,
+    utm_campaign,
     request_referer_domain,
     previous_page_path,
     next_step,
@@ -438,7 +469,11 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     session_id,
     anonymised_user_agent_and_ip,
     user_id,
+    namespace,
     page_path,
+    utm_source,
+    utm_medium,
+    utm_campaign,
     request_referer_domain,
     previous_page_path,
     page_visit_at AS page_entry_time,
@@ -467,6 +502,15 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
         next_step)
     ORDER BY
       page_entry_time) AS pages_visited_details,
+    ARRAY_AGG(
+        STRUCT(
+            namespace,
+            utm_source,
+            utm_medium,
+            utm_campaign
+        )
+        ORDER BY page_entry_time
+    ) AS session_level_metrics,
     MIN(page_entry_time) AS session_start_timestamp,
     -- session_start_timestamp is the page_entry_time of the first page
     MAX(page_entry_time) AS final_session_page_timestamp,
@@ -481,8 +525,12 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
   SELECT
     session_id,
     user_id,
+    session_level_metrics[0].namespace AS session_namespace,
     pages_visited_details[0].previous_page_domain AS session_referer_domain,
     pages_visited_details[0].page AS start_page,
+    session_level_metrics[0].utm_source AS utm_source,
+    session_level_metrics[0].utm_medium AS utm_medium,
+    session_level_metrics[0].utm_campaign AS utm_campaign,
     -- set start_page to the first page in the pages_visited_details array for a single session
    ARRAY_REVERSE(pages_visited_details)[0].page AS exit_page,
     -- set exit_page to the last page in the pages_visited_details array for a single session
