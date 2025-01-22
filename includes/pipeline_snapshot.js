@@ -20,7 +20,7 @@ module.exports = (version, params) => {
 
     return [
       // Step 1: Create the pipeline monitoring in table-level
-      operate("pipeline_table_snapshot_" + params.eventSourceName, ctx => [`
+      operate("pipeline_table_snapshots_" + params.eventSourceName, ctx => [`
 
       BEGIN
       CREATE TABLE IF NOT EXISTS ${targetTable} (
@@ -151,9 +151,30 @@ module.exports = (version, params) => {
         `]).tags([params.eventSourceName.toLowerCase()]),
 
       // Step 2: Aggregate metrics to the output_dataset_name level
-      operate("pipeline_table_aggregation_" + params.eventSourceName, ctx => [`
+      operate("pipeline_snapshots_" + params.eventSourceName, ctx => [`
       BEGIN
-      CREATE TABLE IF NOT EXISTS ${aggTargetTable} AS
+      CREATE TABLE IF NOT EXISTS ${aggTargetTable} (
+        workflow_executed_at TIMESTAMP,
+        gcp_project_name STRING,
+        event_source_name STRING,
+        output_dataset_name STRING,
+        dfe_analytics_version STRING,
+        dfe_analytics_dataform_version STRING,
+        checksum_enabled BOOLEAN,
+        number_of_tables INTEGER,
+        number_of_tables_with_matching_checksums INTEGER,
+        number_of_rows INTEGER,
+        number_of_missing_rows INTEGER,
+        number_of_extra_rows INTEGER,
+        weekly_change_in_number_of_rows INTEGER,
+        weekly_change_in_number_of_missing_rows INTEGER,
+        weekly_change_in_number_of_extra_rows INTEGER,
+        largest_error_rate_for_any_table FLOAT64,
+        table_with_largest_error_rate STRING,
+        largest_twelve_week_projected_error_rate_for_any_table FLOAT64,
+        table_with_largest_twelve_week_projected_error_rate STRING
+      );
+      INSERT INTO ${aggTargetTable}
       SELECT
         CURRENT_TIMESTAMP AS workflow_executed_at,
         gcp_project_name,
