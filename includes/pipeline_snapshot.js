@@ -11,7 +11,7 @@ module.exports = (version, params) => {
 
      const aggTargetTable = isDevelopment
         ? "`" + params.bqProjectName + "." + dataform.projectConfig.defaultSchema + "_" + dataform.projectConfig.schemaSuffix + ".pipeline_snapshots`" // dev aggregation target table
-        : "`cross-teacher-services.monitoring.pipeline_snapshots_new`"; // production aggregation target table
+        : "`cross-teacher-services.monitoring.pipeline_snapshots`"; // production aggregation target table
 
     if (!params.enableMonitoring) {
         // Don't send pipeline snapshot if monitoring is disabled (enableMonitoring is true by default)
@@ -157,15 +157,18 @@ module.exports = (version, params) => {
         workflow_executed_at TIMESTAMP,
         gcp_project_name STRING,
         event_source_name STRING,
-        output_dataset_name STRING,
         dfe_analytics_version STRING,
         dfe_analytics_dataform_version STRING,
-        checksum_enabled BOOLEAN,
         number_of_tables INTEGER,
         number_of_tables_with_matching_checksums INTEGER,
-        number_of_rows INTEGER,
+        checksum_enabled BOOLEAN,
         number_of_missing_rows INTEGER,
         number_of_extra_rows INTEGER,
+        number_of_rows INTEGER,
+        dfe_analytics_dataform_parameters STRING,
+        output_dataset_name STRING,
+        hidden_pii_streamed_within_the_last_week BOOLEAN,
+        hidden_pii_configured BOOLEAN,
         weekly_change_in_number_of_rows INTEGER,
         weekly_change_in_number_of_missing_rows INTEGER,
         weekly_change_in_number_of_extra_rows INTEGER,
@@ -179,15 +182,18 @@ module.exports = (version, params) => {
         CURRENT_TIMESTAMP AS workflow_executed_at,
         gcp_project_name,
         event_source_name,
-        output_dataset_name,
         dfe_analytics_version,
         dfe_analytics_dataform_version,
-        COUNT(DISTINCT entity_table_name) > 0 AS checksum_enabled,
         COUNT(DISTINCT entity_table_name) AS number_of_tables,
         SUM(CAST(matching_checksums AS INT64)) as number_of_tables_with_matching_checksums,
-        SUM(number_of_rows) AS number_of_rows,
+        COUNT(DISTINCT entity_table_name) > 0 AS checksum_enabled,
         SUM(number_of_missing_rows) AS number_of_missing_rows,
         SUM(number_of_extra_rows) AS number_of_extra_rows,
+        SUM(number_of_rows) AS number_of_rows,
+        dfe_analytics_dataform_parameters,
+        output_dataset_name,
+        hidden_pii_streamed_within_the_last_week,
+        hidden_pii_configured,
         SUM(weekly_change_in_number_of_rows) AS weekly_change_in_number_of_rows,
         SUM(weekly_change_in_number_of_missing_rows) AS weekly_change_in_number_of_missing_rows,
         SUM(weekly_change_in_number_of_extra_rows) AS weekly_change_in_number_of_extra_rows,
@@ -198,7 +204,7 @@ module.exports = (version, params) => {
       FROM
         ${targetTable}
       GROUP BY
-        1,2,3,4,5,6;
+        all;
       EXCEPTION WHEN ERROR THEN
         IF LOWER(@@error.message) LIKE "%access denied%" THEN RAISE USING MESSAGE = "Your Dataform service account does not have the required permissions to send data to the monitoring.pipeline_snapshots table in the cross-teacher-services GCP project. Please ask the Data & Insights team on Slack (#twd_data_insights) to give your Dataform service account the BigQuery Data Editor role on this table.";
         ELSE RAISE;
