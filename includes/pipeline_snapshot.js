@@ -30,8 +30,6 @@ module.exports = (version, params) => {
           output_dataset_name STRING,
           entity_table_name STRING,
           checksum_calculated_at TIMESTAMP,
-          dfe_analytics_version STRING,
-          dfe_analytics_dataform_version STRING,
           matching_checksums BOOLEAN,
           number_of_rows INTEGER,
           number_of_missing_rows INTEGER,
@@ -41,7 +39,6 @@ module.exports = (version, params) => {
           weekly_change_in_number_of_extra_rows INTEGER,
           error_rate FLOAT64,
           twelve_week_projected_error_rate FLOAT64,
-          dfe_analytics_dataform_parameters STRING,
           hidden_pii_streamed_within_the_last_week BOOLEAN,
           hidden_pii_configured BOOLEAN
           );
@@ -53,8 +50,6 @@ module.exports = (version, params) => {
           output_dataset_name,
           entity_table_name,
           checksum_calculated_at,
-          dfe_analytics_version,
-          dfe_analytics_dataform_version,
           matching_checksums,
           number_of_rows,
           number_of_missing_rows,
@@ -64,7 +59,6 @@ module.exports = (version, params) => {
           weekly_change_in_number_of_extra_rows,
           error_rate,
           twelve_week_projected_error_rate,
-          dfe_analytics_dataform_parameters,
           hidden_pii_streamed_within_the_last_week,
           hidden_pii_configured 
           )
@@ -101,13 +95,6 @@ module.exports = (version, params) => {
           CAST(NULL AS INT64) AS number_of_extra_rows
           `}
         ),
-        dfe_analytics_configuration_metrics AS (
-        SELECT
-          MAX_BY(version, valid_from) AS dfe_analytics_version
-        FROM
-          ${ctx.ref("dfe_analytics_configuration_" + params.eventSourceName)}
-        WHERE
-          valid_to IS NULL ),
         events_table_metrics AS (
           SELECT
             LOGICAL_OR(ARRAY_LENGTH(hidden_data) > 0) AS hidden_pii_streamed_within_the_last_week
@@ -123,8 +110,6 @@ module.exports = (version, params) => {
         "${dataform.projectConfig.defaultSchema + (dataform.projectConfig.schemaSuffix ? "_" + dataform.projectConfig.schemaSuffix : "")}" AS output_dataset_name,
         entity_table_check_scheduled_metrics.entity_table_name,
         entity_table_check_scheduled_metrics.checksum_calculated_at,
-        dfe_analytics_configuration_metrics.dfe_analytics_version,
-        "${version}" AS dfe_analytics_dataform_version,
         entity_table_check_scheduled_metrics.matching_checksums,
         entity_table_check_scheduled_metrics.number_of_rows,
         entity_table_check_scheduled_metrics.number_of_missing_rows,
@@ -134,14 +119,12 @@ module.exports = (version, params) => {
         entity_table_check_scheduled_metrics.weekly_change_in_number_of_extra_rows,
         entity_table_check_scheduled_metrics.error_rate,
         entity_table_check_scheduled_metrics.twelve_week_projected_error_rate,
-        """${JSON.stringify(params)}""" AS dfe_analytics_dataform_parameters,
         /* New parameters from dfe-analytics-dataform v2.0.0 below */
         events_table_metrics.hidden_pii_streamed_within_the_last_week,
         ${params.hiddenPolicyTagLocation ? "TRUE" : "FALSE"} AS hidden_pii_configured
         ${params.transformEntityEvents ? `` : ``}
       FROM
         entity_table_check_scheduled_metrics,
-        dfe_analytics_configuration_metrics,
         events_table_metrics;
       EXCEPTION WHEN ERROR THEN
         IF LOWER(@@error.message) LIKE "%access denied%" THEN RAISE USING MESSAGE = "Your Dataform service account does not have the required permissions to send data to the monitoring.pipeline_snapshots table in the cross-teacher-services GCP project. Please ask the Data & Insights team on Slack (#twd_data_insights) to give your Dataform service account the BigQuery Data Editor role on this table.";
@@ -178,19 +161,26 @@ module.exports = (version, params) => {
         table_with_largest_twelve_week_projected_error_rate STRING
       );
       INSERT INTO ${aggTargetTable}
+      WITH dfe_analytics_configuration_metrics AS (
+        SELECT
+          MAX_BY(version, valid_from) AS dfe_analytics_version
+        FROM
+          ${ctx.ref("dfe_analytics_configuration_" + params.eventSourceName)}
+        WHERE
+          valid_to IS NULL )
       SELECT
         CURRENT_TIMESTAMP AS workflow_executed_at,
         gcp_project_name,
         event_source_name,
-        dfe_analytics_version,
-        dfe_analytics_dataform_version,
+        dfe_analytics_configuration_metrics.dfe_analytics_version,
+        "${version}" AS dfe_analytics_dataform_version,
         COUNT(DISTINCT entity_table_name) AS number_of_tables,
         SUM(CAST(matching_checksums AS INT64)) as number_of_tables_with_matching_checksums,
         COUNT(DISTINCT entity_table_name) > 0 AS checksum_enabled,
         SUM(number_of_missing_rows) AS number_of_missing_rows,
         SUM(number_of_extra_rows) AS number_of_extra_rows,
         SUM(number_of_rows) AS number_of_rows,
-        dfe_analytics_dataform_parameters,
+        """${JSON.stringify(params)}""" AS dfe_analytics_dataform_parameters,
         output_dataset_name,
         hidden_pii_streamed_within_the_last_week,
         hidden_pii_configured,
@@ -202,7 +192,8 @@ module.exports = (version, params) => {
         MAX(twelve_week_projected_error_rate) AS largest_twelve_week_projected_error_rate_for_any_table,
         MAX_BY(entity_table_name, twelve_week_projected_error_rate) AS table_with_largest_twelve_week_projected_error_rate
       FROM
-        ${targetTable}
+        ${targetTable},
+        dfe_analytics_configuration_metrics
       GROUP BY
         all;
       EXCEPTION WHEN ERROR THEN
