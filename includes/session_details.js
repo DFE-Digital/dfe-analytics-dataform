@@ -1,8 +1,14 @@
 module.exports = (params) => {
-  if (!params.enableSessionDetailsTable) {
-    return true;
-  }  
-  return publish("session_details_" + params.eventSourceName, {
+    if (!params.enableSessionDetailsTable) {
+        return true;
+    }
+
+    // Determine table name based on eventSourceName and bqEventsTableNameSpace
+    const tableName = params.eventSourceName === "publish" ?
+        `${params.bqEventsTableNameSpace}` :
+        `${params.eventSourceName}`;
+
+    return publish("session_details_" + tableName, {
         ...params.defaultConfig,
         type: "incremental",
         protected: false,
@@ -15,38 +21,40 @@ module.exports = (params) => {
             }
         },
         assertions: {
-                uniqueKey: [["session_id"]]
+            uniqueKey: [
+                ["session_id"]
+            ]
         },
         tags: [params.eventSourceName.toLowerCase()],
         description: "This table contains data on sessions and accompanying metrics. Each row is a single session. This table uses the Google Analytics definition of a session: A session is a group of user interactions with the website that that occur continuously without a break of more than 30 minutes of inactivity or until the user navigates away from the site. This does not include sessions or page visits from bots.",
         dependencies: params.dependencies,
         columns: {
-          session_id: "The unique ID of the session",
-          user_id: "UUID of the user. This is only available for users who have signed into the service during their session.",
-          session_namespace: "The namespace of the instance of dfe-analytics that streamed the first web visit event in this session. For example this might identify the name of the service that streamed the event.",
-          start_page: "The page URL of the first page visited in the session",
-          utm_source: "Identifies the specific source of the traffic (e.g., marketing campaign, newsletter) as part of the UTM tag used for campaign tracking.",
-          utm_medium: "Indicates the marketing channel or medium through which the traffic originated (e.g., email, social) using a UTM tag.",
-          utm_campaign: "Specifies the name or identifier of the marketing campaign driving the traffic (e.g. marketing_campaign_summer_2024), tracked via a UTM tag.",
-          exit_page: "The page URL of the last page visited in the session",
-          session_start_timestamp: "Timestamp of the first page visit in the session",
-          final_session_page_timestamp: "Timestamp of the last page visit in the session",
-          session_time_in_seconds: "The duration of the session in seconds.",
-          count_pages_visited: "The number of pages visited during the session.",
-          pages_visited_details: {
-              description: "The pages visited within this session and associated metrics.",
-              columns: {
-                  anonymised_user_agent_and_ip: "One way hash of a combination of the user's IP address and user agent. Multiple users may share a single anonymised_user_agent_and_ip.",
-                  page: "The URL of the page visited",
-                  page_entry_time: "Timestamp indicating when the page was entered.",
-                  page_exit_time: "Timestamp indicating when the page was exited and the next page visit in the session began. This will be NULL is the user left the site after this page.",
-                  duration: "The difference in seconds between page_entry_time and page_exit_time. This will be NULL is the user left the site after this page.",
-                  next_step: "String indicating whether, at the end of this funnel, the user 'Left site immediately after this' or 'Visited subsequent pages'",
-                  exit_page_flag: "Indicates is the user left the site after this page. This is included as there are a small number of instances where a user has no subsequent page visits but 'next step' field shows 'Visited subsequent pages'"
-              }
-          }
-        } 
-  }).query(ctx => `
+            session_id: "The unique ID of the session",
+            user_id: "UUID of the user. This is only available for users who have signed into the service during their session.",
+            session_namespace: "The namespace of the instance of dfe-analytics that streamed the first web visit event in this session. For example this might identify the name of the service that streamed the event.",
+            start_page: "The page URL of the first page visited in the session",
+            utm_source: "Identifies the specific source of the traffic (e.g., marketing campaign, newsletter) as part of the UTM tag used for campaign tracking.",
+            utm_medium: "Indicates the marketing channel or medium through which the traffic originated (e.g., email, social) using a UTM tag.",
+            utm_campaign: "Specifies the name or identifier of the marketing campaign driving the traffic (e.g. marketing_campaign_summer_2024), tracked via a UTM tag.",
+            exit_page: "The page URL of the last page visited in the session",
+            session_start_timestamp: "Timestamp of the first page visit in the session",
+            final_session_page_timestamp: "Timestamp of the last page visit in the session",
+            session_time_in_seconds: "The duration of the session in seconds.",
+            count_pages_visited: "The number of pages visited during the session.",
+            pages_visited_details: {
+                description: "The pages visited within this session and associated metrics.",
+                columns: {
+                    anonymised_user_agent_and_ip: "One way hash of a combination of the user's IP address and user agent. Multiple users may share a single anonymised_user_agent_and_ip.",
+                    page: "The URL of the page visited",
+                    page_entry_time: "Timestamp indicating when the page was entered.",
+                    page_exit_time: "Timestamp indicating when the page was exited and the next page visit in the session began. This will be NULL is the user left the site after this page.",
+                    duration: "The difference in seconds between page_entry_time and page_exit_time. This will be NULL is the user left the site after this page.",
+                    next_step: "String indicating whether, at the end of this funnel, the user 'Left site immediately after this' or 'Visited subsequent pages'",
+                    exit_page_flag: "Indicates is the user left the site after this page. This is included as there are a small number of instances where a user has no subsequent page visits but 'next step' field shows 'Visited subsequent pages'"
+                }
+            }
+        }
+    }).query(ctx => `
   
 /* 
 
@@ -100,9 +108,17 @@ WITH
     -- Only web page visits
     AND response_status NOT LIKE "3__"
     -- Do not include redirects 
-    AND occurred_at > event_timestamp_checkpoint),
-    -- only events that occurred within 24 hours of the latest session start,
-
+    AND occurred_at > event_timestamp_checkpoint
+    -- only events that occurred within 24 hours of the latest session start
+  ${
+    params.eventSourceName === 'publish' && params.bqEventsTableNameSpace === 'find'
+    ? `AND namespace = 'find'`
+    : params.eventSourceName === 'publish' && params.bqEventsTableNameSpace === 'publish'
+      ? `AND namespace = 'publish'`
+      : ``
+        }
+  -- If the params.eventSourceName === 'publish' then add a WHERE clause to split the table by find and publish
+),
   /*
 
 The events_with_next_visit_to_url CTE left joins, to each page, all the pages that directly follow a page visit. Importantly, multiple future pages DO NOT indicate a journey of page visits but instead suggest 'branching' page visits (the user visited visited multiple following pages from the current page.)
@@ -545,13 +561,15 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     count_pages_visited,
     pages_visited_details
   FROM
-    session_metrics
+    session_metrics 
+    -- Source table containing web event data
+
   `).preOps(ctx => {
-    // This pre operation is used to filter the events table to only events that started AFTER the maximum event start time in the current session_details table. 
-    return `
+        // This pre operation is used to filter the events table to only events that started AFTER the maximum event start time in the current session_details table. 
+        return `
     DECLARE event_timestamp_checkpoint TIMESTAMP DEFAULT (
       ${ctx.incremental() ? `SELECT MAX(session_start_timestamp) FROM ${ctx.self()}` : `SELECT TIMESTAMP("2000-01-01")`}
     );
   `;
-})
+    })
 }
