@@ -1,8 +1,14 @@
 module.exports = (params) => {
-  if (!params.enableSessionDetailsTable) {
-    return true;
-  }  
-  return publish("session_details_" + params.eventSourceName, {
+    if (!params.enableSessionDetailsTable) {
+        return true;
+    }
+
+    const targets = params.eventSourceName === 'publish' 
+        ? ['find', 'publish'] 
+        : [params.eventSourceName];
+
+    return targets.map(SourceOrNamespace => 
+        publish(`session_details_${SourceOrNamespace}`, { 
         ...params.defaultConfig,
         type: "incremental",
         protected: false,
@@ -46,7 +52,8 @@ module.exports = (params) => {
               }
           }
         } 
-  }).query(ctx => `
+  }).query(ctx => 
+`
   
 /* 
 
@@ -100,9 +107,17 @@ WITH
     -- Only web page visits
     AND response_status NOT LIKE "3__"
     -- Do not include redirects 
-    AND occurred_at > event_timestamp_checkpoint),
-    -- only events that occurred within 24 hours of the latest session start,
-
+    AND occurred_at > event_timestamp_checkpoint
+    -- only events that occurred within 24 hours of the latest session start
+      ${
+    params.eventSourceName === 'publish' && SourceOrNamespace === 'find'
+    ? `AND namespace = 'find'`
+    : params.eventSourceName === 'publish' && SourceOrNamespace === 'publish'
+      ? `AND namespace != 'find'`
+      : ``
+        }
+  -- If the params.eventSourceName === 'publish' then add a WHERE clause to split the table by find and publish
+ ),
   /*
 
 The events_with_next_visit_to_url CTE left joins, to each page, all the pages that directly follow a page visit. Importantly, multiple future pages DO NOT indicate a journey of page visits but instead suggest 'branching' page visits (the user visited visited multiple following pages from the current page.)
@@ -554,4 +569,5 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     );
   `;
 })
-}
+    );
+};
