@@ -110,9 +110,9 @@ WITH
     AND occurred_at > event_timestamp_checkpoint
     -- only events that occurred within 24 hours of the latest session start
       ${
-    params.eventSourceName === 'publish' && interface === 'find'
+    params.eventSourceName === 'publish' && SourceOrNamespace === 'find'
     ? `AND namespace = 'find'`
-    : params.eventSourceName === 'publish' && interface === 'publish'
+    : params.eventSourceName === 'publish' && SourceOrNamespace === 'publish'
       ? `AND namespace != 'find'`
       : ``
         }
