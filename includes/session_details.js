@@ -1,14 +1,8 @@
 module.exports = (params) => {
-    if (!params.enableSessionDetailsTable) {
-        return true;
-    }
-
-    const targets = params.eventSourceName === 'publish' 
-        ? ['find', 'publish'] 
-        : [params.eventSourceName];
-
-    return targets.map(SourceOrNamespace => 
-        publish(`session_details_${SourceOrNamespace}`, { 
+  if (!params.enableSessionDetailsTable) {
+    return true;
+  }  
+  return publish("session_details_" + params.eventSourceName, {
         ...params.defaultConfig,
         type: "incremental",
         protected: false,
@@ -109,14 +103,6 @@ WITH
     -- Do not include redirects 
     AND occurred_at > event_timestamp_checkpoint
     -- only events that occurred within 24 hours of the latest session start
-      ${
-    params.eventSourceName === 'publish' && SourceOrNamespace === 'find'
-    ? `AND namespace = 'find'`
-    : params.eventSourceName === 'publish' && SourceOrNamespace === 'publish'
-      ? `AND namespace != 'find'`
-      : ``
-        }
-  -- If the params.eventSourceName === 'publish' then add a WHERE clause to split the table by find and publish
  ),
   /*
 
@@ -569,5 +555,4 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     );
   `;
 })
-    );
-};
+}
