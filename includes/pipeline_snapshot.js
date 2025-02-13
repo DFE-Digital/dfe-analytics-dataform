@@ -53,9 +53,18 @@ module.exports = (version, params) => {
         FROM
           ${ctx.ref("dfe_analytics_configuration_" + params.eventSourceName)}
         WHERE
-          valid_to IS NULL )
+          valid_to IS NULL ),
+      latest_data AS (
+        SELECT
+          *
+        FROM
+          ${targetTable}
+        WHERE event_source_name = "${params.eventSourceName}"
+        QUALIFY
+          ROW_NUMBER() OVER (PARTITION BY entity_table_name ORDER BY workflow_executed_at DESC) = 1
+        )
       SELECT
-        CURRENT_TIMESTAMP AS workflow_executed_at,
+        workflow_executed_at,
         gcp_project_name,
         event_source_name,
         dfe_analytics_configuration_metrics.dfe_analytics_version,
@@ -78,9 +87,8 @@ module.exports = (version, params) => {
         MAX(twelve_week_projected_error_rate) AS largest_twelve_week_projected_error_rate_for_any_table,
         MAX_BY(entity_table_name, twelve_week_projected_error_rate) AS table_with_largest_twelve_week_projected_error_rate
       FROM
-        ${targetTable},
+        latest_data,
         dfe_analytics_configuration_metrics
-      WHERE event_source_name = "${params.eventSourceName}"
       GROUP BY
         all;
       EXCEPTION WHEN ERROR THEN
