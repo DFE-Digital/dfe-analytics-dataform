@@ -80,6 +80,7 @@ module.exports = (version, params) => {
       FROM
         ${targetTable},
         dfe_analytics_configuration_metrics
+      WHERE event_source_name = "${params.eventSourceName}"
       GROUP BY
         all;
       EXCEPTION WHEN ERROR THEN
