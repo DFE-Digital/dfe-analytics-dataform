@@ -24,6 +24,7 @@ const flattenedEntityFieldUpdates = require("./includes/flattened_entity_field_u
 const entityAt = require("./includes/entity_at");
 const entitiesAreMissingExpectedFields = require("./includes/entities_are_missing_expected_fields");
 const unhandledFieldOrEntityIsBeingStreamed = require("./includes/unhandled_field_or_entity_is_being_streamed");
+const unhandledCustomEventIsBeingStreamed = require("./includes/unhandled_custom_event_is_being_streamed");
 const hiddenPIIConfigurationDoesNotMatchEventsStreamed = require("./includes/hidden_pii_configuration_does_not_match_events_streamed");
 const entitiesHaveNotBeenBackfilled = require("./includes/entities_have_not_been_backfilled");
 const dataSchemaJSONLatest = require("./includes/data_schema_json_latest");
@@ -110,6 +111,7 @@ module.exports = (params) => {
             dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
             entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
             unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
+            unhandledCustomEventIsBeingStreamed: unhandledCustomEventIsBeingStreamed(params),
             hiddenPIIConfigurationDoesNotMatchEventsStreamed: hiddenPIIConfigurationDoesNotMatchEventsStreamed(params),
             entitiesHaveNotBeenBackfilled: entitiesHaveNotBeenBackfilled(params),
             entityVersion: entityVersion(params),
