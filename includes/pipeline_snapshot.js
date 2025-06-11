@@ -96,6 +96,7 @@ module.exports = (version, params) => {
         ELSE RAISE;
         END IF;
       END;
-        `]).tags([params.eventSourceName.toLowerCase()])
+        `]).dependencies(["pipeline_table_snapshots_" + params.eventSourceName])
+        .tags([params.eventSourceName.toLowerCase()])
     ];
 };
