@@ -5,6 +5,10 @@ module.exports = (version, params) => {
 
     const isDevelopment = dataform.projectConfig.schemaSuffix;
 
+    const targetSchema = isDevelopment
+        ? "`" + params.bqProjectName + "." + dataform.projectConfig.defaultSchema + "_" + dataform.projectConfig.schemaSuffix + "`" // dev target schema
+        : "`cross-teacher-services.monitoring`"; // production target schema
+
     const targetTable = isDevelopment
         ? "`" + params.bqProjectName + "." + dataform.projectConfig.defaultSchema + "_" + dataform.projectConfig.schemaSuffix + ".pipeline_table_snapshots`" // dev target table
         : "`cross-teacher-services.monitoring.pipeline_table_snapshots`"; // production target table
@@ -23,6 +27,8 @@ module.exports = (version, params) => {
       operate("pipeline_table_snapshots_" + params.eventSourceName, ctx => [`
 
       BEGIN
+      CREATE SCHEMA IF NOT EXISTS ${targetSchema};
+      
       CREATE TABLE IF NOT EXISTS ${targetTable} (
           workflow_executed_at TIMESTAMP,
           gcp_project_name STRING,
