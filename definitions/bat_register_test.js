@@ -3,7 +3,7 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
-    disabled: false,
+    disabled: true,
     eventSourceName: "register",
     bqDatasetName: "register_events_production",
     bqEventsTableName: "events",
