@@ -2,7 +2,7 @@ module.exports = (params) => {
   return assert(params.eventSourceName + "_entities_are_missing_expected_fields", {
     ...params.defaultConfig,
     type: "assertion",
-    description: "Counts the number of entities updated yesterday which did not contain an expected field, excluding updates which were before a new field was introduced partway through the day. The list is taken from the dataSchema JSON parameter passed to dfe-analytics-dataform, but the assertion will fail if that file is updated but this assertion is not in order to alert us that we need to think through the implications for analytics of losing a field. If this assertion fails, we need to ask developers why, and ask them either to fix the bug, or if the field was intentionally removed, remove the field from dataSchema and any points where it used downstream in the pipeline."
+    description: "Counts the number of entities updated yesterday which did not contain an expected field, excluding updates which were before a new field was introduced partway through the day. The list is taken from the dataSchema JSON parameter passed to dfe-analytics-dataform, but the assertion will fail if that file is updated but this assertion is not in order to alert us that we need to think through the implications for analytics of losing a field. If this assertion fails, we need to ask developers why, and ask them either to fix the bug, or if the field was intentionally removed, remove the field from dataSchema and any points where it used downstream in the pipeline.",
   }).tags([params.eventSourceName.toLowerCase()]).query(ctx => `
 WITH expected_entity_fields AS (
   SELECT DISTINCT
@@ -75,7 +75,8 @@ GROUP BY
 HAVING
   updates_made_yesterday_without_this_key > 0
   /* Don't flag an error if the field was a new field introduced midway through yesterday. */
-  AND NOT (last_update_yesterday_without_this_key_at < first_update_yesterday_with_this_key_at)
+  AND (first_update_yesterday_with_this_key_at IS NULL   -- This is to capture instances where there has NEVER been an update made with this key. These should still be flagged as it could be a redundant field. 
+  OR NOT (last_update_yesterday_without_this_key_at < first_update_yesterday_with_this_key_at))
 ORDER BY
   entity_name,
   expected_key`)

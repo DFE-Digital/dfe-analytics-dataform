@@ -11,7 +11,7 @@ module.exports = (params) => {
                     'valid_from < valid_to OR valid_to IS NULL'
                 ]
             },
-            dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields", params.eventSourceName + "_hidden_pii_configuration_does_not_match_entity_events_streamed_yesterday", params.eventSourceName + "_hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed"],
+            dependencies: [params.eventSourceName + "_hidden_pii_configuration_does_not_match_entity_events_streamed_yesterday", params.eventSourceName + "_hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed"],
             bigquery: {
                 partitionBy: "RANGE_BUCKET(entity_table_name_and_valid_to_partition_number, GENERATE_ARRAY(0, 2000, 1))",
                 updatePartitionFilter: "entity_table_name_and_valid_to_partition_number < 1000",

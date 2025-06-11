@@ -7,7 +7,7 @@ module.exports = (params) => {
                     uniqueKey: ["entity_table_name", "checksum_calculated_on"],
                     nonNull: ["entity_table_name"]
                 },
-                dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
+                dependencies: [],
                 bigquery: {
                     partitionBy: "checksum_calculated_on",
                     labels: {
