@@ -3,7 +3,7 @@ module.exports = (version, params) => {
     // - In development, the table includes a schema suffix specific to the workspace.
     // - In production, the table uses the standard monitoring schema.
 
-    const isDevelopment = dataform.projectConfig.schemaSuffix;
+    const isDevelopment = !!dataform.projectConfig.schemaSuffix;
 
     const targetSchema = isDevelopment
         ? "`" + params.bqProjectName + "." + dataform.projectConfig.defaultSchema + "_" + dataform.projectConfig.schemaSuffix + "`" // dev target schema
