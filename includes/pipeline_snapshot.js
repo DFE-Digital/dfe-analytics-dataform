@@ -23,29 +23,54 @@ module.exports = (version, params) => {
       operate("pipeline_snapshots_" + params.eventSourceName, ctx => [`
       BEGIN
       CREATE TABLE IF NOT EXISTS ${aggTargetTable} (
-        workflow_executed_at TIMESTAMP,
-        gcp_project_name STRING,
-        event_source_name STRING,
-        dfe_analytics_version STRING,
-        dfe_analytics_dataform_version STRING,
-        number_of_tables INTEGER,
-        number_of_tables_with_matching_checksums INTEGER,
-        checksum_enabled BOOLEAN,
-        number_of_missing_rows INTEGER,
-        number_of_extra_rows INTEGER,
-        number_of_rows INTEGER,
-        dfe_analytics_dataform_parameters STRING,
-        output_dataset_name STRING,
-        hidden_pii_streamed_within_the_last_week BOOLEAN,
-        hidden_pii_configured BOOLEAN,
-        weekly_change_in_number_of_rows INTEGER,
-        weekly_change_in_number_of_missing_rows INTEGER,
-        weekly_change_in_number_of_extra_rows INTEGER,
-        largest_error_rate_for_any_table FLOAT64,
-        table_with_largest_error_rate STRING,
-        largest_twelve_week_projected_error_rate_for_any_table FLOAT64,
-        table_with_largest_twelve_week_projected_error_rate STRING
-      );
+        workflow_executed_at TIMESTAMP OPTIONS(
+          description="Timestamp when the Dataform pipeline took this snapshot of itself."),
+        gcp_project_name STRING OPTIONS(
+          description="Name of the GCP project within which this Dataform pipeline was executed."),
+        event_source_name STRING OPTIONS(
+          description="The eventSourceName included in the name of each table compiled via the dfeAnalyticsDataform() function."),
+        dfe_analytics_version STRING OPTIONS(
+          description="Version of dfe-analytics last used to stream events into the events table for this pipeline."),
+        dfe_analytics_dataform_version STRING OPTIONS(
+          description="Version of dfe-analytics-dataform used to generate the SQL queries executed in this pipeline."),
+        number_of_tables INTEGER OPTIONS(
+          description="Total number of tables in the application database currently configured to stream to BigQuery."),
+        number_of_tables_with_matching_checksums INTEGER OPTIONS(
+          description="Number of tables fully and accurately loaded into BigQuery with matching checksums."),
+        checksum_enabled BOOLEAN OPTIONS(
+          description="Indicates if nightly checksums are being streamed to BigQuery by this application."),
+        number_of_missing_rows INTEGER OPTIONS(
+          description="Total rows present in the database but missing in BigQuery across all tables."),
+        number_of_extra_rows INTEGER OPTIONS(
+          description="Total rows present in BigQuery but no longer present in the source database."),
+        number_of_rows INTEGER OPTIONS(
+          description="Total rows across all tables in the database, based on the latest nightly checksum events."),
+        dfe_analytics_dataform_parameters STRING OPTIONS(
+          description="JSON string containing all configuration parameters used in this call to dfeAnalyticsDataform()."),
+        output_dataset_name STRING OPTIONS(
+          description="Name of the BigQuery dataset where this pipeline outputs transformed tables."),
+        hidden_pii_streamed_within_the_last_week BOOLEAN OPTIONS(
+          description="Indicates if hidden_data has been used in the events table within the last week."),
+        hidden_pii_configured BOOLEAN OPTIONS(
+          description="Indicates if a policy tag is configured in dfe-analytics-dataform for this pipeline."),
+        weekly_change_in_number_of_rows INTEGER OPTIONS(
+          description="Difference in number_of_rows compared to the value 7 days prior."),
+        weekly_change_in_number_of_missing_rows INTEGER OPTIONS(
+          description="Difference in number_of_missing_rows compared to the value 7 days prior."),
+        weekly_change_in_number_of_extra_rows INTEGER OPTIONS(
+          description="Difference in number_of_extra_rows compared to the value 7 days prior."),
+        largest_error_rate_for_any_table FLOAT64 OPTIONS(
+          description="Largest error rate for any table based on missing or extra rows as a proportion of total rows; always positive."),
+        table_with_largest_error_rate STRING OPTIONS(
+          description="Name of the table corresponding to the largest error rate."),
+        largest_twelve_week_projected_error_rate_for_any_table FLOAT64 OPTIONS(
+          description="Projected largest error rate for any table 12 weeks after checksum calculation, assuming current trends continue."),
+        table_with_largest_twelve_week_projected_error_rate STRING OPTIONS(
+          description="Name of the table with the largest projected twelve-week error rate.")
+      )
+      OPTIONS (
+            description = "Event-level pipeline monitoring data providing a detailed overview of how many tables in the project have matching checksums, along with counts of rows missing or extra in BigQuery compared to the source database."
+          );
       INSERT INTO ${aggTargetTable}
       WITH dfe_analytics_configuration_metrics AS (
         SELECT
@@ -70,7 +95,7 @@ module.exports = (version, params) => {
         dfe_analytics_configuration_metrics.dfe_analytics_version,
         "${version}" AS dfe_analytics_dataform_version,
         COUNT(DISTINCT entity_table_name) AS number_of_tables,
-        SUM(CAST(matching_checksums AS INT64)) as number_of_tables_with_matching_checksums,
+        SUM(CAST(matching_checksums AS INTEGER)) as number_of_tables_with_matching_checksums,
         COUNT(DISTINCT entity_table_name) > 0 AS checksum_enabled,
         SUM(number_of_missing_rows) AS number_of_missing_rows,
         SUM(number_of_extra_rows) AS number_of_extra_rows,
