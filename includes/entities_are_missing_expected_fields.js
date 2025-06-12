@@ -75,9 +75,8 @@ GROUP BY
 HAVING
   updates_made_yesterday_without_this_key > 0
   /* Don't flag an error if the field was a new field introduced midway through yesterday. */
-  AND ((first_update_yesterday_with_this_key_at IS NULL   -- This is to capture instances where there has NEVER been an update made with this key. These should still be flagged as it could be a redundant field. 
-  AND expected_key NOT IN ("id", "created_at", "updated_at")) -- This is to ensure the default fields that are created for all tables are not captured by this assertion if there has never been data in those fields. 
-  OR (last_update_yesterday_without_this_key_at >= first_update_yesterday_with_this_key_at))
+  AND (first_update_yesterday_with_this_key_at IS NULL   -- This is to capture instances where there was no update made with this key in the last 24 hours. This implies that the field has been removed by devs. 
+  OR (last_update_yesterday_without_this_key_at >= first_update_yesterday_with_this_key_at)) 
 ORDER BY
   entity_name,
   expected_key`)

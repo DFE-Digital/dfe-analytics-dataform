@@ -451,6 +451,7 @@ dfeAnalyticsDataform({
             entityTableName: "hesa_collection_requests",
             description: "",
             materialisation: "view",
+            primaryKey: "requested_at",
             keys: [{
                 keyName: "requested_at",
                 dataType: "timestamp",
