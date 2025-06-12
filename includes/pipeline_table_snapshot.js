@@ -3,7 +3,11 @@ module.exports = (version, params) => {
     // - In development, the table includes a schema suffix specific to the workspace.
     // - In production, the table uses the standard monitoring schema.
 
-    const isDevelopment = dataform.projectConfig.schemaSuffix;
+    const isDevelopment = !!dataform.projectConfig.schemaSuffix;
+
+    const targetSchema = isDevelopment
+        ? "`" + params.bqProjectName + "." + dataform.projectConfig.defaultSchema + "_" + dataform.projectConfig.schemaSuffix + "`" // dev target schema
+        : "`cross-teacher-services.monitoring`"; // production target schema
 
     const targetTable = isDevelopment
         ? "`" + params.bqProjectName + "." + dataform.projectConfig.defaultSchema + "_" + dataform.projectConfig.schemaSuffix + ".pipeline_table_snapshots`" // dev target table
@@ -23,24 +27,46 @@ module.exports = (version, params) => {
       operate("pipeline_table_snapshots_" + params.eventSourceName, ctx => [`
 
       BEGIN
+      CREATE SCHEMA IF NOT EXISTS ${targetSchema};
+      
       CREATE TABLE IF NOT EXISTS ${targetTable} (
-          workflow_executed_at TIMESTAMP,
-          gcp_project_name STRING,
-          event_source_name STRING,
-          output_dataset_name STRING,
-          entity_table_name STRING,
-          checksum_calculated_at TIMESTAMP,
-          matching_checksums BOOLEAN,
-          number_of_rows INTEGER,
-          number_of_missing_rows INTEGER,
-          number_of_extra_rows INTEGER,
-          weekly_change_in_number_of_rows INTEGER,
-          weekly_change_in_number_of_missing_rows INTEGER,
-          weekly_change_in_number_of_extra_rows INTEGER,
-          error_rate FLOAT64,
-          twelve_week_projected_error_rate FLOAT64,
-          hidden_pii_streamed_within_the_last_week BOOLEAN,
-          hidden_pii_configured BOOLEAN
+          workflow_executed_at TIMESTAMP OPTIONS(
+            description="The time the Dataform pipeline that took this snapshot of itself was executed"),
+          gcp_project_name STRING OPTIONS(
+            description="The name of the GCP project this Dataform pipeline was executed within"),
+          event_source_name STRING OPTIONS(
+            description="The eventSourceName included in the name of each table compiled via this dfeAnalyticsDataform() JS function"),
+          output_dataset_name STRING OPTIONS(
+            description="The name of the BigQuery dataset this pipeline output transformed tables into"),
+          entity_table_name STRING OPTIONS(
+            description="Name of the entity table"),
+          checksum_calculated_at TIMESTAMP OPTIONS(
+            description="Timestamp when checksum was calculated"),
+          matching_checksums BOOLEAN OPTIONS(
+            description="TRUE if nightly checksums are being streamed and match for this table"),
+          number_of_rows INTEGER OPTIONS(
+            description="The total number of rows in this table according to the latest nightly checksum"),
+          number_of_missing_rows INTEGER OPTIONS(
+            description="The total number of rows missing in BigQuery but present in the source database"),
+          number_of_extra_rows INTEGER OPTIONS(
+            description="The total number of rows present in BigQuery but no longer in the source database"),
+          weekly_change_in_number_of_rows INTEGER OPTIONS(
+            description="Difference in number_of_rows compared to 7 days ago"),
+          weekly_change_in_number_of_missing_rows INTEGER OPTIONS(
+            description="Difference in number_of_missing_rows compared to 7 days ago"),
+          weekly_change_in_number_of_extra_rows INTEGER OPTIONS(
+            description="Difference in number_of_extra_rows compared to 7 days ago"),
+          error_rate FLOAT64 OPTIONS(
+            description="Largest error rate for any table as a proportion of total rows"),
+          twelve_week_projected_error_rate FLOAT64 OPTIONS(
+            description="Projected error rate 12 weeks in the future assuming current trends"),
+          hidden_pii_streamed_within_the_last_week BOOLEAN OPTIONS(
+            description="TRUE if hidden_data has been used in this events table within the last week"),
+          hidden_pii_configured BOOLEAN OPTIONS(
+            description="TRUE if a policy tag is configured in dfe-analytics-dataform for this pipeline")
+          )
+          OPTIONS (
+            description = "Table-level pipeline monitoring data providing a detailed overview of project tables, including checksum verification and the number of missing or extra rows in BigQuery compared to the source database."
           );
 
       INSERT ${targetTable} (
