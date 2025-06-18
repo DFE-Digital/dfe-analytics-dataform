@@ -75,7 +75,8 @@ GROUP BY
 HAVING
   updates_made_yesterday_without_this_key > 0
   /* Don't flag an error if the field was a new field introduced midway through yesterday. */
-  AND NOT (last_update_yesterday_without_this_key_at < first_update_yesterday_with_this_key_at)
+  AND (first_update_yesterday_with_this_key_at IS NULL   -- This is to capture instances where there was no update made with this key in the last 24 hours. This implies that the field has been removed by devs. 
+  OR (last_update_yesterday_without_this_key_at >= first_update_yesterday_with_this_key_at)) 
 ORDER BY
   entity_name,
   expected_key`)
