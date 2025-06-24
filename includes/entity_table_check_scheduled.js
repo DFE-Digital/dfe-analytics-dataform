@@ -24,9 +24,9 @@ module.exports = (params) => {
                     bigquery_checksum: "Checksum for this entity in the entity_version table at checksum_calculated_at, or the group of import_entity events with this import_id in the events table (as applicable). The checksum is calculated by ordering all the entity IDs by order_column, concatenating them and then using the SHA256 algorithm.",
                     checksum_calculated_at: "The time that database_checksum was calculated at",
                     checksum_calculated_on: "The day that database_checksum was calculated on",
-                    order_column: "The column used to order entity IDs as part of the checksum calculation algorithm for both database_checksum and bigquery_checksum. May be updated_at (default), created_at or id.",
+                    order_column: "The column used to order entity IDs as part of the checksum calculation algorithm for both database_checksum and bigquery_checksum. May be created_at (default) or id.",
                     bigquery_row_count: "The number of unique IDs for this entity in the entity_version table at checksum_calculated_at, or the group of import_entity events with this import_id in the events table (as applicable). ",
-                    bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation: "The number of unique IDs for this entity in the entity_version table at checksum_calculated_at which have a timestamp value (created_at or updated_at) for order_column which is earlier than checksum_calculated_at. This indicates that they likely changed during checksum calculation in the database and so have been excluded from the checksum.",
+                    bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation: "The number of unique IDs for this entity in the entity_version table at checksum_calculated_at which have a timestamp value (created_at) for order_column which is earlier than checksum_calculated_at. This indicates that they likely changed during checksum calculation in the database and so have been excluded from the checksum.",
                     number_of_missing_rows: "The difference between database_row_count and bigquery_row_count if database_row_count is larger than bigquery_row_count. NULL otherwise.",
                     number_of_extra_rows: "The difference between database_row_count and bigquery_row_count if bigquery_row_count is larger than database_row_count. NULL otherwise.",
                     weekly_change_in_number_of_missing_rows: "The difference between number_of_missing_rows on checksum_calculated_on and its value 7 days previously.",
@@ -46,8 +46,7 @@ module.exports = (params) => {
           entity_id AS id,
           valid_from,
           valid_to,
-          created_at,
-          updated_at
+          created_at
         FROM
           ${ctx.ref(params.eventSourceName + "_entity_version")}
         WHERE
@@ -77,7 +76,7 @@ module.exports = (params) => {
         /* BigQuery has a 100MB limit for the data processed across all aggregate functions within an individual subquery. */
         /* Calculating checksums with two different sort orders depending on order_column causes this limit to be breached if completed within the same subquery. */
         /* To work around this each order is calculated in a separate subquery below and then recombined. */
-        ${["updated_at", "created_at", "id"].map(sortField =>
+        ${["created_at", "id"].map(sortField =>
         `tables_with_${sortField}_metrics AS (
           SELECT
             check.entity_table_name,
@@ -102,7 +101,7 @@ module.exports = (params) => {
               AND entity_version.valid_from <= check.checksum_calculated_at)
           WHERE
             check.order_column = "${sortField}"
-            ${(sortField == "updated_at") ? "/* Default to sorting by updated_at for backwards compatibility */ OR check.order_column IS NULL":""}
+            ${(sortField == "created_at") ? "/* Default to sorting by created_at for backwards compatibility */ OR check.order_column IS NULL":""}
           GROUP BY
             check.entity_table_name,
             check.row_count,
@@ -114,25 +113,19 @@ module.exports = (params) => {
       SELECT
         check.entity_table_name,
         check.row_count AS database_row_count,
-        COALESCE(tables_with_updated_at_metrics.bigquery_row_count, tables_with_created_at_metrics.bigquery_row_count, tables_with_id_metrics.bigquery_row_count) AS bigquery_row_count,
-        COALESCE(tables_with_updated_at_metrics.bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation, tables_with_created_at_metrics.bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation) AS bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation,
+        COALESCE(tables_with_created_at_metrics.bigquery_row_count, tables_with_id_metrics.bigquery_row_count) AS bigquery_row_count,
+        tables_with_created_at_metrics.bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation AS bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation,
         check.checksum AS database_checksum,
         check.order_column,
         check.checksum_calculated_at,
         DATE(check.checksum_calculated_at) AS checksum_calculated_on,
         CASE
-          WHEN NOT COALESCE(tables_with_updated_at_metrics.bigquery_row_count, tables_with_created_at_metrics.bigquery_row_count, tables_with_id_metrics.bigquery_row_count) > 0 THEN TO_HEX(MD5(""))
+          WHEN NOT COALESCE(tables_with_created_at_metrics.bigquery_row_count, tables_with_id_metrics.bigquery_row_count) > 0 THEN TO_HEX(MD5(""))
           WHEN check.order_column = "created_at" THEN tables_with_created_at_metrics.bigquery_checksum
           WHEN check.order_column = "id" THEN tables_with_id_metrics.bigquery_checksum
-        ELSE
-          /* Default to sorting by updated_at for backwards compatibility */
-          tables_with_updated_at_metrics.bigquery_checksum
         END AS bigquery_checksum
       FROM
         check
-      LEFT JOIN
-        tables_with_updated_at_metrics
-      USING (entity_table_name, checksum_calculated_at)
       LEFT JOIN
         tables_with_created_at_metrics
       USING (entity_table_name, checksum_calculated_at)
