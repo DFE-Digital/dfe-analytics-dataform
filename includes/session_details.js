@@ -98,10 +98,10 @@ WITH
     AND device_category != "bot"
     -- Do not include bot visits
     AND CONTAINS_SUBSTR(response_content_type, "text/html")
-    -- Only web page visits - not redirects (HTTP error 3xx) or page not found errors (HTTP error 4xx)
+    -- Only web page visits
     AND response_status NOT LIKE "3__"
     AND response_status NOT LIKE "4__"
-    -- Do not include redirects 
+    -- Do not include redirects (HTTP error 3xx) or page not found errors (HTTP error 4xx)
     AND occurred_at > event_timestamp_checkpoint
     -- only events that occurred within 24 hours of the latest session start
  ),
