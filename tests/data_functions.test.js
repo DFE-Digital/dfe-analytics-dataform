@@ -1,12 +1,11 @@
-// Import all functions from data_functions
 const dataFunctions = require('../includes/data_functions');
 const normalize = (sql) => sql.replace(/\s+/g, ' ').trim();
 const canonicalizeSQL = (sql) =>
   sql
-    .replace(/\s+/g, ' ') // Replace all whitespace with a single space
-    .replace(/\s*\(\s*/g, '(') // Remove spaces around parentheses
-    .replace(/\s*\)\s*/g, ')') // Remove spaces around parentheses
-    .trim(); // Trim leading and trailing spaces
+    .replace(/\s+/g, ' ')
+    .replace(/\s*\(\s*/g, '(')
+    .replace(/\s*\)\s*/g, ')')
+    .trim();
 
 describe('stringToIntegerArray', () => {
   it('should generate the correct SQL query for a valid input string', () => {
@@ -316,9 +315,7 @@ describe('eventDataExtractIntegerArray', () => {
       WHERE key = "event_integer_array")
     `;
 
-
     const result = dataFunctions.eventDataExtract(dataField, keyToExtract, dynamic, 'integer_array', false);
-
     expect(canonicalizeSQL(result)).toEqual(canonicalizeSQL(expectedSQL));
   });
 });
