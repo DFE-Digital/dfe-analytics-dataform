@@ -536,3 +536,49 @@ describe('setKeyConstraints', () => {
     expect(canonicalizeSQL(result)).toBe(canonicalizeSQL(expectedSQL));
   });
 });
+
+
+describe('eventDataExtractListOfStrings', () => {
+  test("decodeUriComponent generates correct SQL for decoding URI components", () => {
+    const url = "`events.referer_url`";
+
+    const result = dataFunctions.decodeUriComponent(url);
+    const expectedSQL = `(
+        SELECT
+          STRING_AGG(
+            IF(
+              REGEXP_CONTAINS(y, r'^%[0-9a-fA-F]{2}'),
+              SAFE_CONVERT_BYTES_TO_STRING(FROM_HEX(REPLACE(y, '%', ''))),
+              y
+            ),
+            '' ORDER BY i
+          )
+        FROM UNNEST(REGEXP_EXTRACT_ALL(\`events.referer_url\`, r"%[0-9a-fA-F]{2}(?:%[0-9a-fA-F]{2})*|[^%]+")) y WITH OFFSET AS i
+      )
+    `
+
+    expect(canonicalizeSQL(result)).toBe(canonicalizeSQL(expectedSQL));
+  });
+});
+
+describe('standardisePathQuery', () => {
+  test("standardisePathQuery generates correct SQL for standardising path and query", () => {
+    const path_query = "`events.page_path_and_query`";
+
+    const result = dataFunctions.standardisePathQuery(path_query);
+    const expectedSQL = `CASE WHEN \`events.page_path_and_query\` IS NOT NULL THEN
+        SPLIT(\`events.page_path_and_query\`, '?')[SAFE_OFFSET(0)] || 
+        IF(
+          ARRAY_LENGTH(SPLIT(\`events.page_path_and_query\`, '?')) > 1,
+          '?' || (
+            SELECT STRING_AGG(DISTINCT key_value_pair, '&' ORDER BY key_value_pair)
+            FROM UNNEST(SPLIT(SPLIT(\`events.page_path_and_query\`, '?')[SAFE_OFFSET(1)], '&')) AS key_value_pair
+          ),
+          ''
+        )
+      END
+    `
+
+    expect(canonicalizeSQL(result)).toBe(canonicalizeSQL(expectedSQL));
+  });
+});
