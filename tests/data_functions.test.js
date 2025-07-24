@@ -1,13 +1,5 @@
 const dataFunctions = require('../includes/data_functions');
-const normalize = (sql) => sql.replace(/\s+/g, ' ').trim();
-const canonicalizeSQL = (sql) =>
-  sql
-    .replace(/\s+/g, ' ')
-    .replace(/\s*\(\s*/g, '(')
-    .replace(/\s*\)\s*/g, ')')
-    .replace(/"{3}/g, '"')
-    .trim()
-    .toLowerCase();
+const { canonicalizeSQL } = require('./helpers/sql');
 
 describe('stringToIntegerArray', () => {
   it('should generate the correct SQL query for a valid input string', () => {

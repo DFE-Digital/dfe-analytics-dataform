@@ -1,3 +1,5 @@
+const data_functions = require('./data_functions');
+
 module.exports = (params) => {
   return assert(params.eventSourceName + "_entities_are_missing_expected_fields", {
     ...params.defaultConfig,
