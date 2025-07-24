@@ -6,7 +6,7 @@ const mockOperate = jest.fn(() => ({ tags: mockTags }));
 
 global.operate = mockOperate;
 
-const generateTableFunctions = require('../includes/entity_table_function');
+const generateTableFunctions = require('../includes/entity_at');
 
 describe('entity_table_function', () => {
   it('generates a table function for each entity in dataSchema', () => {
@@ -42,6 +42,6 @@ describe('entity_table_function', () => {
     expect(sql).toContain('create or replace table function');
     expect(sql).toContain('my_db.my_schema.schools_at_myservice');
     expect(sql).toContain('from `schools_version_myservice`');
-    expect(sql).toContain('where (valid_to is null or valid_to > timestamp_at) and valid_from <= timestamp_at');
+    expect(sql).toContain('where(valid_to is null or valid_to > timestamp_at)and valid_from <= timestamp_at');
   });
 });
