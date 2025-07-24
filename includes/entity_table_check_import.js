@@ -1,37 +1,38 @@
+const data_functions = require("./data_functions");
 module.exports = (params) => {
-    return publish(
-            "entity_table_check_import_" + params.eventSourceName, {
-                ...params.defaultConfig,
-                type: "incremental",
-                assertions: {
-                    uniqueKey: ["entity_table_name", "import_id"],
-                    nonNull: ["entity_table_name"]
-                },
-                dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields", params.eventSourceName + "_hidden_pii_configuration_does_not_match_entity_events_streamed_yesterday", params.eventSourceName + "_hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed"],
-                bigquery: {
-                    partitionBy: "DATE(checksum_calculated_at)",
-                    labels: {
-                        eventsource: params.eventSourceName.toLowerCase(),
-                        sourcedataset: params.bqDatasetName.toLowerCase()
-                    }
-                },
-                tags: [params.eventSourceName.toLowerCase()],
-                description: "Checksum events streamed by dfe-analytics after application database table imports to allow dfe-analytics-dataform to verify that tables have been fully loaded in to BigQuery, and correct this where possible, together with row counts and checksums calculated for data loaded into BigQuery for comparison.",
-                columns: {
-                    entity_table_name: "Name of the table in the database that this checksum was calculated for",
-                    import_id: "UID of the import. Each import event for that table has the same import_id. Different tables and different imports of the same table have different import_ids.",
-                    database_row_count: "Number of rows in the database table at checksum_calculated_at.",
-                    database_checksum: "Checksum for the database table at checksum_calculated_at. The checksum is calculated by ordering all the entity IDs by order_column, concatenating them and then using the SHA256 algorithm.",
-                    bigquery_checksum: "Checksum for the group of import_entity events with this import_id in the events table. The checksum is calculated by ordering all the entity IDs by order_column, concatenating them and then using the SHA256 algorithm.",
-                    checksum_calculated_at: "The time that database_checksum was calculated.",
-                    final_import_event_received_at: "The time that the final import_entity or import_entity_table_check event was received from dfe-analytics for this import",
-                    order_column: "The column used to order entity IDs as part of the checksum calculation algorithm for both database_checksum and bigquery_checksum. May be updated_at (default), created_at or id.",
-                    bigquery_row_count: "The number of unique IDs for this entity in the group of import_entity events with this import_id in the events table. "
-                }
-            }
-        ).tags([params.eventSourceName.toLowerCase()])
-        .query(ctx =>
-            `WITH
+  return publish(
+    "entity_table_check_import_" + params.eventSourceName, {
+    ...params.defaultConfig,
+    type: "incremental",
+    assertions: {
+      uniqueKey: ["entity_table_name", "import_id"],
+      nonNull: ["entity_table_name"]
+    },
+    dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields", params.eventSourceName + "_hidden_pii_configuration_does_not_match_entity_events_streamed_yesterday", params.eventSourceName + "_hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed"],
+    bigquery: {
+      partitionBy: "DATE(checksum_calculated_at)",
+      labels: {
+        eventsource: params.eventSourceName.toLowerCase(),
+        sourcedataset: params.bqDatasetName.toLowerCase()
+      }
+    },
+    tags: [params.eventSourceName.toLowerCase()],
+    description: "Checksum events streamed by dfe-analytics after application database table imports to allow dfe-analytics-dataform to verify that tables have been fully loaded in to BigQuery, and correct this where possible, together with row counts and checksums calculated for data loaded into BigQuery for comparison.",
+    columns: {
+      entity_table_name: "Name of the table in the database that this checksum was calculated for",
+      import_id: "UID of the import. Each import event for that table has the same import_id. Different tables and different imports of the same table have different import_ids.",
+      database_row_count: "Number of rows in the database table at checksum_calculated_at.",
+      database_checksum: "Checksum for the database table at checksum_calculated_at. The checksum is calculated by ordering all the entity IDs by order_column, concatenating them and then using the SHA256 algorithm.",
+      bigquery_checksum: "Checksum for the group of import_entity events with this import_id in the events table. The checksum is calculated by ordering all the entity IDs by order_column, concatenating them and then using the SHA256 algorithm.",
+      checksum_calculated_at: "The time that database_checksum was calculated.",
+      final_import_event_received_at: "The time that the final import_entity or import_entity_table_check event was received from dfe-analytics for this import",
+      order_column: "The column used to order entity IDs as part of the checksum calculation algorithm for both database_checksum and bigquery_checksum. May be updated_at (default), created_at or id.",
+      bigquery_row_count: "The number of unique IDs for this entity in the group of import_entity events with this import_id in the events table. "
+    }
+  }
+  ).tags([params.eventSourceName.toLowerCase()])
+    .query(ctx =>
+      `WITH
         import_event AS (
           SELECT
             event_tags[0] AS import_id,
@@ -105,7 +106,7 @@ module.exports = (params) => {
             AND check.import_id = latest_import_event.import_id
           WHERE
             check.order_column = "${sortField}"
-            ${(sortField == "updated_at") ? "/* Default to sorting by updated_at for backwards compatibility */ OR check.order_column IS NULL":""}
+            ${(sortField == "updated_at") ? "/* Default to sorting by updated_at for backwards compatibility */ OR check.order_column IS NULL" : ""}
           GROUP BY
             check.entity_table_name,
             check.import_id,
@@ -113,7 +114,7 @@ module.exports = (params) => {
             check.checksum,
             check.checksum_calculated_at,
             check.order_column )`
-          ).join(',\n')}
+      ).join(',\n')}
       SELECT
         check.import_id,
         check.entity_table_name,
@@ -146,11 +147,11 @@ module.exports = (params) => {
       LEFT JOIN
         imports_with_id_metrics
       USING (entity_table_name, import_id)`
-        ).preOps(ctx => `
+    ).preOps(ctx => `
     DECLARE event_timestamp_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(), `SELECT IFNULL(MAX(final_import_event_received_at), TIMESTAMP("2000-01-01")) FROM ${ctx.self()}`, `SELECT TIMESTAMP("2000-01-01")`)});`
-  )
-  .postOps(ctx => `
+    )
+    .postOps(ctx => `
     ALTER TABLE ${ctx.self()} SET OPTIONS (partition_expiration_days = ${params.expirationDays || `NULL`});
     `)
 }
