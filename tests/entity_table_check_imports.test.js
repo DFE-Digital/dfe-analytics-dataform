@@ -1,7 +1,6 @@
 const generateImportEntityCheck = require('../includes/entity_table_check_import');
 const { canonicalizeSQL } = require('./helpers/sql');
 
-// Mock data_functions dependency
 jest.mock('../includes/data_functions', () => ({
   eventDataExtract: jest.fn((source, key, isRequired, castAs) => {
     return `MOCKED_EXTRACT(${source}, ${key}, ${castAs || 'string'})`;

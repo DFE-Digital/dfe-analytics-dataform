@@ -1,6 +1,5 @@
 const flattenedCustomEvents = require('../includes/flattened_custom_event');
 
-// Mocks
 jest.mock('../includes/data_functions', () => ({
   stringToTimestamp: jest.fn(str => `CAST(${str} AS TIMESTAMP)`),
   stringToDate: jest.fn(str => `CAST(${str} AS DATE)`),
