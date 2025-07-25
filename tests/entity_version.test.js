@@ -1,7 +1,5 @@
 const generateEntityVersion = require('../includes/entity_version');
-const { canonicalizeSQL } = require('./helpers/sql');
 
-// Mocks
 jest.mock('../includes/data_functions', () => ({
   eventDataExtract: jest.fn((source, key, isRequired, castAs) => `EXTRACTED(${source}, ${key}, ${castAs || 'string'})`),
   setKeyConstraints: jest.fn((ctx, dataform, options) => `-- setKeyConstraints with ${options.primaryKey}`)
