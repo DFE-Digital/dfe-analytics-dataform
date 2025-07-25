@@ -46,10 +46,8 @@ describe('latest entity version', () => {
 
     flattenedLatestEntity(mockParams);
 
-    // Check publish was called correctly
     expect(global.publish).toHaveBeenCalled();
 
-    // ✅ Check SQL inside .query(...)
     expect(mockQuery).toHaveBeenCalled();
     const sqlFn = mockQuery.mock.calls[0][0]; // the ctx => `...` function
     const sql = sqlFn({
