@@ -29,7 +29,7 @@ describe('entity_ids_do_not_match', () => {
       })
     );
 
-    const queryFn = mockQuery.mock.calls[0][0]; // Get ctx => `...`
+    const queryFn = mockQuery.mock.calls[0][0];
     const sql = queryFn(mockCtx);
     const canonical = canonicalizeSQL(sql)
 
