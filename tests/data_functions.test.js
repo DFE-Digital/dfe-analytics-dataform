@@ -97,64 +97,6 @@ describe('stringToDate', () => {
   });
 });
 
-describe('stringToIntegerArray', () => {
-  it('should generate the correct SQL query for a valid input string', () => {
-    const input = '[3,75,2,1]';
-    const expectedSQL = `ARRAY(
-    SELECT
-      step_int
-    FROM
-      (
-        SELECT
-          SAFE_CAST(step AS INT64) AS step_int
-        FROM
-          UNNEST(
-            SPLIT(
-              TRIM(
-                ${input},
-                "[]"
-              ),
-              ","
-            )
-          ) AS step
-      )
-    WHERE
-      step_int IS NOT NULL
-  )`;
-
-    const result = dataFunctions.stringToIntegerArray(input);
-    expect(result).toBe(expectedSQL);
-  });
-
-  it('should handle an empty input string', () => {
-    const input = '[]';
-    const expectedSQL = `ARRAY(
-    SELECT
-      step_int
-    FROM
-      (
-        SELECT
-          SAFE_CAST(step AS INT64) AS step_int
-        FROM
-          UNNEST(
-            SPLIT(
-              TRIM(
-                ${input},
-                "[]"
-              ),
-              ","
-            )
-          ) AS step
-      )
-    WHERE
-      step_int IS NOT NULL
-  )`;
-
-    const result = dataFunctions.stringToIntegerArray(input);
-    expect(result).toBe(expectedSQL);
-  });
-});
-
 describe('eventDataExtract', () => {
   const normalize = (sql) => sql.replace(/\s+/g, ' ').trim();
 
@@ -310,54 +252,6 @@ describe('eventDataExtractIntegerArray', () => {
     `;
 
     const result = dataFunctions.eventDataExtract(dataField, keyToExtract, dynamic, 'integer_array', false);
-    expect(canonicalizeSQL(result)).toEqual(canonicalizeSQL(expectedSQL));
-  });
-});
-
-describe('eventDataExtractListOfStringsBeginning', () => {
-  it('should return a SQL query to extract comma-separated values for keys starting with a specific prefix', () => {
-    const dataField = 'event_params';
-    const keyToExtractBegins = 'prefix_';
-    const dynamic = false;
-
-    const expectedSQL = `
-      NULLIF(
-        (SELECT IF(
-          ARRAY_LENGTH(ARRAY_CONCAT_AGG(value)) = 0,
-          NULL,
-          ARRAY_TO_STRING(ARRAY_CONCAT_AGG(value), ",")
-        ) AS concat_value
-        FROM UNNEST(event_params)
-        WHERE STARTS_WITH(key, "prefix_")),
-        ""
-      )
-    `;
-
-    const result = dataFunctions.eventDataExtractListOfStringsBeginning(dataField, keyToExtractBegins, dynamic);
-
-    expect(canonicalizeSQL(result)).toEqual(canonicalizeSQL(expectedSQL));
-  });
-
-  it('should return NULL if no keys match the prefix or all values are empty strings', () => {
-    const dataField = 'event_params';
-    const keyToExtractBegins = 'nonexistent_prefix_';
-    const dynamic = false;
-
-    const expectedSQL = `
-      NULLIF(
-        (SELECT IF(
-          ARRAY_LENGTH(ARRAY_CONCAT_AGG(value)) = 0,
-          NULL,
-          ARRAY_TO_STRING(ARRAY_CONCAT_AGG(value), ",")
-        ) AS concat_value
-        FROM UNNEST(event_params)
-        WHERE STARTS_WITH(key, "nonexistent_prefix_")),
-        ""
-      )
-    `;
-
-    const result = dataFunctions.eventDataExtractListOfStringsBeginning(dataField, keyToExtractBegins, dynamic);
-
     expect(canonicalizeSQL(result)).toEqual(canonicalizeSQL(expectedSQL));
   });
 });

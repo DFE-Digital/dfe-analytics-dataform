@@ -30,7 +30,7 @@ describe("customEventDataNotFresh", () => {
     expect(result).toBeUndefined(); // No assertion is generated
   });
 
-  test("generates assertionfor valid custom event", () => {
+  test("generates assertion for valid custom event", () => {
     const params = {
       customEventSchema: [
         { eventType: "testEvent", dataFreshnessDays: 5 },
