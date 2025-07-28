@@ -19,8 +19,8 @@ describe('data_schema_latest', () => {
     global.publish = mockPublish;
 
     global.data_functions = {
-      stringToTimestamp: jest.fn(() => 'PARSE_TIMESTAMP(this_value)'), // mock implementation
-      stringToDate: jest.fn(() => 'PARSE_DATE(this_value)')            // mock implementation
+      stringToTimestamp: jest.fn(() => 'PARSE_TIMESTAMP(this_value)'),
+      stringToDate: jest.fn(() => 'PARSE_DATE(this_value)')
     };
   });
 
