@@ -48,7 +48,6 @@ describe('migrate_historic_events_to_current_hidden_pii_configuration', () => {
       expect.any(Function)
     );
 
-    // Capture and invoke SQL builder
     const ctx = {
       resolve: (name) => `\`${name}\``,
       ref: (name) => `\`ref_${name}\``

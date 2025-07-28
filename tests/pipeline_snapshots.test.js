@@ -1,6 +1,6 @@
-const pipelineMonitoring = require('../includes/pipeline_snapshot');
+const pipelineSnapshot = require('../includes/pipeline_snapshot');
 
-describe('pipelineMonitoring', () => {
+describe('pipelineSnapshot', () => {
   let mockOperate;
   let originalProjectConfig;
 
@@ -37,13 +37,13 @@ describe('pipelineMonitoring', () => {
   };
 
   it('should return true if monitoring is disabled', () => {
-    const result = pipelineMonitoring(version, { ...mockParams, enableMonitoring: false });
+    const result = pipelineSnapshot(version, { ...mockParams, enableMonitoring: false });
     expect(result).toBe(true);
     expect(mockOperate).not.toHaveBeenCalled();
   });
 
   it('should call operate with correct name and include expected SQL elements in dev mode', () => {
-    pipelineMonitoring(version, mockParams);
+    pipelineSnapshot(version, mockParams);
 
     expect(mockOperate).toHaveBeenCalledWith(
       'pipeline_snapshots_TestService',
@@ -68,7 +68,7 @@ describe('pipelineMonitoring', () => {
   it('should use production table names when schemaSuffix is not set', () => {
     delete global.dataform.projectConfig.schemaSuffix;
 
-    pipelineMonitoring(version, mockParams);
+    pipelineSnapshot(version, mockParams);
 
     const callArgs = mockOperate.mock.calls[0][1];
     const result = callArgs({
