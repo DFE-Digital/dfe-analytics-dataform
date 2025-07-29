@@ -53,18 +53,15 @@ describe('entity_table_check_import', () => {
       self: () => '`MyProject.MyDataset.entity_table_check_import_TestService`'
     };
 
-    // Check preOps content
     const preSQL = preOpsMock.mock.calls[0][0](ctx);
     expect(preSQL).toContain('DECLARE event_timestamp_checkpoint');
 
-    // Check SQL query
     const sql = queryMock.mock.calls[0][0](ctx);
     expect(typeof sql).toBe('string');
     const canonical = canonicalizeSQL(sql);
     expect(canonical).toContain('from `myproject.mydataset.events_table`');
     expect(canonical).toContain('mocked_extract');
 
-    // Check postOps content
     const postSQL = postOpsMock.mock.calls[0][0](ctx);
     expect(postSQL).toContain('ALTER TABLE');
     expect(postSQL).toContain('partition_expiration_days = 7');
