@@ -320,7 +320,7 @@ The tests follow a basic pattern. Most of the functions return an SQl query, acc
 ```
 // require or mock functions
 const dataFunctions = require('../includes/data_functions');
-const { canonicalizeSQL } = require('./helpers/sql');
+
 // describe the function to be tested
 describe('stringToIntegerArray', () => {
   it('should generate the correct SQL query for a valid input string', () => {
