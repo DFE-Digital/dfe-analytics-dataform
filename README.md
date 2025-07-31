@@ -306,3 +306,57 @@ The names of these will vary depending on the ```eventSourceName``` you have spe
 - A stored procedure called ```migrate_foo_historic_events_to_current_hidden_pii_configuration``` in your output Dataform dataset. You can invoke this to migrate past entity CRUD/import events to ensure that fields in the ```data``` and ```hidden_data``` arrays in your source events table and ```events_foo``` table are in the array field that matches the hidden field configuration in your ```dataSchema```.
 - Assertions called ```foo_hidden_pii_configuration_does_not_match_entity_events_streamed_yesterday``` and ```foo_hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed```. See section "Hidden fields" above for more information.
 - An assertion called ```foo_entities_have_not_been_backfilled``` which fails if no ```import_entity_table_check``` or ```import_entity``` events exist in the source events table for a particular ```entity_table_name``` configured in ```dataSchema```. Likely causes of this are not running an import as part of ```dfe-analytics``` installation, not running an import on a newly created table in the application database, or deletion of the latest import of the table due to enforcement of a data retention schedule
+
+## Test framework
+Tests with the jest framework are filed in the `tests` folder
+
+Test are run locally using `npm run test` to run all tests and `npm run test <file>` to run a single test file.
+
+The tests were written retrospectively, going forwards all new functions should have a matching test.
+
+The tests follow a basic pattern. Most of the functions return an SQl query, accepting variable arguments and occasionally a boolean logic gate.
+
+# Setup
+```
+// require or mock functions
+const dataFunctions = require('../includes/data_functions');
+const { canonicalizeSQL } = require('./helpers/sql');
+// describe the function to be tested
+describe('stringToIntegerArray', () => {
+  it('should generate the correct SQL query for a valid input string', () => {
+    // Provide arguments
+    const input = '[3,75,2,1]';
+    // Provide the expected result, this can be deduced from either the actual
+    // function under test, or by running the test file itself which calls the
+    // function as below, then has an expect(result).toBe(expected) call.
+    // If the result does not match, the test output will provide the SQL for 
+    // comparison. 
+    const expectedSQL = `ARRAY(
+    SELECT
+      step_int
+    FROM
+      (
+        SELECT
+          SAFE_CAST(step AS INT64) AS step_int
+        FROM
+          UNNEST(
+            SPLIT(
+              TRIM(
+                ${input},
+                "[]"
+              ),
+              ","
+            )
+          ) AS step
+      )
+    WHERE
+      step_int IS NOT NULL
+  )`;
+    // call the function
+    const result = dataFunctions.stringToIntegerArray(input);
+    // check the expectation is true
+    expect(result).toBe(expectedSQL);
+  });
+  ```
+Full documentation can be found at [Jest](https://jestjs.io/) 
+
