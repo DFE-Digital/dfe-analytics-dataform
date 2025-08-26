@@ -1,18 +1,21 @@
+const data_functions = require('./data_functions');
+
 module.exports = (params) => {
   const customEventAssertions = params.customEventSchema.length > 0 && (params.customEventSchema.some(customEvent => customEvent.keys.length > 0)) ?
     ["hidden_pii_configuration_does_not_match_custom_events_streamed_yesterday",
-    "hidden_pii_configuration_does_not_match_sample_of_historic_custom_events_streamed"
+      "hidden_pii_configuration_does_not_match_sample_of_historic_custom_events_streamed"
     ] : [];
   const entityEventAssertions = params.transformEntityEvents ?
     ["hidden_pii_configuration_does_not_match_entity_events_streamed_yesterday",
-  "hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed",
+      "hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed",
     ] : [];
   return [...entityEventAssertions, ...customEventAssertions]
-  .forEach(assertionNamePart => {assert(params.eventSourceName + "_" + assertionNamePart, {
-    ...params.defaultConfig,
-    type: "assertion",
-    description: `Counts the number of ${assertionNamePart.includes('entity') ? `entities` : `custom events`} updated ${assertionNamePart.includes('yesterday') ? `yesterday` : `in a sample representing 1% of historic data`} which were either in the hidden_data field but not configured to be hidden in the dfe-analytics-dataform dataSchema, or vice versa. If this assertion fails, either change the ${assertionNamePart.includes('entity') ? `dataSchema` : `customEventSchema`} to hide / unhide the field(s) as appropriate, or ask a developer to change dfe-analytics configuration to hide / unhide the field(s) in streamed data. You may also need to update past events to move key-value pairs from data to hidden_data or vice versa as appropriate.`
-  }).tags([params.eventSourceName.toLowerCase()]).query(ctx => `
+    .forEach(assertionNamePart => {
+      assert(params.eventSourceName + "_" + assertionNamePart, {
+        ...params.defaultConfig,
+        type: "assertion",
+        description: `Counts the number of ${assertionNamePart.includes('entity') ? `entities` : `custom events`} updated ${assertionNamePart.includes('yesterday') ? `yesterday` : `in a sample representing 1% of historic data`} which were either in the hidden_data field but not configured to be hidden in the dfe-analytics-dataform dataSchema, or vice versa. If this assertion fails, either change the ${assertionNamePart.includes('entity') ? `dataSchema` : `customEventSchema`} to hide / unhide the field(s) as appropriate, or ask a developer to change dfe-analytics configuration to hide / unhide the field(s) in streamed data. You may also need to update past events to move key-value pairs from data to hidden_data or vice versa as appropriate.`
+      }).tags([params.eventSourceName.toLowerCase()]).query(ctx => `
 WITH expected_fields AS (
   SELECT DISTINCT
     ${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
@@ -21,14 +24,14 @@ WITH expected_fields AS (
   FROM
   UNNEST([
       ${(assertionNamePart.includes('entity') ? params.dataSchema : params.customEventSchema).map(schema => {
-    return `STRUCT("${assertionNamePart.includes('entity') ? schema.entityTableName : schema.eventType}" AS ${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
+        return `STRUCT("${assertionNamePart.includes('entity') ? schema.entityTableName : schema.eventType}" AS ${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
         [
             ${schema.keys.filter(key => !(key.historic || (key.keyName == schema.primaryKey))).map(key => { return `STRUCT("${key.keyName}" AS key, ${key.hidden || 'false'} AS configured_to_be_hidden_in_schema)`; }).join(', ')}
             ${assertionNamePart.includes('entity') ? `, STRUCT("${schema.primaryKey || 'id'}" AS key, ${schema.hidePrimaryKey || 'false'} AS configured_to_be_hidden_in_schema)` : ``}
         ] AS keys
     )`;
-  }
-  ).join(',')}
+      }
+      ).join(',')}
   ]), UNNEST(keys) AS this_key
 ),
 events_to_test AS (
@@ -42,9 +45,8 @@ events_to_test AS (
     ${ctx.ref("events_" + params.eventSourceName)} ${assertionNamePart.includes('historic') ? `TABLESAMPLE SYSTEM ( 1 PERCENT )` : ``}
   WHERE
     event_type IN (
-      ${
-        assertionNamePart.includes('entity') ? `"create_entity", "update_entity", "import_entity"`
-        : params.customEventSchema.map(schema => {return `"${schema.eventType}"`}).join(', ')
+      ${assertionNamePart.includes('entity') ? `"create_entity", "update_entity", "import_entity"`
+          : params.customEventSchema.map(schema => { return `"${schema.eventType}"` }).join(', ')
         }
       )
     ${assertionNamePart.includes('yesterday') ? `AND DATE(occurred_at) >= CURRENT_DATE - 1` : `AND DATE(occurred_at) < CURRENT_DATE - 1`}
@@ -124,5 +126,6 @@ HAVING
 ORDER BY
   expected_fields.${assertionNamePart.includes('entity') ? `entity_name` : `event_type`},
   key_configured,
-  configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom_event`}_schema`)})
+  configured_to_be_hidden_in_${assertionNamePart.includes('entity') ? `data` : `custom_event`}_schema`)
+    })
 }

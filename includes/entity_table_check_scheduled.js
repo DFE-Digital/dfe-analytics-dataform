@@ -1,44 +1,45 @@
+const data_functions = require('../includes/data_functions');
 module.exports = (params) => {
-    return publish(
-            "entity_table_check_scheduled_" + params.eventSourceName, {
-                ...params.defaultConfig,
-                type: "table",
-                assertions: {
-                    uniqueKey: ["entity_table_name", "checksum_calculated_on"],
-                    nonNull: ["entity_table_name"]
-                },
-                dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
-                bigquery: {
-                    partitionBy: "checksum_calculated_on",
-                    labels: {
-                        eventsource: params.eventSourceName.toLowerCase(),
-                        sourcedataset: params.bqDatasetName.toLowerCase()
-                    }
-                },
-                tags: [params.eventSourceName.toLowerCase()],
-                description: "Scheduled checksum events streamed by dfe-analytics within the last 8 days to allow dfe-analytics-dataform to verify that tables have been fully loaded in to BigQuery, together with row counts and checksums calculated for data loaded into BigQuery for comparison.",
-                columns: {
-                    entity_table_name: "Name of the table in the database that this checksum was calculated for",
-                    database_row_count: "Number of rows in the database table at checksum_calculated_at.",
-                    database_checksum: "Checksum for the database table at checksum_calculated_at. The checksum is calculated by ordering all the entity IDs by order_column, concatenating them and then using the SHA256 algorithm.",
-                    bigquery_checksum: "Checksum for this entity in the entity_version table at checksum_calculated_at, or the group of import_entity events with this import_id in the events table (as applicable). The checksum is calculated by ordering all the entity IDs by order_column, concatenating them and then using the SHA256 algorithm.",
-                    checksum_calculated_at: "The time that database_checksum was calculated at",
-                    checksum_calculated_on: "The day that database_checksum was calculated on",
-                    order_column: "The column used to order entity IDs as part of the checksum calculation algorithm for both database_checksum and bigquery_checksum. May be updated_at (default), created_at or id.",
-                    bigquery_row_count: "The number of unique IDs for this entity in the entity_version table at checksum_calculated_at, or the group of import_entity events with this import_id in the events table (as applicable). ",
-                    bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation: "The number of unique IDs for this entity in the entity_version table at checksum_calculated_at which have a timestamp value (created_at or updated_at) for order_column which is earlier than checksum_calculated_at. This indicates that they likely changed during checksum calculation in the database and so have been excluded from the checksum.",
-                    number_of_missing_rows: "The difference between database_row_count and bigquery_row_count if database_row_count is larger than bigquery_row_count. NULL otherwise.",
-                    number_of_extra_rows: "The difference between database_row_count and bigquery_row_count if bigquery_row_count is larger than database_row_count. NULL otherwise.",
-                    weekly_change_in_number_of_missing_rows: "The difference between number_of_missing_rows on checksum_calculated_on and its value 7 days previously.",
-                    weekly_change_in_number_of_extra_rows: "The difference between number_of_extra_rows on checksum_calculated_on and its value 7 days previously.",
-                    weekly_change_in_number_of_rows: "The difference between database_row_count on checksum_calculated_on and its value 7 days previously.",
-                    error_rate: "number_of_missing_rows or number_of_extra_rows (whichever is non-null) as a proportion of database_row_count. Always positive.",
-                    twelve_week_projected_error_rate: "The value error_rate will have 12 weeks after checksum_calculated_on if new rows continue to be added to the database and the number of missing or extra rows continue to increase at the same rates they have done in the previous week."
-                }
-            }
-        ).tags([params.eventSourceName.toLowerCase()])
-        .query(ctx =>
-            `WITH
+  return publish(
+    "entity_table_check_scheduled_" + params.eventSourceName, {
+    ...params.defaultConfig,
+    type: "table",
+    assertions: {
+      uniqueKey: ["entity_table_name", "checksum_calculated_on"],
+      nonNull: ["entity_table_name"]
+    },
+    dependencies: [params.eventSourceName + "_entities_are_missing_expected_fields"],
+    bigquery: {
+      partitionBy: "checksum_calculated_on",
+      labels: {
+        eventsource: params.eventSourceName.toLowerCase(),
+        sourcedataset: params.bqDatasetName.toLowerCase()
+      }
+    },
+    tags: [params.eventSourceName.toLowerCase()],
+    description: "Scheduled checksum events streamed by dfe-analytics within the last 8 days to allow dfe-analytics-dataform to verify that tables have been fully loaded in to BigQuery, together with row counts and checksums calculated for data loaded into BigQuery for comparison.",
+    columns: {
+      entity_table_name: "Name of the table in the database that this checksum was calculated for",
+      database_row_count: "Number of rows in the database table at checksum_calculated_at.",
+      database_checksum: "Checksum for the database table at checksum_calculated_at. The checksum is calculated by ordering all the entity IDs by order_column, concatenating them and then using the SHA256 algorithm.",
+      bigquery_checksum: "Checksum for this entity in the entity_version table at checksum_calculated_at, or the group of import_entity events with this import_id in the events table (as applicable). The checksum is calculated by ordering all the entity IDs by order_column, concatenating them and then using the SHA256 algorithm.",
+      checksum_calculated_at: "The time that database_checksum was calculated at",
+      checksum_calculated_on: "The day that database_checksum was calculated on",
+      order_column: "The column used to order entity IDs as part of the checksum calculation algorithm for both database_checksum and bigquery_checksum. May be updated_at (default), created_at or id.",
+      bigquery_row_count: "The number of unique IDs for this entity in the entity_version table at checksum_calculated_at, or the group of import_entity events with this import_id in the events table (as applicable). ",
+      bigquery_rows_excluded_because_they_may_have_changed_during_checksum_calculation: "The number of unique IDs for this entity in the entity_version table at checksum_calculated_at which have a timestamp value (created_at or updated_at) for order_column which is earlier than checksum_calculated_at. This indicates that they likely changed during checksum calculation in the database and so have been excluded from the checksum.",
+      number_of_missing_rows: "The difference between database_row_count and bigquery_row_count if database_row_count is larger than bigquery_row_count. NULL otherwise.",
+      number_of_extra_rows: "The difference between database_row_count and bigquery_row_count if bigquery_row_count is larger than database_row_count. NULL otherwise.",
+      weekly_change_in_number_of_missing_rows: "The difference between number_of_missing_rows on checksum_calculated_on and its value 7 days previously.",
+      weekly_change_in_number_of_extra_rows: "The difference between number_of_extra_rows on checksum_calculated_on and its value 7 days previously.",
+      weekly_change_in_number_of_rows: "The difference between database_row_count on checksum_calculated_on and its value 7 days previously.",
+      error_rate: "number_of_missing_rows or number_of_extra_rows (whichever is non-null) as a proportion of database_row_count. Always positive.",
+      twelve_week_projected_error_rate: "The value error_rate will have 12 weeks after checksum_calculated_on if new rows continue to be added to the database and the number of missing or extra rows continue to increase at the same rates they have done in the previous week."
+    }
+  }
+  ).tags([params.eventSourceName.toLowerCase()])
+    .query(ctx =>
+      `WITH
         entity_version AS (
         /* Pre filter entity_version on its valid_to partition to accelerate performance */
         SELECT
@@ -102,14 +103,14 @@ module.exports = (params) => {
               AND entity_version.valid_from <= check.checksum_calculated_at)
           WHERE
             check.order_column = "${sortField}"
-            ${(sortField == "updated_at") ? "/* Default to sorting by updated_at for backwards compatibility */ OR check.order_column IS NULL":""}
+            ${(sortField == "updated_at") ? "/* Default to sorting by updated_at for backwards compatibility */ OR check.order_column IS NULL" : ""}
           GROUP BY
             check.entity_table_name,
             check.row_count,
             check.checksum,
             check.checksum_calculated_at,
             check.order_column )`
-          ).join(',\n')},
+      ).join(',\n')},
       tables_with_metrics AS (
       SELECT
         check.entity_table_name,
@@ -168,8 +169,8 @@ module.exports = (params) => {
       FROM
         tables_with_insight_metrics
       WINDOW same_table_one_week_ago AS (PARTITION BY entity_table_name ORDER BY checksum_calculated_on ASC ROWS BETWEEN 7 PRECEDING AND 7 PRECEDING)`
-        )
-  .postOps(ctx => `
+    )
+    .postOps(ctx => `
     ALTER TABLE ${ctx.self()} SET OPTIONS (partition_expiration_days = ${params.expirationDays || `NULL`});
     `)
 }

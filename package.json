@@ -1,6 +1,12 @@
 {
-    "name": "dfe-analytics-dataform",
-    "dependencies": {
-        "@dataform/core": "3.0.7"
-    }
+  "name": "dfe-analytics-dataform",
+  "dependencies": {
+    "@dataform/core": "3.0.7"
+  },
+  "devDependencies": {
+    "jest": "^30.0.4"
+  },
+  "scripts": {
+    "test": "jest"
+  }
 }

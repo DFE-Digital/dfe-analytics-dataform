@@ -416,7 +416,7 @@ CREATE TEMP FUNCTION
   END
     ) ;`
   )
-.postOps(ctx => `
+    .postOps(ctx => `
     ALTER TABLE ${ctx.self()} SET OPTIONS (partition_expiration_days = ${params.webRequestEventExpirationDays || params.expirationDays || `NULL`});
 `)
 }
