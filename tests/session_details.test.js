@@ -62,7 +62,7 @@ describe('session_details module', () => {
       ref: (x) => `\`${x}\``,
       incremental: () => true,
       self: () => '`session_details_TestService`',
-      ctx.when = (condition, ifTrue, ifFalse) => (condition ? ifTrue : ifFalse),
+      when: (condition, ifTrue, ifFalse) => (condition ? ifTrue : ifFalse),
     };
 
     const sql = mockQueryImpl(ctx);
