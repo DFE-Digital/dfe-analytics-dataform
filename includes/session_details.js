@@ -1,7 +1,31 @@
 module.exports = (params) => {
   if (!params.enableSessionDetailsTable) {
     return true;
-  }  
+  }
+
+  function requestToMedium(ctx) {
+    return `
+    CASE
+        WHEN REGEXP_CONTAINS(request_referer_domain, "${params.urlRegex}") THEN NULL
+        ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN utm_medium = "cpc" THEN "PPC"`, ``)}
+        ${ctx.when(params.attributionParameters.includes('gclid'), `WHEN gclid IS NOT NULL THEN "PPC"`, ``)}
+        ${ctx.when(params.attributionParameters.includes('dclid'), `WHEN dclid IS NOT NULL THEN "PPC"`, ``)}
+        ${ctx.when(params.attributionParameters.includes('msclkid'), `WHEN msclkid IS NOT NULL THEN "PPC"`, ``)}
+        ${ctx.when(params.attributionParameters.includes('gbraid'), `WHEN gbraid IS NOT NULL THEN "PPC"`, ``)}
+        ${ctx.when(params.attributionParameters.includes('fbclid'), `WHEN fbclid IS NOT NULL THEN "PPC"`, ``)}
+        ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN REGEXP_CONTAINS(utm_medium, "(?i)(email)") THEN "Email"`, ``)}
+        WHEN REGEXP_CONTAINS(SPLIT(request_referer_domain, "/")[SAFE_OFFSET(2)], "${params.socialRefererDomainRegex}") THEN "Social"
+        ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN REGEXP_CONTAINS(utm_medium, "(?i)(social)") THEN "Social"`, ``)}
+        WHEN REGEXP_CONTAINS(SPLIT(request_referer_domain, "/")[SAFE_OFFSET(2)], "${params.searchEngineRefererDomainRegex}") THEN "Organic"
+        ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN REGEXP_CONTAINS(utm_medium, "(?i)(organic)") THEN "Organic"`, ``)}
+        WHEN REGEXP_CONTAINS(request_referer_domain, "${params.attributionDomainExclusionRegex}") THEN "Direct or unknown"
+        WHEN request_referer_domain IS NOT NULL THEN "Referral"
+        ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN REGEXP_CONTAINS(utm_medium, "(?i)(referral)") THEN "Referral"`, ``)}
+        ELSE "Direct or unknown"
+    END
+    `;
+  }
+
   return publish("session_details_" + params.eventSourceName, {
         ...params.defaultConfig,
         type: "incremental",
@@ -28,6 +52,7 @@ module.exports = (params) => {
           utm_source: "Identifies the specific source of the traffic (e.g., marketing campaign, newsletter) as part of the UTM tag used for campaign tracking.",
           utm_medium: "Indicates the marketing channel or medium through which the traffic originated (e.g., email, social) using a UTM tag.",
           utm_campaign: "Specifies the name or identifier of the marketing campaign driving the traffic (e.g. marketing_campaign_summer_2024), tracked via a UTM tag.",
+          medium: "Categorises where the traffic came from outside the site. NULL for traffic that was not newly arrived traffic. Possible values are PPC, Social, Email, Referral, Organic, or 'Direct or unknown'.",
           exit_page: "The page URL of the last page visited in the session",
           session_start_timestamp: "Timestamp of the first page visit in the session",
           final_session_page_timestamp: "Timestamp of the last page visit in the session",
@@ -82,6 +107,8 @@ WITH
     namespace,
     -- The namespace of the instance of dfe-analytics that streamed this event.
     request_path,
+    -- query in key-value pair form (array of structs)
+    request_query,
     -- Path requested by the user
     request_path_and_query AS page_path_and_query,
     -- Path and query requested by the user
@@ -174,6 +201,7 @@ events_with_following_pages AS (
     request_user_id,
     namespace,
     request_path,
+    request_query,
     page_path_and_query,
     request_referer_domain,
     referer_path_and_query,
@@ -190,6 +218,7 @@ events_with_following_pages AS (
     anonymised_user_agent_and_ip,
     namespace,
     request_path,
+    request_query,
     page_path_and_query,
     request_referer_domain,
     referer_path_and_query,
@@ -275,6 +304,7 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     -- The final estimated user_id based on the conditions
     namespace,
     request_path,
+    request_query,
     page_path_and_query,
     request_referer_domain,
     referer_path_and_query,
@@ -335,12 +365,7 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     occurred_at AS page_visit_at,
     namespace,
     request_path AS page_path,
-    REGEXP_EXTRACT(page_path_and_query, r'utm_source=([^&]*)') AS utm_source,
-    -- Extract the UTM Source
-    REGEXP_EXTRACT(page_path_and_query, r'utm_medium=([^&]*)') AS utm_medium,
-    -- Extract the UTM Medium
-    REGEXP_EXTRACT(page_path_and_query, r'utm_campaign=([^&]*)') AS utm_campaign,
-    -- Extract the UTM Campaign
+    ${parameter_functions.attributionParamFields(params)}
     request_referer_domain,
     REGEXP_EXTRACT(referer_path_and_query, r'^([^?]+)') AS previous_page_path,
     next_step,
@@ -363,7 +388,8 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
   user_page_visits_with_session_number AS (
   SELECT
     *,
-    COUNT(CASE WHEN new_session THEN 1 END) OVER (PARTITION BY user_id ORDER BY page_visit_at) as session_number
+    COUNT(CASE WHEN new_session THEN 1 END) OVER (PARTITION BY user_id ORDER BY page_visit_at) as session_number,
+    ${requestToMedium(ctx)} AS medium
   FROM
     user_page_visits_with_session_boundaries),
   user_page_visits_with_session_id AS (
@@ -398,12 +424,7 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     occurred_at AS page_visit_at,
     namespace,
     request_path AS page_path,
-    REGEXP_EXTRACT(page_path_and_query, r'utm_source=([^&]*)') AS utm_source,
-    -- Extract the UTM Source
-    REGEXP_EXTRACT(page_path_and_query, r'utm_medium=([^&]*)') AS utm_medium,
-    -- Extract the UTM Medium
-    REGEXP_EXTRACT(page_path_and_query, r'utm_campaign=([^&]*)') AS utm_campaign,
-    -- Extract the UTM Campaign
+    ${parameter_functions.attributionParamFields(params)}
     request_referer_domain,
     REGEXP_EXTRACT(referer_path_and_query, r'^([^?]+)') AS previous_page_path,
     next_step,
@@ -422,7 +443,8 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
   non_user_page_visits_with_session_number AS (
   SELECT
     *,
-    COUNT(CASE WHEN new_session THEN 1 END) OVER (PARTITION BY anonymised_user_agent_and_ip ORDER BY page_visit_at) as session_number
+    COUNT(CASE WHEN new_session THEN 1 END) OVER (PARTITION BY anonymised_user_agent_and_ip ORDER BY page_visit_at) as session_number,
+    ${requestToMedium(ctx)} AS medium
   FROM
     non_user_page_visits_with_session_boundaries),
   nonuser_page_visits_with_session_id AS (
@@ -443,6 +465,7 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     utm_source,
     utm_medium,
     utm_campaign,
+    medium,
     request_referer_domain,
     previous_page_path,
     next_step,
@@ -459,6 +482,7 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     utm_source,
     utm_medium,
     utm_campaign,
+    medium,
     request_referer_domain,
     previous_page_path,
     next_step,
@@ -476,6 +500,7 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     utm_source,
     utm_medium,
     utm_campaign,
+    medium,
     request_referer_domain,
     previous_page_path,
     page_visit_at AS page_entry_time,
@@ -509,7 +534,8 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
             namespace,
             utm_source,
             utm_medium,
-            utm_campaign
+            utm_campaign,
+            medium
         )
         ORDER BY page_entry_time
     ) AS session_level_metrics,
@@ -533,6 +559,7 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     session_level_metrics[0].utm_source AS utm_source,
     session_level_metrics[0].utm_medium AS utm_medium,
     session_level_metrics[0].utm_campaign AS utm_campaign,
+    session_level_metrics[0].medium AS medium,
     -- set start_page to the first page in the pages_visited_details array for a single session
    ARRAY_REVERSE(pages_visited_details)[0].page AS exit_page,
     -- set exit_page to the last page in the pages_visited_details array for a single session
