@@ -1,3 +1,5 @@
+const parameter_functions = require('./parameter_functions');
+
 module.exports = (params) => {
   const stepNumbers = Array.from({ length: params.funnelDepth }, (_, i) => i + 1);
   const stepFieldMetadata = stepNumbers.map(stepNumber => ({
