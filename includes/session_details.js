@@ -1,3 +1,5 @@
+const parameter_functions = require('./parameter_functions');
+
 module.exports = (params) => {
   if (!params.enableSessionDetailsTable) {
     return true;
