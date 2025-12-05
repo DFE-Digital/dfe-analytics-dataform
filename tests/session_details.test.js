@@ -52,7 +52,8 @@ describe('session_details module', () => {
       eventSourceName: 'TestService',
       bqDatasetName: 'test_dataset',
       defaultConfig: {},
-      dependencies: []
+      dependencies: [],
+      attributionParameters: ['gclid']
     };
 
     require('../includes/session_details')(params);
