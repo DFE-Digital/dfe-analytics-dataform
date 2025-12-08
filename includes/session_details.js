@@ -16,9 +16,9 @@ module.exports = (params) => {
         ${ctx.when(params.attributionParameters.includes('gbraid'), `WHEN gbraid IS NOT NULL THEN "PPC"`, ``)}
         ${ctx.when(params.attributionParameters.includes('fbclid'), `WHEN fbclid IS NOT NULL THEN "PPC"`, ``)}
         ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN REGEXP_CONTAINS(utm_medium, "(?i)(email)") THEN "Email"`, ``)}
-        WHEN REGEXP_CONTAINS(SPLIT(request_referer_domain, "/")[SAFE_OFFSET(2)], "${params.socialRefererDomainRegex}") THEN "Social"
+        WHEN REGEXP_CONTAINS(request_referer_domain, "${params.socialRefererDomainRegex}") THEN "Social"
         ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN REGEXP_CONTAINS(utm_medium, "(?i)(social)") THEN "Social"`, ``)}
-        WHEN REGEXP_CONTAINS(SPLIT(request_referer_domain, "/")[SAFE_OFFSET(2)], "${params.searchEngineRefererDomainRegex}") THEN "Organic"
+        WHEN REGEXP_CONTAINS(request_referer_domain, "${params.searchEngineRefererDomainRegex}") THEN "Organic"
         ${ctx.when(params.attributionParameters.includes('utm_medium'), `WHEN REGEXP_CONTAINS(utm_medium, "(?i)(organic)") THEN "Organic"`, ``)}
         WHEN REGEXP_CONTAINS(request_referer_domain, "${params.attributionDomainExclusionRegex}") THEN "Direct or unknown"
         WHEN request_referer_domain IS NOT NULL THEN "Referral"
