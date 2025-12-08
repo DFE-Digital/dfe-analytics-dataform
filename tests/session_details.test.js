@@ -52,7 +52,8 @@ describe('session_details module', () => {
       eventSourceName: 'TestService',
       bqDatasetName: 'test_dataset',
       defaultConfig: {},
-      dependencies: []
+      dependencies: [],
+      attributionParameters: ['gclid']
     };
 
     require('../includes/session_details')(params);
@@ -60,7 +61,8 @@ describe('session_details module', () => {
     const ctx = {
       ref: (x) => `\`${x}\``,
       incremental: () => true,
-      self: () => '`session_details_TestService`'
+      self: () => '`session_details_TestService`',
+      when: (condition, ifTrue, ifFalse) => (condition ? ifTrue : ifFalse),
     };
 
     const sql = mockQueryImpl(ctx);
