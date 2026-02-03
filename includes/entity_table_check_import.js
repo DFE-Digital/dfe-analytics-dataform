@@ -4,6 +4,7 @@ module.exports = (params) => {
     "entity_table_check_import_" + params.eventSourceName, {
     ...params.defaultConfig,
     type: "incremental",
+    protected: false,
     assertions: {
       uniqueKey: ["entity_table_name", "import_id"],
       nonNull: ["entity_table_name"]
