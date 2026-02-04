@@ -38,6 +38,7 @@ describe('entity_table_check_import', () => {
       'entity_table_check_import_TestService',
       expect.objectContaining({
         type: 'incremental',
+        protected: false,
         tags: ['testservice'],
         bigquery: expect.objectContaining({
           partitionBy: 'DATE(checksum_calculated_at)',

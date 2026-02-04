@@ -57,6 +57,7 @@ describe('flattened_custom_events', () => {
       'custom_event_type_TestService',
       expect.objectContaining({
         type: 'incremental',
+        protected: false,
         description: expect.stringContaining('custom_event_type'),
         bigquery: expect.objectContaining({
           partitionBy: 'DATE(occurred_at)',
