@@ -2,7 +2,6 @@ module.exports = (params) => {
   return publish("dfe_analytics_configuration_" + params.eventSourceName, {
     ...params.defaultConfig,
     type: "table",
-    protected: false,
     bigquery: {
       partitionBy: "DATE(valid_to)",
       labels: {
