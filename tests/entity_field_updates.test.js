@@ -26,7 +26,7 @@ describe('entity_field_updates', () => {
       eventSourceName: 'MyService',
       bqDatasetName: 'MyDataset',
       hiddenPolicyTagLocation: 'projects/myproject/locations/eu/taxonomies/123/policyTags/abc',
-      defaultConfig: { type: 'table', protected: false },
+      defaultConfig: { type: 'table'},
       dataSchema: [
         { entityTableName: 'schools', hidePrimaryKey: true }
       ],
@@ -38,7 +38,6 @@ describe('entity_field_updates', () => {
       'MyService_entity_field_updates',
       expect.objectContaining({
         type: 'table',
-        protected: false,
         assertions: expect.any(Object),
         bigquery: expect.any(Object),
         tags: ['myservice'],
