@@ -68,6 +68,7 @@ describe('pageview_with_funnels', () => {
       'pageview_with_funnels_TestSource',
       expect.objectContaining({
         type: 'incremental',
+        protected: false,
         bigquery: expect.objectContaining({
           partitionBy: 'DATE(occurred_at)',
           clusterBy: ['newly_arrived'],

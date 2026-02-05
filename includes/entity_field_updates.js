@@ -2,7 +2,6 @@ module.exports = (params) => {
     return publish(params.eventSourceName + "_entity_field_updates", {
             ...params.defaultConfig,
             type: "table",
-            protected: false,
             assertions: {
                 uniqueKey: ["entity_id", "occurred_at", "key_updated", "entity_table_name"],
                 nonNull: ["entity_id", "occurred_at", "key_updated", "entity_table_name"]

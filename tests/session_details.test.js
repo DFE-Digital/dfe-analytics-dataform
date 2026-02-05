@@ -38,6 +38,7 @@ describe('session_details module', () => {
       'session_details_TestService',
       expect.objectContaining({
         type: 'incremental',
+        protected: false,
         tags: ['testservice'],
         assertions: {
           uniqueKey: [['session_id']]

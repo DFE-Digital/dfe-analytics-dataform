@@ -41,7 +41,6 @@ describe('configuration_versions module', () => {
       'dfe_analytics_configuration_MyService',
       expect.objectContaining({
         type: 'table',
-        protected: false,
         bigquery: expect.objectContaining({
           partitionBy: 'DATE(valid_to)',
           labels: {
