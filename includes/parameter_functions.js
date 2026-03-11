@@ -304,5 +304,6 @@ module.exports = {
   setDefaultSchemaParameters,
   dateRangesToDisableAssertionsNow,
   attributionParamFields,
-  attributionParamFieldMetadata
+  attributionParamFieldMetadata,
+  validateAirbyteParams
 }
