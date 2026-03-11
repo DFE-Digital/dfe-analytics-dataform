@@ -130,7 +130,7 @@ module.exports = (params) => {
     // EXISTING: dfe-analytics processing
     // Publish and return datasets - assertions first for quick access in the Dataform UI
     if (params.transformEntityEvents) {
-        return {
+        result = {
             events: events(params),
             eventsDataNotFresh: eventsDataNotFresh(params),
             entityDataNotFresh: entityDataNotFresh(params),
@@ -161,7 +161,7 @@ module.exports = (params) => {
             pipelineTableSnapshot: pipelineTableSnapshot(version, params),
             pipelineSnapshot: pipelineSnapshot(version, params),
             version: version
-        }
+        };
     } else {
         result = {
             events: events(params),
@@ -205,14 +205,6 @@ module.exports = (params) => {
                 airbyteAssertions: airbyteAssertions(params)
             } : {}),
         }
-    }
-
-    // NEW: Validation comparison (for dual-run migration period)
-    if (params.enableValidationComparison && params.enableAirbyteSource && params.transformEntityEvents) {
-        result = {
-            ...result,
-            validationComparison: validationComparison(params),
-        };
     }
 
     result.version = version;

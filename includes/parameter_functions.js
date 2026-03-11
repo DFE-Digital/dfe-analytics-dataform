@@ -24,7 +24,15 @@ const validTopLevelParameters = ['eventSourceName',
   'disabled',
   'hiddenPolicyTagLocation',
   'expirationDays',
-  'webRequestEventExpirationDays'
+  'webRequestEventExpirationDays',
+  // Airbyte parameters
+  'enableAirbyteSource',
+  'airbyteConfig',
+  'airbyteEnableVersioning',
+  'airbyteEnableFieldUpdates',
+  'airbyteEnableAssertions',
+  'enableValidationComparison',
+  'validationConfig'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
   'description',

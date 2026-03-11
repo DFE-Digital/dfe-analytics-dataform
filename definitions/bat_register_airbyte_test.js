@@ -5,15 +5,15 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
-    disabled: true,
-    // --- Existing dfe-analytics config (keep this for dual-run) ---
-    transformEntityEvents: true,
+    disabled: false,
     eventSourceName: "register",
     bqDatasetName: "register_events_production",
-    bqEventsTableName: "events",    
+    bqEventsTableName: "events",
+    urlRegex: "register-trainee-teachers.service.gov.uk",
+    transformEntityEvents: true,
+    compareChecksums: false,
     enableSessionTables: false,
-    enableSessionDetailsTable: false,
-    enableMonitoring: false,
+    hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     expirationDays: false,
     
     // --- NEW: Enable Airbyte ---
