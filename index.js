@@ -38,7 +38,6 @@ const airbyteEntityLatest = require("./includes/airbyte_entity_latest");
 const airbyteEntityVersion = require("./includes/airbyte_entity_version");
 const airbyteEntityFieldUpdates = require("./includes/airbyte_entity_field_updates");
 const airbyteAssertions = require("./includes/airbyte_assertions");
-const validationComparison = require("./includes/validation_comparison");
 
 module.exports = (params) => {
     // Set default values of parameters if parameters with the same name have not been passed to dfeAnalyticsDataform()
@@ -61,7 +60,7 @@ module.exports = (params) => {
         searchEngineRefererDomainRegex: "(?i)(google|bing|yahoo|aol|ask.co|baidu|duckduckgo|dogpile|ecosia|entireweb|exalead|gigablast|hotbot|info.com|lycos|metacrawler|mojeek|qwant|searx|startpage|swisscows|webcrawler|yandex|yippy)", // re-2 formatted regular expression to use to work out whether an HTTP referer is a search enginer (regardless of whether paid or organic)
         funnelDepth: 10, // Number of steps forwards/backwards to analyse in funnels - higher allows deeper analysis, lower reduces CPU usage
         requestPathGroupingRegex: '[0-9a-zA-Z]*[0-9][0-9a-zA-Z]*', // re2-formatted regular expression to replace with the string 'UID' when grouping request paths
-        attributionParameters: ['utm_source', 'utm_campaign', 'utm_medium', 'utm_content', 'gclid', 'gcsrc','fbclid','dclid','gad_source','ds_rl','gbraid','msclkid'], // list of parameters to extract from the request_query array of structs at the beginning of funnels
+        attributionParameters: ['utm_source', 'utm_campaign', 'utm_medium', 'utm_content', 'gclid', 'gcsrc', 'fbclid', 'dclid', 'gad_source', 'ds_rl', 'gbraid', 'msclkid'], // list of parameters to extract from the request_query array of structs at the beginning of funnels
         attributionDomainExclusionRegex: "(?i)(signin.education.gov.uk)", //re2-formatted regular expression to use to detect domain names which should be excluded from attribution modelling - for example, the domain name of an authentication service which 
         expirationDays: null, // Number of days after which all data streamed by dfe-analytics or managed by dfe-analytics-dataform for a particular eventDataSource should be deleted. Must be either an integer value or false.
         webRequestEventExpirationDays: null, // the number of days after which web_request events should be deleted, along with data in tables generated from them by dfe-analytics-dataform
@@ -84,22 +83,22 @@ module.exports = (params) => {
             toMonth: 1,
             toDay: 7
         }], // an array of day or date ranges between which some assertions will be disabled if other parameters are set to disable them. Each range is a hash containing either the integer values fromDay, fromMonth, toDay and toMonth *or* the date values fromDate and toDate. Defaults to an approximation to school holidays each year.
-        
+
         enableAirbyteSource: false, // Master switch for Airbyte processing
-        
+
         airbyteConfig: {
             datasetName: null, // REQUIRED if enableAirbyteSource: BigQuery dataset with Airbyte tables
             tablePrefix: '', // Optional: prefix for Airbyte table names (e.g., '_airbyte_raw_')
-            outputSuffix: '_airbyte',// Suffix for Airbyte output tables (to distinguish from dfe-analytics)
+            outputSuffix: '_airbyte', // Suffix for Airbyte output tables (to distinguish from dfe-analytics)
             primaryKeyField: 'id', // Default primary key field name
             changeDetectionStrategy: 'content_hash', // 'content_hash' | 'extraction_time'
         },
-        
+
         // Airbyte-specific feature flags
         airbyteEnableVersioning: true, // Generate _version tables from Airbyte
         airbyteEnableFieldUpdates: true, // Generate _field_updates tables from Airbyte
-        airbyteEnableAssertions: true,// Generate Airbyte-specific assertions
-        
+        airbyteEnableAssertions: true, // Generate Airbyte-specific assertions
+
         // Dual-run validation (for migration period)
         enableValidationComparison: false, // Generate comparison tables between dfe-analytics and Airbyte
         validationConfig: {
@@ -107,7 +106,7 @@ module.exports = (params) => {
             samplePercent: 10, // Percentage of records to sample for value comparison
             rowCountThresholdPercent: 1.0, // Fail if row count diff > this %
         },
-        
+
         ...params
     };
 
@@ -164,7 +163,7 @@ module.exports = (params) => {
             version: version
         }
     } else {
-        return {
+        result = {
             events: events(params),
             eventsDataNotFresh: eventsDataNotFresh(params),
             customEventDataNotFresh: customEventDataNotFresh(params),
@@ -176,7 +175,7 @@ module.exports = (params) => {
             dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
             pipelineSnapshot: pipelineSnapshot(version, params),
             version: version
-        }
+        };
     }
 
     // NEW: Airbyte processing (only if enabled)
@@ -185,22 +184,22 @@ module.exports = (params) => {
         if (!params.airbyteConfig.datasetName) {
             throw new Error("airbyteConfig.datasetName is required when enableAirbyteSource is true");
         }
-        
+
         result = {
             ...result,
             // Airbyte _latest tables
             airbyteEntityLatest: airbyteEntityLatest(params),
-            
+
             // Airbyte _version tables
             ...(params.airbyteEnableVersioning ? {
                 airbyteEntityVersion: airbyteEntityVersion(params)
             } : {}),
-            
+
             // Airbyte _field_updates tables
             ...(params.airbyteEnableFieldUpdates ? {
                 airbyteEntityFieldUpdates: airbyteEntityFieldUpdates(params)
             } : {}),
-            
+
             // Airbyte assertions
             ...(params.airbyteEnableAssertions ? {
                 airbyteAssertions: airbyteAssertions(params)
@@ -209,7 +208,7 @@ module.exports = (params) => {
     }
 
     // NEW: Validation comparison (for dual-run migration period)
-     if (params.enableValidationComparison && params.enableAirbyteSource && params.transformEntityEvents) {
+    if (params.enableValidationComparison && params.enableAirbyteSource && params.transformEntityEvents) {
         result = {
             ...result,
             validationComparison: validationComparison(params),
