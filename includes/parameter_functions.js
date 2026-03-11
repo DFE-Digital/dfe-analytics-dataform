@@ -265,6 +265,40 @@ const attributionParamFieldMetadata = (params) => {
     )
   };
 
+function validateAirbyteParams(params) {
+    if (params.enableAirbyteSource) {
+        if (!params.airbyteConfig) {
+            throw new Error("airbyteConfig object is required when enableAirbyteSource is true");
+        }
+        if (!params.airbyteConfig.datasetName) {
+            throw new Error("airbyteConfig.datasetName is required when enableAirbyteSource is true");
+        }
+        if (params.airbyteConfig.changeDetectionStrategy && 
+            !['content_hash', 'extraction_time'].includes(params.airbyteConfig.changeDetectionStrategy)) {
+            throw new Error("airbyteConfig.changeDetectionStrategy must be 'content_hash' or 'extraction_time'");
+        }
+        
+        // Validate dataSchema has required fields for Airbyte
+        params.dataSchema.forEach(entity => {
+            if (!entity.entityTableName) {
+                throw new Error("Each entity in dataSchema must have 'entityTableName' for Airbyte processing");
+            }
+            if (!entity.keys || entity.keys.length === 0) {
+                throw new Error(`Entity '${entity.entityTableName}' must have 'keys' defined for Airbyte processing`);
+            }
+        });
+    }
+    
+    if (params.enableValidationComparison) {
+        if (!params.enableAirbyteSource) {
+            throw new Error("enableValidationComparison requires enableAirbyteSource to be true");
+        }
+        if (!params.transformEntityEvents) {
+            throw new Error("enableValidationComparison requires transformEntityEvents to be true (to compare against)");
+        }
+    }
+}
+
 module.exports = {
   validateParams,
   setDefaultSchemaParameters,

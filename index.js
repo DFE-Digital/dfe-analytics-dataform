@@ -1,4 +1,4 @@
-const version = "2.4.2";
+const version = "2.5.0";
 
 const parameterFunctions = require("./includes/parameter_functions");
 
@@ -32,6 +32,13 @@ const dfeAnalyticsConfiguration = require("./includes/dfe_analytics_configuratio
 const migrateHistoricEventsToCurrentHiddenPIIConfiguration = require("./includes/migrate_historic_events_to_current_hidden_pii_configuration");
 const pipelineTableSnapshot = require("./includes/pipeline_table_snapshot");
 const pipelineSnapshot = require("./includes/pipeline_snapshot");
+
+// Airbyte modules
+const airbyteEntityLatest = require("./includes/airbyte_entity_latest");
+const airbyteEntityVersion = require("./includes/airbyte_entity_version");
+const airbyteEntityFieldUpdates = require("./includes/airbyte_entity_field_updates");
+const airbyteAssertions = require("./includes/airbyte_assertions");
+const validationComparison = require("./includes/validation_comparison");
 
 module.exports = (params) => {
     // Set default values of parameters if parameters with the same name have not been passed to dfeAnalyticsDataform()
@@ -77,6 +84,30 @@ module.exports = (params) => {
             toMonth: 1,
             toDay: 7
         }], // an array of day or date ranges between which some assertions will be disabled if other parameters are set to disable them. Each range is a hash containing either the integer values fromDay, fromMonth, toDay and toMonth *or* the date values fromDate and toDate. Defaults to an approximation to school holidays each year.
+        
+        enableAirbyteSource: false, // Master switch for Airbyte processing
+        
+        airbyteConfig: {
+            datasetName: null, // REQUIRED if enableAirbyteSource: BigQuery dataset with Airbyte tables
+            tablePrefix: '', // Optional: prefix for Airbyte table names (e.g., '_airbyte_raw_')
+            outputSuffix: '_airbyte',// Suffix for Airbyte output tables (to distinguish from dfe-analytics)
+            primaryKeyField: 'id', // Default primary key field name
+            changeDetectionStrategy: 'content_hash', // 'content_hash' | 'extraction_time'
+        },
+        
+        // Airbyte-specific feature flags
+        airbyteEnableVersioning: true, // Generate _version tables from Airbyte
+        airbyteEnableFieldUpdates: true, // Generate _field_updates tables from Airbyte
+        airbyteEnableAssertions: true,// Generate Airbyte-specific assertions
+        
+        // Dual-run validation (for migration period)
+        enableValidationComparison: false, // Generate comparison tables between dfe-analytics and Airbyte
+        validationConfig: {
+            outputDataset: null, // Dataset for validation results (defaults to bqDatasetName)
+            samplePercent: 10, // Percentage of records to sample for value comparison
+            rowCountThresholdPercent: 1.0, // Fail if row count diff > this %
+        },
+        
         ...params
     };
 
@@ -94,6 +125,10 @@ module.exports = (params) => {
     // Work out whether to disable assertions now if eventsDataFreshnessDisableDuringRange or dataSchema.dataFreshnessDisableDuringRange is true
     params.disableAssertionsNow = parameterFunctions.dateRangesToDisableAssertionsNow(params.assertionDisableDuringDateRanges, new Date());
 
+    // Build result object
+    let result = {};
+
+    // EXISTING: dfe-analytics processing
     // Publish and return datasets - assertions first for quick access in the Dataform UI
     if (params.transformEntityEvents) {
         return {
@@ -143,4 +178,44 @@ module.exports = (params) => {
             version: version
         }
     }
+
+    // NEW: Airbyte processing (only if enabled)
+    if (params.enableAirbyteSource) {
+        // Validate Airbyte-specific params
+        if (!params.airbyteConfig.datasetName) {
+            throw new Error("airbyteConfig.datasetName is required when enableAirbyteSource is true");
+        }
+        
+        result = {
+            ...result,
+            // Airbyte _latest tables
+            airbyteEntityLatest: airbyteEntityLatest(params),
+            
+            // Airbyte _version tables
+            ...(params.airbyteEnableVersioning ? {
+                airbyteEntityVersion: airbyteEntityVersion(params)
+            } : {}),
+            
+            // Airbyte _field_updates tables
+            ...(params.airbyteEnableFieldUpdates ? {
+                airbyteEntityFieldUpdates: airbyteEntityFieldUpdates(params)
+            } : {}),
+            
+            // Airbyte assertions
+            ...(params.airbyteEnableAssertions ? {
+                airbyteAssertions: airbyteAssertions(params)
+            } : {}),
+        }
+    }
+
+    // NEW: Validation comparison (for dual-run migration period)
+     if (params.enableValidationComparison && params.enableAirbyteSource && params.transformEntityEvents) {
+        result = {
+            ...result,
+            validationComparison: validationComparison(params),
+        };
+    }
+
+    result.version = version;
+    return result;
 }
