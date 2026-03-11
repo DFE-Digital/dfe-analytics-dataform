@@ -46,29 +46,6 @@ dfeAnalyticsDataform({
             }]
         },
         {
-            entityTableName: "activities",
-            description: "",
-            materialisation: "view",
-            keys: [{
-                keyName: "action_name",
-                dataType: "string",
-                description: "action activity applies to"
-            }, {
-                keyName: "controller_name",
-                dataType: "string",
-                description: "controller activity applies to"
-            }, {
-                keyName: "metadata",
-                dataType: "string",
-                description: "contains action, format, subject, controller & training_route"
-            }, {
-                keyName: "user_id",
-                dataType: "string",
-                description: "",
-                foreignKeyTable: "users"
-            }]
-        },
-        {
             entityTableName: "allocation_subjects",
             description: "",
             keys: [{
@@ -96,6 +73,92 @@ dfeAnalyticsDataform({
                 keyName: "apply_id",
                 dataType: "string",
                 description: "Application form ID in Apply, if and only if a SCITT successfully imported data from Apply when they started registering this trainee in Register. Because of this this field is *not* suitable for use to join all trainees in Register on to corresponding candidates/application forms in Apply."
+            }]
+        },
+        {
+            entityTableName: "courses",
+            description: "",
+            keys: [{
+                keyName: "accredited_body_code",
+                dataType: "string",
+                description: "code for the accredited body of a course"
+            }, {
+                keyName: "code",
+                dataType: "string",
+                description: "course code",
+                alias: "course_code"
+            }, {
+                keyName: "course_length",
+                dataType: "string",
+                description: "length of the course"
+            }, {
+                keyName: "duration_in_years",
+                dataType: "integer",
+                description: "duration of the course in years"
+            }, {
+                keyName: "level",
+                dataType: "string",
+                description: "level of the course"
+            }, {
+                keyName: "min_age",
+                dataType: "integer",
+                description: "minimum teaching age"
+            }, {
+                keyName: "max_age",
+                dataType: "integer",
+                description: "maximum teaching age"
+            }, {
+                keyName: "qualification",
+                dataType: "string",
+                description: "qualification aim of the course"
+            }, {
+                keyName: "name",
+                dataType: "string",
+                description: "name of the course"
+            }, {
+                keyName: "recruitment_cycle_year",
+                dataType: "integer",
+                description: "recruitment cycle year for a course"
+            }, {
+                keyName: "route",
+                dataType: "string",
+                description: "ITT route"
+            }, {
+                keyName: "full_time_start_date",
+                dataType: "date",
+                description: "Full time start date"
+            }, {
+                keyName: "full_time_end_date",
+                dataType: "date",
+                description: "Full time end date"
+            }, {
+                keyName: "part_time_start_date",
+                dataType: "date",
+                description: "Part time start date"
+            }, {
+                keyName: "part_time_end_date",
+                dataType: "date",
+                description: "Part time end date"
+            }, {
+                keyName: "published_start_date",
+                dataType: "date",
+                description: "Published start date"
+            }, {
+                keyName: "start_date",
+                dataType: "date",
+                description: ""
+            }, {
+                keyName: "study_mode",
+                dataType: "string",
+                description: "study mode, e.g. full-time or part-time"
+            }, {
+                keyName: "summary",
+                dataType: "string",
+                description: "summary description of the course"
+            }, {
+                keyName: "uuid",
+                dataType: "string",
+                description: "unique identifier for a course"
             }]
         }
     ]
