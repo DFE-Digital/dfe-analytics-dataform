@@ -16,7 +16,7 @@ dfeAnalyticsDataform({
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     expirationDays: false,
     
-    // --- NEW: Enable Airbyte ---
+    // NEW: Enable Airbyte
     enableAirbyteSource: true,
     
     airbyteConfig: {
@@ -31,9 +31,9 @@ dfeAnalyticsDataform({
     airbyteEnableFieldUpdates: true,
     airbyteEnableAssertions: true,
     
-    // --- Data schema (start with a small subset for testing!) ---
+    // Data schema (small subset for testing)
     dataSchema: [{
-            entityTableName: "academic_cycles",
+        entityTableName: "academic_cycles",
             description: "",
             keys: [{
                 keyName: "start_date",
@@ -143,10 +143,6 @@ dfeAnalyticsDataform({
                 keyName: "published_start_date",
                 dataType: "date",
                 description: "Published start date"
-            }, {
-                keyName: "start_date",
-                dataType: "date",
-                description: ""
             }, {
                 keyName: "study_mode",
                 dataType: "string",
