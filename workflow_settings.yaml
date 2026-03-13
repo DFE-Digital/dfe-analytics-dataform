@@ -1,4 +1,4 @@
-defaultDataset: dataform_airbyte_test
-defaultAssertionDataset: dataform_airbyte_test_assertions
+defaultDataset: dataform
+defaultAssertionDataset: dataform_assertions
 defaultProject: rugged-abacus-218110
 defaultLocation: europe-west2

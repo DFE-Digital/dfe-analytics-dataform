@@ -180,10 +180,7 @@ module.exports = (params) => {
 
     // NEW: Airbyte processing (only if enabled)
     if (params.enableAirbyteSource) {
-        // Validate Airbyte-specific params
-        if (!params.airbyteConfig.datasetName) {
-            throw new Error("airbyteConfig.datasetName is required when enableAirbyteSource is true");
-        }
+        parameterFunctions.validateAirbyteParams(params);
 
         result = {
             ...result,
