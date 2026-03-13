@@ -1,4 +1,4 @@
-/* Generates {entity}_version_{source}{suffix} tables from Airbyte raw data; SCD Type 2 with content hashing for change detection. */
+/* Generates {entity}_version_{source}{suffix} tables from Airbyte raw data */
 
 const airbyteDataFunctions = require('./airbyte_data_functions');
 
@@ -29,7 +29,7 @@ module.exports = (params) => {
         return publish(tableName, {
             type: "incremental",
             schema: params.bqDatasetName,
-            protected: false,
+            protected: true,
             uniqueKey: [primaryKey, "valid_from"],
             description: `[AIRBYTE] Version history of ${entitySchema.entityTableName} entities. ${useContentHash ? 'Uses content hashing.' : ''} ${entitySchema.description || ''}`,
             columns: {
@@ -63,10 +63,10 @@ module.exports = (params) => {
         }).query(ctx => `
 WITH source_data AS (
     SELECT
-        ${primaryKey},
-${selectColumns},
-        _airbyte_extracted_at,
-        _airbyte_raw_id,
+        CAST(${primaryKey} AS STRING) AS ${primaryKey},
+        ${selectColumns},
+        CAST(_airbyte_extracted_at AS TIMESTAMP) AS _airbyte_extracted_at,
+        CAST(_airbyte_raw_id AS STRING) AS _airbyte_raw_id,
         ${contentHashExpr} AS content_hash
     FROM ${sourceTable}
     WHERE ${primaryKey} IS NOT NULL
@@ -92,6 +92,7 @@ existing_versions AS (
         CAST(NULL AS TIMESTAMP) AS valid_to,
         CAST(NULL AS BOOL) AS is_current,
         CAST(NULL AS INT64) AS version_number
+    FROM source_data
     WHERE FALSE
     `}
 ),
