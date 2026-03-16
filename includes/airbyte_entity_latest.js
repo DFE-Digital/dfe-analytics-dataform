@@ -6,81 +6,48 @@ module.exports = (params) => {
     if (!params.enableAirbyteSource) return null;
 
     const suffix = params.airbyteConfig.outputSuffix || '_airbyte';
+    const primaryKey = params.airbyteConfig.primaryKeyField || 'id';
 
-    return params.dataSchema.map(entitySchema => {
-        const tableName = `${entitySchema.entityTableName}_latest_${params.eventSourceName}${suffix}`;
-        const sourceTable = `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${params.airbyteConfig.tablePrefix}${entitySchema.entityTableName}\``;
-        const primaryKey = entitySchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id';
+    return params.dataSchema.forEach(tableSchema => {
+        const sourceTable = `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${params.airbyteConfig.tablePrefix}${tableSchema.entityTableName}\``;
 
-        // Build column expressions
-        const selectColumns = entitySchema.keys.map(key => {
-            const castExpr = airbyteDataFunctions.getCastExpression(key.keyName, key.dataType, key.isArray);
-            const alias = key.alias || key.keyName;
-            return `    ${castExpr} AS \`${alias}\``;
-        }).join(',\n');
-
-        // Column documentation
-        const columnDocs = {
-            [primaryKey]: `Primary key of the ${entitySchema.entityTableName} entity`,
-            first_seen_at: "Timestamp when this entity was first extracted by Airbyte",
-            last_seen_at: "Timestamp when this entity was last extracted by Airbyte",
-            ...Object.fromEntries(
-                entitySchema.keys.map(k => [k.alias || k.keyName, k.description || ''])
-            )
-        };
-
-        return publish(tableName, {
-            type: entitySchema.materialisation || 'table',
-            schema: params.bqDatasetName,
-            description: `[AIRBYTE] Latest version of each ${entitySchema.entityTableName} entity. ${entitySchema.description || ''}`,
-            columns: columnDocs,
+        publish(tableSchema.entityTableName + "_latest_" + params.eventSourceName + suffix, {
+            ...params.defaultConfig,
+            type: tableSchema.materialisation || 'table',
+            ...((tableSchema.materialisation || 'table') == "table" ? {
+                assertions: {
+                    uniqueKey: [primaryKey],
+                    nonNull: ["last_streamed_at", primaryKey]
+                }
+            } : {}),
             bigquery: {
                 labels: {
                     eventsource: params.eventSourceName.toLowerCase(),
-                    sourcetype: 'airbyte',
-                    entitytype: 'latest'
+                    sourcedataset: params.bqDatasetName.toLowerCase(),
+                    entitytabletype: "latest"
                 },
-                ...(entitySchema.materialisation === 'table' ? {
+                ...((tableSchema.materialisation || 'table') == "table" ? {
                     clusterBy: [primaryKey]
                 } : {})
             },
-            tags: [params.eventSourceName.toLowerCase(), 'airbyte', entitySchema.entityTableName],
-            assertions: entitySchema.materialisation === 'table' ? {
-                uniqueKey: [primaryKey],
-                nonNull: [primaryKey]
-            } : {}
+            tags: [params.eventSourceName.toLowerCase(), 'airbyte'],
+            description: "[AIRBYTE] Latest version of " + tableSchema.entityTableName + ". Sourced from Airbyte raw table in the " + params.airbyteConfig.datasetName + " dataset. " + (tableSchema.description || ''),
+            columns: {
+                last_streamed_occurred_at: "Timestamp of the last Airbyte extraction for this entity.",
+                [primaryKey]: {
+                    description: `Primary key of the ${tableSchema.entityTableName} entity.`,
+                    bigqueryPolicyTags: tableSchema.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+                },
+                created_at: "Timestamp this entity was first saved in the database.",
+                updated_at: "Timestamp this entity was last updated in the database."
+            }
         }).query(ctx => `
-WITH ranked_records AS (
-    SELECT
-        ${primaryKey},
-${selectColumns},
-        _airbyte_extracted_at,
-        _airbyte_raw_id,
-        ROW_NUMBER() OVER (
-            PARTITION BY ${primaryKey} 
-            ORDER BY _airbyte_extracted_at DESC
-        ) AS _rn
-    FROM ${sourceTable}
-    WHERE ${primaryKey} IS NOT NULL
-),
-
-first_seen AS (
-    SELECT
-        ${primaryKey},
-        MIN(_airbyte_extracted_at) AS first_seen_at
-    FROM ${sourceTable}
-    WHERE ${primaryKey} IS NOT NULL
-    GROUP BY ${primaryKey}
-)
-
 SELECT
-    r.${primaryKey},
-    f.first_seen_at,
-    r._airbyte_extracted_at AS last_seen_at,
-${entitySchema.keys.map(k => `    r.\`${k.alias || k.keyName}\``).join(',\n')}
-FROM ranked_records r
-JOIN first_seen f ON r.${primaryKey} = f.${primaryKey}
-WHERE r._rn = 1
-`);
+    * EXCEPT(_airbyte_raw_id, _airbyte_extracted_at, _airbyte_meta, _airbyte_generation_id, _ab_cdc_lsn, _ab_cdc_deleted_at, _ab_cdc_updated_at),
+    _airbyte_extracted_at AS last_streamed_occurred_at
+FROM ${sourceTable}
+WHERE ${primaryKey} IS NOT NULL
+    AND _ab_cdc_deleted_at IS NULL
+`)
     });
 };
