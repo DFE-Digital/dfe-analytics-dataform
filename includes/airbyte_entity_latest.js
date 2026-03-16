@@ -1,7 +1,5 @@
 /* Generates {entity}_latest_{source}{suffix} tables from Airbyte raw data; Contains the most recent version of each entity. */
 
-const airbyteDataFunctions = require('./airbyte_data_functions');
-
 module.exports = (params) => {
     if (!params.enableAirbyteSource) return null;
 
