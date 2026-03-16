@@ -31,7 +31,7 @@ module.exports = (params) => {
             tags: [params.eventSourceName.toLowerCase(), 'airbyte'],
             description: "[AIRBYTE] Latest version of " + tableSchema.entityTableName + ". Sourced from Airbyte raw table in the " + params.airbyteConfig.datasetName + " dataset. " + (tableSchema.description || ''),
             columns: {
-                last_streamed_occurred_at: "Timestamp of the last Airbyte extraction for this entity.",
+                last_streamed_at: "Timestamp of the last Airbyte extraction for this entity.",
                 [primaryKey]: {
                     description: `Primary key of the ${tableSchema.entityTableName} entity.`,
                     bigqueryPolicyTags: tableSchema.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
@@ -42,7 +42,7 @@ module.exports = (params) => {
         }).query(ctx => `
 SELECT
     * EXCEPT(_airbyte_raw_id, _airbyte_extracted_at, _airbyte_meta, _airbyte_generation_id, _ab_cdc_lsn, _ab_cdc_deleted_at, _ab_cdc_updated_at),
-    _airbyte_extracted_at AS last_streamed_occurred_at
+    _airbyte_extracted_at AS last_streamed_at
 FROM ${sourceTable}
 WHERE ${primaryKey} IS NOT NULL
     AND _ab_cdc_deleted_at IS NULL
