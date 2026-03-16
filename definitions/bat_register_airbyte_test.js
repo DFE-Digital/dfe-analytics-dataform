@@ -10,11 +10,12 @@ dfeAnalyticsDataform({
     bqDatasetName: "register_events_production",
     bqEventsTableName: "events",
     urlRegex: "register-trainee-teachers.service.gov.uk",
-    transformEntityEvents: true,
+    transformEntityEvents: false,
     compareChecksums: false,
     enableSessionTables: false,
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     expirationDays: false,
+    enableMonitoring: false,
     
     // NEW: Enable Airbyte
     enableAirbyteSource: true,
