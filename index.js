@@ -36,7 +36,7 @@ const pipelineSnapshot = require("./includes/pipeline_snapshot");
 // Airbyte modules
 const airbyteEntityLatest = require("./includes/airbyte_entity_latest");
 const airbyteEntityVersion = require("./includes/airbyte_entity_version");
-const airbyteAssertions = require("./includes/airbyte_assertions");
+const airbyteentityDataNotFresh = require("./includes/airbyte_entity_data_not_fresh");
 
 module.exports = (params) => {
     // Set default values of parameters if parameters with the same name have not been passed to dfeAnalyticsDataform()
@@ -190,9 +190,9 @@ module.exports = (params) => {
                 airbyteEntityVersion: airbyteEntityVersion(params)
             } : {}),
 
-            // Airbyte assertions
+            // Airbyte entity data not fresh check
             ...(params.airbyteEnableAssertions ? {
-                airbyteAssertions: airbyteAssertions(params)
+                airbyteentityDataNotFresh: airbyteentityDataNotFresh(params)
             } : {}),
         }
     }
