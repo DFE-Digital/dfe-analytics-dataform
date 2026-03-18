@@ -36,7 +36,6 @@ const pipelineSnapshot = require("./includes/pipeline_snapshot");
 // Airbyte modules
 const airbyteEntityLatest = require("./includes/airbyte_entity_latest");
 const airbyteEntityVersion = require("./includes/airbyte_entity_version");
-const airbyteEntityFieldUpdates = require("./includes/airbyte_entity_field_updates");
 const airbyteAssertions = require("./includes/airbyte_assertions");
 
 module.exports = (params) => {
@@ -96,7 +95,6 @@ module.exports = (params) => {
 
         // Airbyte-specific feature flags
         airbyteEnableVersioning: true, // Generate _version tables from Airbyte
-        airbyteEnableFieldUpdates: true, // Generate _field_updates tables from Airbyte
         airbyteEnableAssertions: true, // Generate Airbyte-specific assertions
 
         // Dual-run validation (for migration period)
@@ -190,11 +188,6 @@ module.exports = (params) => {
             // Airbyte _version tables
             ...(params.airbyteEnableVersioning ? {
                 airbyteEntityVersion: airbyteEntityVersion(params)
-            } : {}),
-
-            // Airbyte _field_updates tables
-            ...(params.airbyteEnableFieldUpdates ? {
-                airbyteEntityFieldUpdates: airbyteEntityFieldUpdates(params)
             } : {}),
 
             // Airbyte assertions

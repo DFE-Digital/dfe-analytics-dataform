@@ -29,7 +29,6 @@ dfeAnalyticsDataform({
     },
     
     airbyteEnableVersioning: true,
-    airbyteEnableFieldUpdates: true,
     airbyteEnableAssertions: true,
     
     // Data schema (small subset for testing)
