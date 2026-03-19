@@ -47,10 +47,9 @@ module.exports = (params) => {
 WITH source_data AS (
     SELECT
         CAST(${primaryKey} AS STRING) AS ${primaryKey},
-        * EXCEPT(${primaryKey}, created_at, updated_at, _airbyte_raw_id, _airbyte_extracted_at, _airbyte_meta, _airbyte_generation_id, _ab_cdc_lsn, _ab_cdc_deleted_at, _ab_cdc_updated_at),
+        * EXCEPT(${primaryKey}, created_at, updated_at, _airbyte_raw_id, _airbyte_meta, _airbyte_generation_id, _ab_cdc_lsn, _ab_cdc_deleted_at, _ab_cdc_updated_at),
         CAST(created_at AS TIMESTAMP) AS created_at,
         CAST(updated_at AS TIMESTAMP) AS updated_at,
-        CAST(_airbyte_extracted_at AS TIMESTAMP) AS _airbyte_extracted_at,
         CAST(_ab_cdc_deleted_at AS TIMESTAMP) AS deleted_at,
         CAST(_airbyte_raw_id AS STRING) AS _airbyte_raw_id
     FROM ${sourceTable}
