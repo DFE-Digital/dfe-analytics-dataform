@@ -14,13 +14,13 @@ module.exports = (params) => {
       } else {
         return assert(
           tableSchema.entityTableName +
-          "airbyte_data_not_fresh_" +
+          "_airbyte_data_not_fresh_" +
           params.eventSourceName, {
           ...params.defaultConfig
         }
         ).tags([params.eventSourceName.toLowerCase(),  'airbyte'])
           .query(ctx =>
-            "SELECT MAX(_ab_cdc_updated_at) AS last_cdc_updated_at FROM " +
+            "SELECT MAX(CAST(_ab_cdc_updated_at AS TIMESTAMP)) AS last_cdc_updated_at FROM " +
                         "`" + params.bqProjectName + "." + params.airbyteConfig.datasetName + "." + params.airbyteConfig.tablePrefix + tableSchema.entityTableName + "`" +
                         " HAVING last_cdc_updated_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP, INTERVAL " +
                         tableSchema.dataFreshnessDays +
