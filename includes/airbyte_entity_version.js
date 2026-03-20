@@ -153,6 +153,7 @@ live_records AS (
             ${data_functions.setKeyConstraints(ctx, dataform, {
                 primaryKey: primaryKey + ", valid_from"
             })}
+             /* data retention: delete versions older than the entity-specific expirationDays */
             ${params.expirationDays && ctx.incremental() ? `
                 DELETE FROM ${ctx.self()}
                 WHERE DATE(valid_from) < CURRENT_DATE - ${params.expirationDays};
