@@ -119,12 +119,13 @@ live_records AS (
       /* valid_to is either the next version's updated_at,
          or if no next version exists, the deletion timestamp (if deleted) */
       COALESCE(
-        deletions.deleted_at,
         LEAD(updated_at)
           OVER (
             PARTITION BY live_records.${primaryKey}
             ORDER BY updated_at ASC
-          )) AS valid_to,
+          ),
+          deletions.deleted_at
+        ) AS valid_to,
       deletions.deleted_at IS NOT NULL
         AND LEAD(updated_at)
           OVER (
@@ -135,7 +136,7 @@ live_records AS (
       ROW_NUMBER()
         OVER (
           PARTITION BY live_records.${primaryKey}
-          ORDER BY updated_at ASC
+          ORDER BY updated_at DESC
         ) = 1
         AND deletions.deleted_at IS NULL AS is_current,
       ROW_NUMBER()
@@ -147,6 +148,19 @@ live_records AS (
     LEFT JOIN deletions
       ON live_records.${primaryKey} = deletions.${primaryKey}
 
-`);
+`)
+ .postOps(ctx => `
+            ${data_functions.setKeyConstraints(ctx, dataform, {
+                primaryKey: primaryKey + ", valid_from"
+            })}
+            ${params.expirationDays && ctx.incremental() ? `
+                DELETE FROM ${ctx.self()}
+                WHERE DATE(valid_from) < CURRENT_DATE - ${params.expirationDays};
+            ` : ``}
+            ${entitySchema.expirationDays && ctx.incremental() ? `
+                DELETE FROM ${ctx.self()}
+                WHERE DATE(valid_from) < CURRENT_DATE - ${entitySchema.expirationDays};
+            ` : ``}
+        `);
     });
 };
