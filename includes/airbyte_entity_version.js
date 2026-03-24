@@ -5,6 +5,15 @@ module.exports = (params) => {
 
     const suffix = params.airbyteConfig.outputSuffix || '_airbyte';
 
+    const getKeys = (keys) => {
+    return keys.filter(k => !k.historic).map(key => ({
+        [key.alias || key.keyName]: {
+          description: key.description,
+          bigqueryPolicyTags: key.hidden && key.hiddenPolicyTagLocation ? [key.hiddenPolicyTagLocation] : []
+        }
+    }))
+    };
+
     return params.dataSchema.map(entitySchema => {
         const tableName = `${entitySchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
         const sourceTable = `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${params.airbyteConfig.tablePrefix}${entitySchema.entityTableName}\``;
@@ -15,15 +24,18 @@ module.exports = (params) => {
             protected: false,
             uniqueKey: [primaryKey, "valid_from"],
             description: `[AIRBYTE] Version history of ${entitySchema.entityTableName} entities. ${entitySchema.description || ''}`,
-            columns: {
-                [primaryKey]: `Primary key of the ${entitySchema.entityTableName} entity.`,
-                valid_from: "Timestamp from which this version was valid (updated_at from the source).",
-                valid_to: "Timestamp until which this version was valid. NULL = current.",
-                is_current: "TRUE if this is the current version.",
-                version_number: "Sequential version number (1 = first).",
-                created_at: "Timestamp this entity was first saved in the database.",
-                updated_at: "Timestamp this entity was last updated in the database."
-            },
+            columns: Object.assign(
+                {
+                    [primaryKey]: `Primary key of the ${entitySchema.entityTableName} entity.`,
+                    valid_from: "Timestamp from which this version was valid (updated_at from the source).",
+                    valid_to: "Timestamp until which this version was valid. NULL = current.",
+                    is_current: "TRUE if this is the current version.",
+                    version_number: "Sequential version number (1 = first).",
+                    created_at: "Timestamp this entity was first saved in the database.",
+                    updated_at: "Timestamp this entity was last updated in the database."
+                },
+                ...(entitySchema.keys ? getKeys(entitySchema.keys) : [])
+            ),
             bigquery: {
                 partitionBy: "DATE(valid_from)",
                 clusterBy: [primaryKey],

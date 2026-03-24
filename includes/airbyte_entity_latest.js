@@ -1,19 +1,19 @@
 /* Generates {entity}_latest_{source}{suffix} tables from Airbyte raw data; Contains the most recent version of each entity. */
 
-const getKeys = (keys) => {
+module.exports = (params) => {
+    if (!params.enableAirbyteSource) return null;
+
+    const suffix = params.airbyteConfig.outputSuffix || '_airbyte';
+    const primaryKey = params.airbyteConfig.primaryKeyField || 'id';
+
+    const getKeys = (keys) => {
     return keys.filter(k => !k.historic).map(key => ({
         [key.alias || key.keyName]: {
           description: key.description,
           bigqueryPolicyTags: key.hidden && key.hiddenPolicyTagLocation ? [key.hiddenPolicyTagLocation] : []
         }
     }))
-};
-
-module.exports = (params) => {
-    if (!params.enableAirbyteSource) return null;
-
-    const suffix = params.airbyteConfig.outputSuffix || '_airbyte';
-    const primaryKey = params.airbyteConfig.primaryKeyField || 'id';
+    };
 
     return params.dataSchema.forEach(tableSchema => {
         const versionTableName = `${tableSchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
