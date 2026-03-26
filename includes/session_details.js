@@ -1425,48 +1425,73 @@ SELECT
 FROM final_assignment_base b`
 );
 
-  return publish(finalName, {
-    ...params.defaultConfig,
-    type: "incremental",
-    protected: false,
-    bigquery: {
-      partitionBy: "DATE(session_start_timestamp)",
-      updatePartitionFilter:
-        "final_session_page_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)",
-      labels: {
-        eventsource: params.eventSourceName.toLowerCase(),
-        sourcedataset: params.bqDatasetName.toLowerCase()
-      }
-    },
-    assertions: {
-      uniqueKey: [["session_id"]]
-    },
-    tags: [params.eventSourceName.toLowerCase()],
-    description:
-      "This table contains data on sessions and accompanying metrics. Each row is a single session.",
-    dependencies: [...(params.dependencies || []), pass3Name],
-    columns: {
-      session_id: "The unique ID of the session",
-      user_id: "UUID of the user. This is only available for users who have signed into the service during their session.",
-      session_namespace: "The namespace of the instance of dfe-analytics that streamed the first web visit event in this session.",
-      start_page: "The page URL of the first page visited in the session",
-      utm_source: "UTM source.",
-      utm_medium: "UTM medium.",
-      utm_campaign: "UTM campaign.",
-      medium: "Categorised traffic medium.",
-      exit_page: "The page URL of the last page visited in the session",
-      session_start_timestamp: "Timestamp of the first page visit in the session",
-      final_session_page_timestamp: "Timestamp of the last page visit in the session",
-      session_time_in_seconds: "The duration of the session in seconds.",
-      count_pages_visited: "The number of pages visited during the session."
+return publish(finalName, {
+  ...params.defaultConfig,
+  type: "incremental",
+  protected: false,
+  bigquery: {
+    partitionBy: "DATE(session_start_timestamp)",
+    updatePartitionFilter:
+      "final_session_page_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)",
+    labels: {
+      eventsource: params.eventSourceName.toLowerCase(),
+      sourcedataset: params.bqDatasetName.toLowerCase()
     }
-  }).query(
-    ctx => `
+  },
+  assertions: {
+    uniqueKey: [["session_id"]]
+  },
+  tags: [params.eventSourceName.toLowerCase()],
+  description:
+    "This table contains data on sessions and accompanying metrics. Each row is a single session.",
+  dependencies: [...(params.dependencies || []), pass3Name],
+  columns: {
+    session_id: "The unique ID of the session",
+    user_id: "UUID of the user. This is only available for users who have signed into the service during their session.",
+    session_type: "The type of session: user_session, device_session, or known_multi_user_device_session.",
+    auid_distinct_iuid_count: "The number of distinct signed-in users historically associated with the anonymised user agent and IP.",
+    includes_low_confidence_identity_propagation:
+      "True if any page in the session had parent_match_confidence_guarded = 'low'.",
+    multiple_auid_session:
+      "True if the session contains more than one distinct anonymised user agent and IP (AUID).",
+    device_id:
+      "Session-level device identifier. If multiple_auid_session is false, this is the single AUID observed in the session. If multiple_auid_session is true, this is a synthetic hashed identifier derived from the session_id, used so that multi-AUID sessions still have a unique device identifier without implying that the underlying AUIDs represent one persistent device across sessions.",
+    session_namespace: "The namespace of the instance of dfe-analytics that streamed the first relevant web visit event in this session.",
+    session_referer_domain: "The referer domain of the first page in the session.",
+    start_page: "The page URL/path of the first page visited in the session",
+    utm_source: "UTM source.",
+    utm_medium: "UTM medium.",
+    utm_campaign: "UTM campaign.",
+    medium: "Categorised traffic medium.",
+    device_category: "Device category for the session, taken from the first page in the session.",
+    exit_page: "The page URL/path of the last page visited in the session",
+    session_start_timestamp: "Timestamp of the first page visit in the session",
+    final_session_page_timestamp: "Timestamp of the last page visit in the session",
+    session_time_in_seconds: "The duration of the session in seconds.",
+    count_pages_visited: "The number of pages visited during the session.",
+    pages_visited_details: "Ordered array of page-level details for the session.",
+    journey_id: "Identifier joining adjacent device and user sessions when they are considered part of one journey.",
+    stitched_to_adjacent_session: "Whether this session was stitched to an adjacent session into a shared journey.",
+    stitched_partner_session_id: "The paired session_id if this session was journey-stitched.",
+    stitch_gap_minutes: "Gap in minutes between stitched sessions.",
+    has_exact_referrer_match: "Whether the stitch was supported by an exact referrer match.",
+    journey_stitch_reason: "Rule used to justify stitching sessions into one journey."
+  }
+}).query(
+  ctx => `
 WITH
+
+  /*
+    Base web page events only.
+
+    We keep only human, HTML page-load style requests and normalise the
+    referrer path/query so that a trailing "?" does not prevent exact matches
+    later when we do referrer chaining.
+  */
   events AS (
     SELECT
       anonymised_user_agent_and_ip,
-      request_user_id AS request_user_id,
+      inferred_user_id_final,
       occurred_at,
       namespace,
       request_path,
@@ -1475,9 +1500,13 @@ WITH
       request_referer_domain,
       IF(
         SUBSTR(request_referer_path_and_query, -1) = '?',
-        SPLIT(request_referer_path_and_query, "?")[0],
+        SPLIT(request_referer_path_and_query, "?")[OFFSET(0)],
         request_referer_path_and_query
-      ) AS referer_path_and_query
+      ) AS referer_path_and_query,
+      auid_distinct_iuid_count,
+      parent_match_confidence_guarded,
+      device_category,
+      ${parameter_functions.attributionParamFields(params)}
     FROM ${ctx.ref(pass3Name)}
     WHERE event_type = "web_request"
       AND device_category != "bot"
@@ -1487,347 +1516,290 @@ WITH
       AND occurred_at > event_timestamp_checkpoint
   ),
 
-  events_with_next_visit_to_url AS (
+  /*
+    STEP 1: Build clean signed-in sessions only.
+  */
+  signed_in_events AS (
+    SELECT
+      *
+    FROM events
+    WHERE inferred_user_id_final IS NOT NULL
+  ),
+
+  /*
+    Order each user's signed-in events and expose the previous event details.
+  */
+  signed_in_events_ordered AS (
     SELECT
       *,
-      COALESCE(
+      LAG(occurred_at) OVER user_window AS prev_occurred_at,
+      LAG(page_path_and_query) OVER user_window AS prev_page_path_and_query
+    FROM signed_in_events
+    WINDOW user_window AS (
+      PARTITION BY inferred_user_id_final
+      ORDER BY occurred_at
+    )
+  ),
+
+  /*
+    Mark where a new signed-in session begins.
+  */
+  signed_in_events_with_session_boundaries AS (
+    SELECT
+      *,
+      CASE
+        WHEN prev_occurred_at IS NULL THEN TRUE
+        WHEN TIMESTAMP_DIFF(occurred_at, prev_occurred_at, MINUTE) <= 30 THEN FALSE
+        WHEN referer_path_and_query = prev_page_path_and_query
+             AND TIMESTAMP_DIFF(occurred_at, prev_occurred_at, MINUTE) <= 360 THEN FALSE
+        ELSE TRUE
+      END AS new_session
+    FROM signed_in_events_ordered
+  ),
+
+  /*
+    Convert session starts into a running session number per user.
+  */
+  signed_in_events_with_session_number AS (
+    SELECT
+      *,
+      ${requestToMedium(ctx)} AS medium,
+      COUNTIF(new_session) OVER (
+        PARTITION BY inferred_user_id_final
+        ORDER BY occurred_at
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+      ) AS session_number
+    FROM signed_in_events_with_session_boundaries
+  ),
+
+  /*
+    Create a stable session_id from:
+    user_id + first timestamp in that session.
+  */
+  signed_in_events_with_session_id AS (
+    SELECT
+      *,
+      CONCAT(
+        inferred_user_id_final,
+        "-",
+        CAST(
+          FIRST_VALUE(occurred_at) OVER (
+            PARTITION BY inferred_user_id_final, session_number
+            ORDER BY occurred_at
+            ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+          ) AS STRING
+        )
+      ) AS session_id
+    FROM signed_in_events_with_session_number
+  ),
+
+  /*
+    Identify the first signed-in event in each session.
+  */
+  signed_in_session_start_events AS (
+    SELECT
+      session_id,
+      inferred_user_id_final AS user_id,
+      anonymised_user_agent_and_ip,
+      occurred_at AS first_signed_in_event_at,
+      page_path_and_query AS first_signed_in_page_path_and_query
+    FROM signed_in_events_with_session_id
+    QUALIFY ROW_NUMBER() OVER (
+      PARTITION BY session_id
+      ORDER BY occurred_at
+    ) = 1
+  ),
+
+  /*
+    Allow-listed pre-auth pages.
+  */
+  pre_auth_pages AS (
+    SELECT '/' AS request_path
+    UNION ALL
+    SELECT '/sign-in' AS request_path
+  ),
+
+  /*
+    Anonymous events available for possible pre-auth attachment.
+  */
+  anonymous_events AS (
+    SELECT
+      anonymised_user_agent_and_ip,
+      occurred_at,
+      namespace,
+      request_path,
+      request_query,
+      page_path_and_query,
+      request_referer_domain,
+      referer_path_and_query,
+      auid_distinct_iuid_count,
+      parent_match_confidence_guarded,
+      device_category,
+      utm_source,
+      utm_medium,
+      utm_campaign
+    FROM events
+    WHERE inferred_user_id_final IS NULL
+  ),
+
+  /*
+    STEP 2: Attach eligible anonymous pre-auth pages directly to each signed-in
+    session.
+  */
+  stitched_pre_auth_pages AS (
+    SELECT DISTINCT
+      s.session_id,
+      s.user_id,
+      e.anonymised_user_agent_and_ip,
+      e.occurred_at,
+      e.page_path_and_query
+    FROM signed_in_session_start_events s
+    INNER JOIN anonymous_events e
+      ON e.anonymised_user_agent_and_ip = s.anonymised_user_agent_and_ip
+     AND e.occurred_at <= s.first_signed_in_event_at
+     AND TIMESTAMP_DIFF(s.first_signed_in_event_at, e.occurred_at, MINUTE) <= 30
+    INNER JOIN pre_auth_pages p
+      ON e.request_path = p.request_path
+    WHERE
+      (
+        e.auid_distinct_iuid_count = 1
+      )
+      OR
+      (
+        COALESCE(e.auid_distinct_iuid_count, 2) > 1
+        AND NOT EXISTS (
+          SELECT 1
+          FROM signed_in_session_start_events s2
+          WHERE s2.anonymised_user_agent_and_ip = s.anonymised_user_agent_and_ip
+            AND s2.first_signed_in_event_at > e.occurred_at
+            AND s2.first_signed_in_event_at < s.first_signed_in_event_at
+        )
+      )
+  ),
+
+  /*
+    STEP 4: Combine:
+    - original signed-in session events
+    - stitched anonymous pre-auth pages
+  */
+  user_session_events AS (
+    SELECT
+      e.session_id,
+      e.inferred_user_id_final AS user_id,
+      e.anonymised_user_agent_and_ip,
+      e.occurred_at,
+      e.namespace,
+      e.request_path,
+      e.request_query,
+      e.page_path_and_query,
+      e.request_referer_domain,
+      e.referer_path_and_query,
+      e.auid_distinct_iuid_count,
+      e.parent_match_confidence_guarded,
+      e.device_category,
+      e.utm_source,
+      e.utm_medium,
+      e.utm_campaign,
+      e.medium,
+      FALSE AS stitched_pre_auth_page
+    FROM signed_in_events_with_session_id e
+
+    UNION ALL
+
+    SELECT
+      s.session_id,
+      s.user_id,
+      e.anonymised_user_agent_and_ip,
+      e.occurred_at,
+      e.namespace,
+      e.request_path,
+      e.request_query,
+      e.page_path_and_query,
+      e.request_referer_domain,
+      e.referer_path_and_query,
+      e.auid_distinct_iuid_count,
+      e.parent_match_confidence_guarded,
+      e.device_category,
+      e.utm_source,
+      e.utm_medium,
+      e.utm_campaign,
+      ${requestToMedium(ctx)} AS medium,
+      TRUE AS stitched_pre_auth_page
+    FROM stitched_pre_auth_pages s
+    INNER JOIN events e
+      ON e.anonymised_user_agent_and_ip = s.anonymised_user_agent_and_ip
+     AND e.occurred_at = s.occurred_at
+     AND e.page_path_and_query = s.page_path_and_query
+     AND e.inferred_user_id_final IS NULL
+  ),
+
+  /*
+    STEP 5: Order all pages within the stitched user session and derive page
+    timings.
+  */
+  user_session_page_times AS (
+    SELECT
+      session_id,
+      user_id,
+      anonymised_user_agent_and_ip,
+      namespace,
+      CAST(NULL AS STRING) AS page_domain,
+      request_path AS page_path,
+      request_query,
+      page_path_and_query,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      medium,
+      device_category,
+      request_referer_domain AS previous_page_domain,
+      REGEXP_EXTRACT(referer_path_and_query, r'^([^?]+)') AS previous_page_path,
+      referer_path_and_query AS previous_page_path_and_query,
+      occurred_at AS page_entry_time,
+      LEAD(occurred_at) OVER (
+        PARTITION BY session_id
+        ORDER BY occurred_at
+      ) AS page_exit_time,
+      TIMESTAMP_DIFF(
         LEAD(occurred_at) OVER (
-          PARTITION BY request_user_id, page_path_and_query, DATE(occurred_at)
+          PARTITION BY session_id
           ORDER BY occurred_at
         ),
-        LEAD(occurred_at) OVER (
-          PARTITION BY anonymised_user_agent_and_ip, page_path_and_query, DATE(occurred_at)
-          ORDER BY occurred_at
-        )
-      ) AS next_same_page_path_and_query_occurred_at
-    FROM events
+        occurred_at,
+        SECOND
+      ) AS page_duration_seconds,
+      auid_distinct_iuid_count,
+      parent_match_confidence_guarded,
+      stitched_pre_auth_page
+    FROM user_session_events
   ),
 
-  events_with_next_page_details AS (
-    SELECT
-      e1.*,
-      e2.next_page_path_and_query,
-      e2.next_page_user_id,
-      e2.next_page_timestamp
-    FROM events_with_next_visit_to_url e1
-    LEFT JOIN (
-      SELECT
-        anonymised_user_agent_and_ip,
-        page_path_and_query,
-        referer_path_and_query,
-        page_path_and_query AS next_page_path_and_query,
-        request_user_id AS next_page_user_id,
-        occurred_at AS next_page_timestamp
-      FROM events
-    ) e2
-      ON (
-        (e1.anonymised_user_agent_and_ip = e2.anonymised_user_agent_and_ip)
-        OR (e1.request_user_id = e2.next_page_user_id)
-      )
-     AND e1.page_path_and_query = e2.referer_path_and_query
-     AND DATE(e1.occurred_at) = DATE(e2.next_page_timestamp)
-     AND e1.occurred_at < e2.next_page_timestamp
-     AND (
-       e1.next_same_page_path_and_query_occurred_at IS NULL
-       OR e2.next_page_timestamp < e1.next_same_page_path_and_query_occurred_at
-     )
-  ),
-
-  events_with_following_pages AS (
-    SELECT
-      anonymised_user_agent_and_ip,
-      request_user_id,
-      namespace,
-      request_path,
-      request_query,
-      page_path_and_query,
-      request_referer_domain,
-      referer_path_and_query,
-      occurred_at,
-      ARRAY_AGG(
-        STRUCT(
-          next_page_path_and_query,
-          next_page_user_id,
-          next_page_timestamp
-        )
-        ORDER BY next_page_timestamp
-      ) AS following_pages
-    FROM events_with_next_page_details
-    GROUP BY
-      request_user_id,
-      anonymised_user_agent_and_ip,
-      namespace,
-      request_path,
-      request_query,
-      page_path_and_query,
-      request_referer_domain,
-      referer_path_and_query,
-      occurred_at
-  ),
-
-  events_with_next_and_prev_user_id AS (
-    SELECT
-      *,
-      CASE
-        WHEN TIMESTAMP_DIFF(
-          LEAD(occurred_at) OVER (PARTITION BY anonymised_user_agent_and_ip ORDER BY occurred_at),
-          occurred_at,
-          MINUTE
-        ) <= 30
-        THEN FIRST_VALUE(request_user_id IGNORE NULLS)
-          OVER (
-            PARTITION BY anonymised_user_agent_and_ip
-            ORDER BY UNIX_SECONDS(occurred_at)
-            RANGE BETWEEN CURRENT ROW AND 1800 FOLLOWING
-          )
-        ELSE (
-          SELECT MIN_BY(fp.next_page_user_id, fp.next_page_timestamp)
-          FROM UNNEST(following_pages) AS fp
-          WHERE fp.next_page_user_id IS NOT NULL
-        )
-      END AS next_user_id,
-      CASE
-        WHEN TIMESTAMP_DIFF(
-          occurred_at,
-          LAG(occurred_at) OVER (PARTITION BY anonymised_user_agent_and_ip ORDER BY occurred_at),
-          MINUTE
-        ) <= 30
-        THEN LAST_VALUE(request_user_id IGNORE NULLS)
-          OVER (
-            PARTITION BY anonymised_user_agent_and_ip
-            ORDER BY UNIX_SECONDS(occurred_at)
-            RANGE BETWEEN 1800 PRECEDING AND CURRENT ROW
-          )
-      END AS prev_user_id
-    FROM events_with_following_pages
-  ),
-
-  events_with_users_estimated AS (
-    SELECT
-      anonymised_user_agent_and_ip,
-      occurred_at,
-      request_user_id,
-      COALESCE(request_user_id, next_user_id, prev_user_id) AS estimated_user_id,
-      namespace,
-      request_path,
-      request_query,
-      page_path_and_query,
-      request_referer_domain,
-      referer_path_and_query,
-      IF(
-        (
-          SELECT MIN_BY(fp.next_page_path_and_query, fp.next_page_timestamp)
-          FROM UNNEST(following_pages) AS fp
-        ) IS NOT NULL,
-        TRUE,
-        FALSE
-      ) AS visited_future_page
-    FROM events_with_next_and_prev_user_id
-  ),
-
-  user_page_visits AS (
-    SELECT
-      *,
-      CASE
-        WHEN LEAD(estimated_user_id) OVER page_visits_for_this_estimated_user IS NOT NULL
-         AND estimated_user_id = LEAD(estimated_user_id) OVER page_visits_for_this_estimated_user
-         AND (
-           TIMESTAMP_DIFF(
-             LEAD(occurred_at) OVER page_visits_for_this_estimated_user,
-             occurred_at,
-             MINUTE
-           ) <= 30
-           OR visited_future_page
-         )
-        THEN "Visited subsequent pages"
-        ELSE "Left site immediately after this"
-      END AS next_step
-    FROM events_with_users_estimated
-    WHERE estimated_user_id IS NOT NULL
-    WINDOW page_visits_for_this_estimated_user AS (
-      PARTITION BY estimated_user_id
-      ORDER BY occurred_at
-    )
-  ),
-
-  user_page_visits_with_session_boundaries AS (
-    SELECT
-      anonymised_user_agent_and_ip,
-      estimated_user_id AS user_id,
-      occurred_at AS page_visit_at,
-      namespace,
-      request_path AS page_path,
-      ${parameter_functions.attributionParamFields(params)}
-      request_referer_domain,
-      REGEXP_EXTRACT(referer_path_and_query, r'^([^?]+)') AS previous_page_path,
-      next_step,
-      CASE
-        WHEN LAG(next_step) OVER page_visits_for_this_estimated_user IS NULL THEN TRUE
-        WHEN LAG(next_step) OVER page_visits_for_this_estimated_user = "Left site immediately after this" THEN TRUE
-        ELSE FALSE
-      END AS new_session
-    FROM user_page_visits
-    WINDOW page_visits_for_this_estimated_user AS (
-      PARTITION BY estimated_user_id
-      ORDER BY occurred_at
-    )
-  ),
-
-  user_page_visits_with_session_number AS (
-    SELECT
-      *,
-      COUNT(CASE WHEN new_session THEN 1 END) OVER (PARTITION BY user_id ORDER BY page_visit_at) AS session_number,
-      ${requestToMedium(ctx)} AS medium
-    FROM user_page_visits_with_session_boundaries
-  ),
-
-  user_page_visits_with_session_id AS (
-    SELECT
-      *,
-      CONCAT(
-        user_id,
-        "-",
-        CAST(FIRST_VALUE(page_visit_at) OVER (PARTITION BY user_id, session_number ORDER BY page_visit_at) AS STRING)
-      ) AS session_id
-    FROM user_page_visits_with_session_number
-  ),
-
-  non_user_page_visits AS (
-    SELECT
-      *,
-      CASE
-        WHEN LEAD(estimated_user_id) OVER page_visits_for_this_anonymised_user_agent_and_ip IS NULL
-         AND anonymised_user_agent_and_ip = LEAD(anonymised_user_agent_and_ip) OVER page_visits_for_this_anonymised_user_agent_and_ip
-         AND (
-           TIMESTAMP_DIFF(
-             LEAD(occurred_at) OVER page_visits_for_this_anonymised_user_agent_and_ip,
-             occurred_at,
-             MINUTE
-           ) <= 30
-           OR visited_future_page
-         )
-        THEN "Visited Subsequent Pages"
-        ELSE "Left site immediately after this"
-      END AS next_step
-    FROM events_with_users_estimated
-    WHERE estimated_user_id IS NULL
-    WINDOW page_visits_for_this_anonymised_user_agent_and_ip AS (
-      PARTITION BY anonymised_user_agent_and_ip
-      ORDER BY occurred_at
-    )
-  ),
-
-  non_user_page_visits_with_session_boundaries AS (
-    SELECT
-      anonymised_user_agent_and_ip,
-      estimated_user_id AS user_id,
-      occurred_at AS page_visit_at,
-      namespace,
-      request_path AS page_path,
-      ${parameter_functions.attributionParamFields(params)}
-      request_referer_domain,
-      REGEXP_EXTRACT(referer_path_and_query, r'^([^?]+)') AS previous_page_path,
-      next_step,
-      CASE
-        WHEN LAG(next_step) OVER page_visits_for_this_anonymised_user_agent_and_ip IS NULL THEN TRUE
-        WHEN LAG(next_step) OVER page_visits_for_this_anonymised_user_agent_and_ip = "Left site immediately after this" THEN TRUE
-        ELSE FALSE
-      END AS new_session
-    FROM non_user_page_visits
-    WINDOW page_visits_for_this_anonymised_user_agent_and_ip AS (
-      PARTITION BY anonymised_user_agent_and_ip
-      ORDER BY occurred_at
-    )
-  ),
-
-  non_user_page_visits_with_session_number AS (
-    SELECT
-      *,
-      COUNT(CASE WHEN new_session THEN 1 END) OVER (PARTITION BY anonymised_user_agent_and_ip ORDER BY page_visit_at) AS session_number,
-      ${requestToMedium(ctx)} AS medium
-    FROM non_user_page_visits_with_session_boundaries
-  ),
-
-  nonuser_page_visits_with_session_id AS (
-    SELECT
-      *,
-      CONCAT(
-        anonymised_user_agent_and_ip,
-        "-",
-        CAST(FIRST_VALUE(page_visit_at) OVER (PARTITION BY anonymised_user_agent_and_ip, session_number ORDER BY page_visit_at) AS STRING)
-      ) AS session_id
-    FROM non_user_page_visits_with_session_number
-  ),
-
-  sessions_grouped AS (
-    SELECT
-      anonymised_user_agent_and_ip,
-      user_id,
-      page_visit_at,
-      namespace,
-      page_path,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      medium,
-      request_referer_domain,
-      previous_page_path,
-      next_step,
-      session_id
-    FROM user_page_visits_with_session_id
-    UNION ALL
-    SELECT
-      anonymised_user_agent_and_ip,
-      user_id,
-      page_visit_at,
-      namespace,
-      page_path,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      medium,
-      request_referer_domain,
-      previous_page_path,
-      next_step,
-      session_id
-    FROM nonuser_page_visits_with_session_id
-  ),
-
-  page_times AS (
-    SELECT
-      session_id,
-      anonymised_user_agent_and_ip,
-      user_id,
-      namespace,
-      page_path,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      medium,
-      request_referer_domain,
-      previous_page_path,
-      page_visit_at AS page_entry_time,
-      LEAD(page_visit_at) OVER session_window AS page_exit_time,
-      TIMESTAMP_DIFF(LEAD(page_visit_at) OVER session_window, page_visit_at, SECOND) AS page_duration_seconds,
-      next_step
-    FROM sessions_grouped
-    WINDOW session_window AS (PARTITION BY session_id ORDER BY page_visit_at)
-  ),
-
-  session_metrics AS (
+  /*
+    STEP 6: Aggregate to session level.
+  */
+  user_session_metrics AS (
     SELECT
       session_id,
       user_id,
+      MAX(auid_distinct_iuid_count) AS auid_distinct_iuid_count,
+      LOGICAL_OR(parent_match_confidence_guarded = "low") AS includes_low_confidence_identity_propagation,
+      COUNT(DISTINCT anonymised_user_agent_and_ip) > 1 AS multiple_auid_session,
+      ARRAY_AGG(DISTINCT anonymised_user_agent_and_ip IGNORE NULLS ORDER BY anonymised_user_agent_and_ip) AS session_auids,
       ARRAY_AGG(
         STRUCT(
           anonymised_user_agent_and_ip,
-          page_path AS page,
-          request_referer_domain AS previous_page_domain,
-          previous_page_path AS previous_page,
+          page_domain,
+          page_path,
+          page_path_and_query,
+          previous_page_domain,
+          previous_page_path,
+          previous_page_path_and_query,
           page_entry_time,
           page_exit_time,
           page_duration_seconds AS duration,
-          next_step
+          stitched_pre_auth_page,
+          CAST(NULL AS STRING) AS continuity_type_to_current_page,
+          CAST(NULL AS BOOL) AS has_exact_referrer_match_to_previous_page
         )
         ORDER BY page_entry_time
       ) AS pages_visited_details,
@@ -1837,38 +1809,516 @@ WITH
           utm_source,
           utm_medium,
           utm_campaign,
-          medium
+          medium,
+          device_category
         )
         ORDER BY page_entry_time
       ) AS session_level_metrics,
       MIN(page_entry_time) AS session_start_timestamp,
       MAX(page_entry_time) AS final_session_page_timestamp,
       COUNT(*) AS count_pages_visited
-    FROM page_times
+    FROM user_session_page_times
     GROUP BY session_id, user_id
+  ),
+
+  /*
+    Final master signed-in user sessions output.
+  */
+  final AS (
+    SELECT
+      session_id,
+      user_id,
+      "user_session" AS session_type,
+      auid_distinct_iuid_count,
+      includes_low_confidence_identity_propagation,
+      multiple_auid_session,
+      CASE
+        WHEN multiple_auid_session THEN CONCAT("multi_auid_session_", TO_HEX(SHA256(session_id)))
+        ELSE session_auids[OFFSET(0)]
+      END AS device_id,
+      session_level_metrics[OFFSET(0)].namespace AS session_namespace,
+      pages_visited_details[OFFSET(0)].previous_page_domain AS session_referer_domain,
+      pages_visited_details[OFFSET(0)].page_path AS start_page,
+      session_level_metrics[OFFSET(0)].utm_source AS utm_source,
+      session_level_metrics[OFFSET(0)].utm_medium AS utm_medium,
+      session_level_metrics[OFFSET(0)].utm_campaign AS utm_campaign,
+      session_level_metrics[OFFSET(0)].medium AS medium,
+      session_level_metrics[OFFSET(0)].device_category AS device_category,
+      ARRAY_REVERSE(pages_visited_details)[OFFSET(0)].page_path AS exit_page,
+      session_auids,
+      session_start_timestamp,
+      final_session_page_timestamp,
+      CASE
+        WHEN final_session_page_timestamp = session_start_timestamp THEN NULL
+        ELSE TIMESTAMP_DIFF(final_session_page_timestamp, session_start_timestamp, SECOND)
+      END AS session_time_in_seconds,
+      count_pages_visited,
+      pages_visited_details
+    FROM user_session_metrics
+  ),
+
+  /* --------------------------------------------------------------------------
+     Build device-level sessions from remaining anonymous events.
+  -------------------------------------------------------------------------- */
+  remaining_anonymous_events AS (
+    SELECT
+      e.*
+    FROM events e
+    LEFT JOIN user_session_events u
+      ON e.anonymised_user_agent_and_ip = u.anonymised_user_agent_and_ip
+     AND e.occurred_at = u.occurred_at
+     AND e.page_path_and_query = u.page_path_and_query
+     AND e.inferred_user_id_final IS NULL
+    WHERE e.inferred_user_id_final IS NULL
+      AND u.session_id IS NULL
+  ),
+
+  /*
+    Order remaining anonymous events within AUID.
+  */
+  remaining_anonymous_events_ordered AS (
+    SELECT
+      *,
+      LAG(occurred_at) OVER auid_window AS prev_occurred_at,
+      LAG(page_path_and_query) OVER auid_window AS prev_page_path_and_query,
+      LAG(request_path) OVER auid_window AS prev_request_path,
+      LAG(referer_path_and_query) OVER auid_window AS prev_referer_path_and_query
+    FROM remaining_anonymous_events
+    WINDOW auid_window AS (
+      PARTITION BY anonymised_user_agent_and_ip
+      ORDER BY occurred_at
+    )
+  ),
+
+  /*
+    Mark session starts.
+  */
+  remaining_anonymous_events_with_boundaries AS (
+    SELECT
+      *,
+      CASE
+        WHEN prev_occurred_at IS NULL THEN TRUE
+        WHEN TIMESTAMP_DIFF(occurred_at, prev_occurred_at, MINUTE) <= 30 THEN FALSE
+        WHEN referer_path_and_query = prev_page_path_and_query THEN FALSE
+        ELSE TRUE
+      END AS new_session,
+
+      CASE
+        WHEN prev_occurred_at IS NULL
+          THEN "First page of this session"
+        WHEN TIMESTAMP_DIFF(occurred_at, prev_occurred_at, MINUTE) <= 30
+            AND referer_path_and_query = prev_page_path_and_query
+          THEN "Continued from previous page: within 30 minutes and exact referrer match"
+        WHEN TIMESTAMP_DIFF(occurred_at, prev_occurred_at, MINUTE) <= 30
+          THEN "Continued from previous page: within 30 minutes"
+        WHEN referer_path_and_query = prev_page_path_and_query
+          THEN "Continued from previous page: exact referrer match after more than 30 minutes"
+        ELSE "Started a new session after a gap"
+      END AS continuity_type_to_current_page,
+
+      CASE
+        WHEN prev_occurred_at IS NULL THEN NULL
+        WHEN referer_path_and_query = prev_page_path_and_query THEN TRUE
+        ELSE FALSE
+      END AS has_exact_referrer_match_to_previous_page
+    FROM remaining_anonymous_events_ordered
+  ),
+
+  remaining_anonymous_events_with_session_number AS (
+    SELECT
+      *,
+      ${requestToMedium(ctx)} AS medium,
+      COUNTIF(new_session) OVER (
+        PARTITION BY anonymised_user_agent_and_ip
+        ORDER BY occurred_at
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+      ) AS session_number
+    FROM remaining_anonymous_events_with_boundaries
+  ),
+
+  remaining_anonymous_events_with_session_id AS (
+    SELECT
+      *,
+      CONCAT(
+        anonymised_user_agent_and_ip,
+        "-device-",
+        CAST(
+          FIRST_VALUE(occurred_at) OVER (
+            PARTITION BY anonymised_user_agent_and_ip, session_number
+            ORDER BY occurred_at
+            ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+          ) AS STRING
+        )
+      ) AS session_id
+    FROM remaining_anonymous_events_with_session_number
+  ),
+
+  /*
+    Derive page timings within each device session.
+  */
+  device_session_page_times AS (
+    SELECT
+      session_id,
+      anonymised_user_agent_and_ip,
+      namespace,
+      CAST(NULL AS STRING) AS page_domain,
+      request_path AS page_path,
+      request_query,
+      page_path_and_query,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      medium,
+      device_category,
+      request_referer_domain AS previous_page_domain,
+      REGEXP_EXTRACT(referer_path_and_query, r'^([^?]+)') AS previous_page_path,
+      referer_path_and_query AS previous_page_path_and_query,
+      occurred_at AS page_entry_time,
+      LEAD(occurred_at) OVER (
+        PARTITION BY session_id
+        ORDER BY occurred_at
+      ) AS page_exit_time,
+      TIMESTAMP_DIFF(
+        LEAD(occurred_at) OVER (
+          PARTITION BY session_id
+          ORDER BY occurred_at
+        ),
+        occurred_at,
+        SECOND
+      ) AS page_duration_seconds,
+      auid_distinct_iuid_count,
+      parent_match_confidence_guarded,
+      continuity_type_to_current_page,
+      has_exact_referrer_match_to_previous_page
+    FROM remaining_anonymous_events_with_session_id
+  ),
+
+  /*
+    Aggregate to session level and attach uncertainty labels.
+  */
+  device_session_metrics AS (
+    SELECT
+      session_id,
+      anonymised_user_agent_and_ip,
+      MAX(COALESCE(auid_distinct_iuid_count, 0)) AS auid_distinct_iuid_count,
+      LOGICAL_OR(parent_match_confidence_guarded = "low") AS includes_low_confidence_identity_propagation,
+      COUNT(DISTINCT anonymised_user_agent_and_ip) > 1 AS multiple_auid_session,
+      ARRAY_AGG(DISTINCT anonymised_user_agent_and_ip IGNORE NULLS ORDER BY anonymised_user_agent_and_ip) AS session_auids,
+      ARRAY_AGG(
+        STRUCT(
+          anonymised_user_agent_and_ip,
+          page_domain,
+          page_path,
+          page_path_and_query,
+          previous_page_domain,
+          previous_page_path,
+          previous_page_path_and_query,
+          page_entry_time,
+          page_exit_time,
+          page_duration_seconds AS duration,
+          CAST(NULL AS BOOL) AS stitched_pre_auth_page,
+          continuity_type_to_current_page,
+          has_exact_referrer_match_to_previous_page
+        )
+        ORDER BY page_entry_time
+      ) AS pages_visited_details,
+      ARRAY_AGG(
+        STRUCT(
+          namespace,
+          utm_source,
+          utm_medium,
+          utm_campaign,
+          medium,
+          device_category
+        )
+        ORDER BY page_entry_time
+      ) AS session_level_metrics,
+      MIN(page_entry_time) AS session_start_timestamp,
+      MAX(page_entry_time) AS final_session_page_timestamp,
+      COUNT(*) AS count_pages_visited
+    FROM device_session_page_times
+    GROUP BY
+      session_id,
+      anonymised_user_agent_and_ip
+  ),
+
+  /*
+    Final device session output.
+  */
+  device_sessions_final AS (
+    SELECT
+      session_id,
+      NULL AS user_id,
+      auid_distinct_iuid_count,
+      includes_low_confidence_identity_propagation,
+      multiple_auid_session,
+      CASE
+        WHEN multiple_auid_session THEN CONCAT("multi_auid_session_", TO_HEX(SHA256(session_id)))
+        ELSE session_auids[OFFSET(0)]
+      END AS device_id,
+      session_level_metrics[OFFSET(0)].namespace AS session_namespace,
+      anonymised_user_agent_and_ip,
+      pages_visited_details[OFFSET(0)].previous_page_domain AS session_referer_domain,
+      pages_visited_details[OFFSET(0)].page_path AS start_page,
+      session_level_metrics[OFFSET(0)].utm_source AS utm_source,
+      session_level_metrics[OFFSET(0)].utm_medium AS utm_medium,
+      session_level_metrics[OFFSET(0)].utm_campaign AS utm_campaign,
+      session_level_metrics[OFFSET(0)].medium AS medium,
+      session_level_metrics[OFFSET(0)].device_category AS device_category,
+      ARRAY_REVERSE(pages_visited_details)[OFFSET(0)].page_path AS exit_page,
+      session_auids,
+      session_start_timestamp,
+      final_session_page_timestamp,
+      CASE
+        WHEN final_session_page_timestamp = session_start_timestamp THEN NULL
+        ELSE TIMESTAMP_DIFF(final_session_page_timestamp, session_start_timestamp, SECOND)
+      END AS session_time_in_seconds,
+      count_pages_visited,
+      pages_visited_details
+    FROM device_session_metrics
+  ),
+
+  /* --------------------------------------------------------------------------
+     Combined output
+  -------------------------------------------------------------------------- */
+  all_sessions AS (
+    SELECT
+      TO_HEX(SHA256(session_id)) AS session_id,
+      "user_session" AS session_type, 
+
+      CAST(user_id AS STRING) AS user_id,
+      includes_low_confidence_identity_propagation,
+
+      device_id,
+      CASE WHEN auid_distinct_iuid_count > 1 THEN TRUE ELSE FALSE END AS known_multi_user_device,
+      multiple_auid_session,
+
+      session_namespace,
+      session_referer_domain,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      medium,
+      device_category,
+
+      start_page,
+      exit_page,
+      session_start_timestamp,
+      final_session_page_timestamp,
+
+      session_time_in_seconds,
+      count_pages_visited,
+
+      pages_visited_details 
+
+    FROM final
+
+    UNION ALL
+
+    SELECT
+      TO_HEX(SHA256(session_id)) AS session_id,
+      "device_session" AS session_type, 
+
+      CAST(user_id AS STRING) AS user_id,
+      includes_low_confidence_identity_propagation,
+
+      device_id,
+      CASE WHEN auid_distinct_iuid_count > 1 THEN TRUE ELSE FALSE END AS known_multi_user_device,
+      multiple_auid_session,
+
+      session_namespace,
+      session_referer_domain,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      medium,
+      device_category,
+
+      start_page,
+      exit_page,
+      session_start_timestamp,
+      final_session_page_timestamp,
+
+      session_time_in_seconds,
+      count_pages_visited,
+
+      pages_visited_details 
+
+    FROM device_sessions_final
+  ),
+
+  /* --------------------------------------------------------------------------
+     Optional journey stitching layer
+  -------------------------------------------------------------------------- */
+  user_session_first_pages AS (
+    SELECT
+      session_id AS user_session_id,
+      user_id,
+      anonymised_user_agent_and_ip AS first_page_auid,
+      occurred_at AS first_page_at,
+      referer_path_and_query AS first_page_referer_path_and_query,
+      page_path_and_query AS first_page_path_and_query,
+      auid_distinct_iuid_count
+    FROM user_session_events
+    QUALIFY ROW_NUMBER() OVER (
+      PARTITION BY session_id
+      ORDER BY occurred_at
+    ) = 1
+  ),
+
+  user_session_last_pages AS (
+    SELECT
+      session_id,
+      "user_session" AS session_type,
+      anonymised_user_agent_and_ip AS session_ending_auid,
+      occurred_at AS last_page_at,
+      page_path_and_query AS last_page_path_and_query,
+      auid_distinct_iuid_count
+    FROM user_session_events
+    QUALIFY ROW_NUMBER() OVER (
+      PARTITION BY session_id
+      ORDER BY occurred_at DESC
+    ) = 1
+  ),
+
+  device_session_last_pages AS (
+    SELECT
+      session_id,
+      "device_session" AS session_type,
+      anonymised_user_agent_and_ip AS session_ending_auid,
+      occurred_at AS last_page_at,
+      page_path_and_query AS last_page_path_and_query,
+      auid_distinct_iuid_count
+    FROM remaining_anonymous_events_with_session_id
+    QUALIFY ROW_NUMBER() OVER (
+      PARTITION BY session_id
+      ORDER BY occurred_at DESC
+    ) = 1
+  ),
+
+  all_session_last_pages_by_auid AS (
+    SELECT * FROM user_session_last_pages
+    UNION ALL
+    SELECT * FROM device_session_last_pages
+  ),
+
+  immediately_preceding_session_on_user_first_page_auid AS (
+    SELECT
+      u.user_session_id,
+      u.user_id,
+      u.first_page_auid,
+      u.first_page_at,
+      u.first_page_referer_path_and_query,
+      u.first_page_path_and_query,
+      u.auid_distinct_iuid_count AS user_session_auid_distinct_iuid_count,
+
+      p.session_id AS previous_session_id,
+      p.session_type AS previous_session_type,
+      p.last_page_at AS previous_session_last_page_at,
+      p.last_page_path_and_query AS previous_session_last_page_path_and_query,
+      p.auid_distinct_iuid_count AS previous_session_auid_distinct_iuid_count,
+
+      TIMESTAMP_DIFF(u.first_page_at, p.last_page_at, MINUTE) AS stitch_gap_minutes,
+      u.first_page_referer_path_and_query = p.last_page_path_and_query AS has_exact_referrer_match
+    FROM user_session_first_pages u
+    INNER JOIN all_session_last_pages_by_auid p
+      ON p.session_ending_auid = u.first_page_auid
+     AND p.last_page_at <= u.first_page_at
+     AND TIMESTAMP_DIFF(u.first_page_at, p.last_page_at, MINUTE) <= 30
+     AND p.session_id != u.user_session_id
+    QUALIFY ROW_NUMBER() OVER (
+      PARTITION BY u.user_session_id
+      ORDER BY p.last_page_at DESC
+    ) = 1
+  ),
+
+  approved_device_to_user_journeys AS (
+    SELECT
+      user_session_id,
+      previous_session_id AS device_session_id,
+      CONCAT(previous_session_id, "--", user_session_id) AS journey_id,
+      first_page_auid AS stitching_auid,
+      stitch_gap_minutes,
+      has_exact_referrer_match,
+      GREATEST(
+        COALESCE(user_session_auid_distinct_iuid_count, 0),
+        COALESCE(previous_session_auid_distinct_iuid_count, 0)
+      ) AS max_auid_distinct_iuid_count,
+      CASE
+        WHEN GREATEST(
+          COALESCE(user_session_auid_distinct_iuid_count, 0),
+          COALESCE(previous_session_auid_distinct_iuid_count, 0)
+        ) <= 1
+          THEN "single_user_device_within_30_minutes"
+        WHEN GREATEST(
+          COALESCE(user_session_auid_distinct_iuid_count, 0),
+          COALESCE(previous_session_auid_distinct_iuid_count, 0)
+        ) > 1
+         AND stitch_gap_minutes <= 5
+         AND has_exact_referrer_match
+          THEN "multi_user_device_exact_referrer_within_5_minutes"
+        ELSE NULL
+      END AS journey_stitch_reason
+    FROM immediately_preceding_session_on_user_first_page_auid
+    WHERE previous_session_type = "device_session"
+      AND (
+        GREATEST(
+          COALESCE(user_session_auid_distinct_iuid_count, 0),
+          COALESCE(previous_session_auid_distinct_iuid_count, 0)
+        ) <= 1
+        OR
+        (
+          GREATEST(
+            COALESCE(user_session_auid_distinct_iuid_count, 0),
+            COALESCE(previous_session_auid_distinct_iuid_count, 0)
+          ) > 1
+          AND stitch_gap_minutes <= 5
+          AND has_exact_referrer_match
+        )
+      )
+  ),
+
+  journey_session_map AS (
+    SELECT
+      device_session_id AS session_id,
+      journey_id,
+      TRUE AS stitched_to_adjacent_session,
+      user_session_id AS stitched_partner_session_id,
+      stitch_gap_minutes,
+      has_exact_referrer_match,
+      journey_stitch_reason
+    FROM approved_device_to_user_journeys
+
+    UNION ALL
+
+    SELECT
+      user_session_id AS session_id,
+      journey_id,
+      TRUE AS stitched_to_adjacent_session,
+      device_session_id AS stitched_partner_session_id,
+      stitch_gap_minutes,
+      has_exact_referrer_match,
+      journey_stitch_reason
+    FROM approved_device_to_user_journeys
+  ),
+
+  all_sessions_with_journey_id AS (
+    SELECT
+      s.*,
+      COALESCE(j.journey_id, s.session_id) AS journey_id,
+      COALESCE(j.stitched_to_adjacent_session, FALSE) AS stitched_to_adjacent_session,
+      j.stitched_partner_session_id,
+      j.stitch_gap_minutes,
+      j.has_exact_referrer_match,
+      j.journey_stitch_reason
+    FROM all_sessions s
+    LEFT JOIN journey_session_map j
+      USING (session_id)
   )
 
-SELECT
-  session_id,
-  user_id,
-  session_level_metrics[0].namespace AS session_namespace,
-  pages_visited_details[0].previous_page_domain AS session_referer_domain,
-  pages_visited_details[0].page AS start_page,
-  session_level_metrics[0].utm_source AS utm_source,
-  session_level_metrics[0].utm_medium AS utm_medium,
-  session_level_metrics[0].utm_campaign AS utm_campaign,
-  session_level_metrics[0].medium AS medium,
-  ARRAY_REVERSE(pages_visited_details)[0].page AS exit_page,
-  session_start_timestamp,
-  final_session_page_timestamp,
-  CASE
-    WHEN final_session_page_timestamp = session_start_timestamp THEN NULL
-    ELSE TIMESTAMP_DIFF(final_session_page_timestamp, session_start_timestamp, SECOND)
-  END AS session_time_in_seconds,
-  count_pages_visited,
-  pages_visited_details
-FROM session_metrics`
-  ).preOps(ctx => `
+SELECT *
+FROM all_sessions_with_journey_id`
+).preOps(ctx => `
     DECLARE event_timestamp_checkpoint TIMESTAMP DEFAULT (
       ${ctx.incremental() ? `SELECT MAX(session_start_timestamp) FROM ${ctx.self()}` : `SELECT TIMESTAMP("2000-01-01")`}
     );
