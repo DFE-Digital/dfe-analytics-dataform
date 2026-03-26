@@ -4,12 +4,7 @@ module.exports = (params) => {
   if (!params.enableAirbyteSource) return null;
   if (!params.dataSchema || params.dataSchema.length === 0) return null;
 
-  const suffix = params.airbyteConfig.outputSuffix || '_airbyte';
-
   return params.dataSchema.forEach(tableSchema => {
-    const sourceTable = "`" + params.bqProjectName + "." +
-      params.airbyteConfig.datasetName + "." +
-      params.airbyteConfig.tablePrefix + tableSchema.entityTableName + "`";
 
     // Build the list of all known/configured keys from the dataSchema
     const configuredKeys = [
