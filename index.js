@@ -37,6 +37,7 @@ const pipelineSnapshot = require("./includes/pipeline_snapshot");
 const airbyteEntityLatest = require("./includes/airbyte_entity_latest");
 const airbyteEntityVersion = require("./includes/airbyte_entity_version");
 const airbyteentityDataNotFresh = require("./includes/airbyte_entity_data_not_fresh");
+const airbyteGlobalDataFreshness = require("./includes/airbyte_global_data_freshness");
 
 module.exports = (params) => {
     // Set default values of parameters if parameters with the same name have not been passed to dfeAnalyticsDataform()
@@ -91,6 +92,11 @@ module.exports = (params) => {
             outputSuffix: '_airbyte', // Suffix for Airbyte output tables (to distinguish from dfe-analytics)
             primaryKeyField: 'id', // Default primary key field name
             changeDetectionStrategy: 'content_hash', // 'content_hash' | 'extraction_time'
+            heartbeatFreshnessHours: 12,          // Check Airbyte sync every 12 hours
+            heartbeatProjectName: null,            // Defaults to bqProjectName
+            heartbeatDatasetName: 'rtt_airbyte_production',
+            heartbeatTableName: 'airbyte_heartbeat',
+            heartbeatFreshnessDisableDuringRange: false,
         },
 
         // Airbyte-specific feature flags
@@ -193,6 +199,11 @@ module.exports = (params) => {
             // Airbyte entity data not fresh check
             ...(params.airbyteEnableAssertions ? {
                 airbyteentityDataNotFresh: airbyteentityDataNotFresh(params)
+            } : {}),
+
+            // Airbyte global data freshness (heartbeat) check
+            ...(params.airbyteEnableAssertions ? {
+                airbyteGlobalDataFreshness: airbyteGlobalDataFreshness(params),
             } : {}),
         }
     }
