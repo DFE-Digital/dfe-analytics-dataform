@@ -30,10 +30,10 @@ module.exports = (params) => {
       type: "assertion",
       description: `Checks that the Airbyte heartbeat table (${heartbeatDataset}.${heartbeatTable}) has been updated within the last ${freshnessHours} hours. The heartbeat table contains a single row with the _airbyte_extracted_at timestamp of the latest Airbyte sync. If this assertion fails, Airbyte has not synced recently — investigate the Airbyte connection or source.`
     }
-  ).tags([params.eventSourceName.toLowerCase(), 'airbyte', 'freshness'])
+  ).tags([params.eventSourceName.toLowerCase(), 'airbyte'])
     .query(ctx =>
       "SELECT _airbyte_extracted_at AS last_airbyte_sync_at " +
       "FROM `" + heartbeatProject + "." + heartbeatDataset + "." + heartbeatTable + "` " +
-      "HAVING last_airbyte_sync_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL " + freshnessHours + " HOUR)"
+      "WHERE _airbyte_extracted_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL " + freshnessHours + " HOUR)"
     )
 }
