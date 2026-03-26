@@ -20,6 +20,9 @@ module.exports = (params) => {
       '_airbyte_extracted_at',
       '_airbyte_meta',
       '_airbyte_generation_id',
+      '_ab_cdc_deleted_at',
+      '_ab_cdc_lsn',
+      '_ab_cdc_updated_at',
       ...tableSchema.keys.map(key => key.keyName)
     ];
 
@@ -40,7 +43,7 @@ module.exports = (params) => {
           `You MUST add every new field to the dataSchema with the appropriate 'hidden' setting (true for PII, false otherwise) before the pipeline can proceed. ` +
           `This prevents PII from being processed without explicit classification.`
       }
-    ).tags([params.eventSourceName.toLowerCase(), 'airbyte', 'pii'])
+    ).tags([params.eventSourceName.toLowerCase(), 'airbyte'])
       .query(ctx => `
 WITH source_columns AS (
   SELECT column_name
