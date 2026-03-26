@@ -15,11 +15,18 @@ module.exports = (params) => {
     }))
     };
 
+    const piiAssertionDependencies = params.airbyteEnableAssertions
+    ? params.dataSchema.map(schema =>
+        schema.entityTableName + "_airbyte_pii_fields_not_in_schema_" + params.eventSourceName
+      )
+    : [];
+
     return params.dataSchema.forEach(tableSchema => {
         const versionTableName = `${tableSchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
 
         publish(tableSchema.entityTableName + "_latest_" + params.eventSourceName + suffix, {
             ...params.defaultConfig,
+            dependencies: piiAssertionDependencies, 
             type: tableSchema.materialisation || 'table',
             ...((tableSchema.materialisation || 'table') == "table" ? {
                 assertions: {

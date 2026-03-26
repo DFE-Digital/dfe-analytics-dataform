@@ -18,10 +18,15 @@ module.exports = (params) => {
         const tableName = `${entitySchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
         const sourceTable = `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${params.airbyteConfig.tablePrefix}${entitySchema.entityTableName}\``;
         const primaryKey = entitySchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id';
+        
+        const piiAssertionDependencies = params.airbyteEnableAssertions
+          ? params.dataSchema.map(schema => schema.entityTableName + "_airbyte_pii_fields_not_in_schema_" + params.eventSourceName)
+          : [];
 
         return publish(tableName, {
             type: "incremental",
             protected: false,
+            dependencies: piiAssertionDependencies, 
             uniqueKey: [primaryKey, "valid_from"],
             description: `[AIRBYTE] Version history of ${entitySchema.entityTableName} entities. ${entitySchema.description || ''}`,
             columns: Object.assign(
