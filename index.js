@@ -34,11 +34,11 @@ const pipelineTableSnapshot = require("./includes/pipeline_table_snapshot");
 const pipelineSnapshot = require("./includes/pipeline_snapshot");
 
 // Airbyte modules
+const airbyteGlobalDataFreshness = require("./includes/airbyte_global_data_freshness");
+const airbytePiiConfigurationDoesNotMatchSource = require("./includes/airbyte_pii_configuration_does_not_match_source");
 const airbyteEntityLatest = require("./includes/airbyte_entity_latest");
 const airbyteEntityVersion = require("./includes/airbyte_entity_version");
 const airbyteentityDataNotFresh = require("./includes/airbyte_entity_data_not_fresh");
-const airbyteGlobalDataFreshness = require("./includes/airbyte_global_data_freshness");
-const airbytePiiConfigurationDoesNotMatchSource = require("./includes/airbyte_pii_configuration_does_not_match_source");
 
 module.exports = (params) => {
     // Set default values of parameters if parameters with the same name have not been passed to dfeAnalyticsDataform()
