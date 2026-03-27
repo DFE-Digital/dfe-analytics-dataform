@@ -103,14 +103,6 @@ module.exports = (params) => {
         airbyteEnableVersioning: true, // Generate _version tables from Airbyte
         airbyteEnableAssertions: true, // Generate Airbyte-specific assertions
 
-        // Dual-run validation (for migration period)
-        enableValidationComparison: false, // Generate comparison tables between dfe-analytics and Airbyte
-        validationConfig: {
-            outputDataset: null, // Dataset for validation results (defaults to bqDatasetName)
-            samplePercent: 10, // Percentage of records to sample for value comparison
-            rowCountThresholdPercent: 1.0, // Fail if row count diff > this %
-        },
-
         ...params
     };
 
