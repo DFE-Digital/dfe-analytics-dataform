@@ -57,7 +57,7 @@ module.exports = (params) => {
                     /* Airbyte creates duplicates on schema changes; added _airbyte_extracted_at to the unique key assertion. */
                     [primaryKey, "valid_from", "_airbyte_extracted_at"]
                 ],
-                nonNull: [primaryKey, "valid_from", "_airbyte_extracted_at"],
+                nonNull: [primaryKey, "valid_from"],
                 rowConditions: ['valid_from <= valid_to OR valid_to IS NULL']
             }
         }).query(ctx => `
@@ -89,6 +89,33 @@ WITH
         FROM ${ctx.self()}
       ) ` : ''}
   ),
+
+/* Deduplicate rows that are identical in all columns.
+     This handles:
+     - Full syncs: same data re-appended with new _airbyte_extracted_at
+     - Schema changes where old rows are re-synced but values haven't changed
+     
+     It does NOT dedupe when a new field is added and has a different value
+     (e.g. old row has NULL, new row has 'some_value') */
+  source_data_deduplicate AS (
+    SELECT * EXCEPT (dedup_rn)
+    FROM (
+      SELECT
+        *,
+        ROW_NUMBER() OVER (
+          PARTITION BY
+            REGEXP_REPLACE(
+              TO_JSON_STRING(source_data),
+              r'"(_airbyte_raw_id|_airbyte_extracted_at|deleted_at)":\s*"[^"]*"',
+              ''
+            )
+          ORDER BY _airbyte_extracted_at DESC
+        ) AS dedup_rn
+      FROM source_data
+    )
+    WHERE dedup_rn = 1
+  ),
+
 ${ctx.incremental() ? ` 
 /* Re-read current versions so the window can include them in next steps */
 existing_open AS (
@@ -97,7 +124,7 @@ existing_open AS (
     WHERE is_current = TRUE
   ),
 combined AS (
-    SELECT * FROM source_data
+    SELECT * FROM source_data_deduplicate
     UNION ALL
     SELECT * FROM existing_open
   ),
@@ -121,12 +148,12 @@ deletions AS (
     SELECT
       ${primaryKey},
       deleted_at
-    FROM source_data
+    FROM source_data_deduplicate
     WHERE deleted_at IS NOT NULL
         ),
 live_records AS (
     SELECT *
-    FROM source_data
+    FROM source_data_deduplicate
     WHERE deleted_at IS NULL
   )
 
