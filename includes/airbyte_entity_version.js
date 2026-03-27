@@ -27,7 +27,7 @@ module.exports = (params) => {
             type: "incremental",
             protected: false,
             dependencies: piiAssertionDependencies, 
-            uniqueKey: [primaryKey, "valid_from"],
+            uniqueKey: [primaryKey, "valid_from", "_airbyte_extracted_at"],
             description: `[AIRBYTE] Version history of ${entitySchema.entityTableName} entities. ${entitySchema.description || ''}`,
             columns: Object.assign(
                 {
@@ -35,7 +35,7 @@ module.exports = (params) => {
                     valid_from: "Timestamp from which this version was valid (updated_at from the source).",
                     valid_to: "Timestamp until which this version was valid. NULL = current.",
                     is_current: "TRUE if this is the current version.",
-                    version_number: "Sequential version number (1 = first).",
+                    version_number: "Sequential version number (1 = latest).",
                     created_at: "Timestamp this entity was first saved in the database.",
                     updated_at: "Timestamp this entity was last updated in the database."
                 },
@@ -54,9 +54,10 @@ module.exports = (params) => {
             tags: [params.eventSourceName.toLowerCase(), 'airbyte'],
             assertions: {
                 uniqueKey: [
-                    [primaryKey, "valid_from"]
+                    /* Airbyte creates duplicates on schema changes; added _airbyte_extracted_at to the unique key assertion. */
+                    [primaryKey, "valid_from", "_airbyte_extracted_at"]
                 ],
-                nonNull: [primaryKey, "valid_from"],
+                nonNull: [primaryKey, "valid_from", "_airbyte_extracted_at"],
                 rowConditions: ['valid_from <= valid_to OR valid_to IS NULL']
             }
         }).query(ctx => `
@@ -139,7 +140,7 @@ live_records AS (
         LEAD(updated_at)
           OVER (
             PARTITION BY live_records.${primaryKey}
-            ORDER BY updated_at ASC
+            ORDER BY updated_at ASC, _airbyte_extracted_at ASC
           ),
           deletions.deleted_at
         ) AS valid_to,
@@ -153,13 +154,13 @@ live_records AS (
       ROW_NUMBER()
         OVER (
           PARTITION BY live_records.${primaryKey}
-          ORDER BY updated_at DESC
+          ORDER BY updated_at DESC, _airbyte_extracted_at DESC
         ) = 1
         AND deletions.deleted_at IS NULL AS is_current,
       ROW_NUMBER()
         OVER (
           PARTITION BY live_records.${primaryKey}
-          ORDER BY updated_at ASC
+          ORDER BY updated_at DESC, _airbyte_extracted_at DESC
         ) AS version_number
     FROM live_records
     LEFT JOIN deletions
@@ -167,7 +168,7 @@ live_records AS (
 
 `)
   .postOps(ctx => `${data_functions.setKeyConstraints(ctx, dataform, {
-            primaryKey: primaryKey + ", valid_from"
+            primaryKey: primaryKey + ", valid_from" + ", _airbyte_extracted_at"
             })}
             ${params.expirationDays && ctx.incremental() ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${params.expirationDays};` : ``}
             ${entitySchema.expirationDays && ctx.incremental() ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${entitySchema.expirationDays};` : ``}
