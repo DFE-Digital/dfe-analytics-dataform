@@ -281,10 +281,6 @@ function validateAirbyteParams(params) {
         if (!params.airbyteConfig.datasetName) {
             throw new Error("airbyteConfig.datasetName is required when enableAirbyteSource is true");
         }
-        if (params.airbyteConfig.changeDetectionStrategy && 
-            !['content_hash', 'extraction_time'].includes(params.airbyteConfig.changeDetectionStrategy)) {
-            throw new Error("airbyteConfig.changeDetectionStrategy must be 'content_hash' or 'extraction_time'");
-        }
         
         // Validate dataSchema has required fields for Airbyte
         params.dataSchema.forEach(entity => {

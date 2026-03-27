@@ -92,7 +92,6 @@ module.exports = (params) => {
             tablePrefix: '', // Optional: prefix for Airbyte table names (e.g., '_airbyte_raw_')
             outputSuffix: '_airbyte', // Suffix for Airbyte output tables (to distinguish from dfe-analytics)
             primaryKeyField: 'id', // Default primary key field name
-            changeDetectionStrategy: 'content_hash', // 'content_hash' | 'extraction_time'
             heartbeatFreshnessHours: 12,          // Check Airbyte sync every 12 hours
             heartbeatProjectName: null,            // Defaults to bqProjectName
             heartbeatDatasetName: 'rtt_airbyte_production',

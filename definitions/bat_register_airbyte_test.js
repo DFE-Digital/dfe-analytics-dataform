@@ -24,16 +24,14 @@ dfeAnalyticsDataform({
         datasetName: "rtt_airbyte_production",
         tablePrefix: "",                        
         outputSuffix: "_airbyte",               
-        primaryKeyField: "id",                   
-        changeDetectionStrategy: "content_hash",
+        primaryKeyField: "id"
     },
     
     airbyteEnableVersioning: true,
     airbyteEnableAssertions: true,
     
-    // Data schema (small subset for testing)
     dataSchema: [{
-        entityTableName: "academic_cycles",
+            entityTableName: "academic_cycles",
             description: "",
             keys: [{
                 keyName: "start_date",
@@ -43,6 +41,29 @@ dfeAnalyticsDataform({
                 keyName: "end_date",
                 dataType: "date",
                 description: "End date of academic cycle"
+            }]
+        },
+        {
+            entityTableName: "activities",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "action_name",
+                dataType: "string",
+                description: "action activity applies to"
+            }, {
+                keyName: "controller_name",
+                dataType: "string",
+                description: "controller activity applies to"
+            }, {
+                keyName: "metadata",
+                dataType: "string",
+                description: "contains action, format, subject, controller & training_route"
+            }, {
+                keyName: "user_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "users"
             }]
         },
         {
@@ -73,6 +94,74 @@ dfeAnalyticsDataform({
                 keyName: "apply_id",
                 dataType: "string",
                 description: "Application form ID in Apply, if and only if a SCITT successfully imported data from Apply when they started registering this trainee in Register. Because of this this field is *not* suitable for use to join all trainees in Register on to corresponding candidates/application forms in Apply."
+            }]
+        },
+        {
+            entityTableName: "bulk_update_row_errors",
+            materialisation: "view",
+            description: "Errors returned to provider users when they attempted to upload a spreadsheet of updates to trainees' data when making recommendations about whether and when they should be awarded Qualified Teacher Status (QTS). Each row represents one error with one row in the uploaded spreadsheet. Each row in the spreadsheet could have multiple errors.",
+            keys: [{
+                keyName: "errored_on_id",
+                dataType: "string",
+                description: "ID of the row in the uploaded spreadsheet that this error refers to. Foreign key for the bulk_update_recommendations_uploads table which is not currently available in BigQuery."
+            }, {
+                keyName: "errored_on_type",
+                dataType: "string",
+                description: "The type of the error."
+            }, {
+                keyName: "error_type",
+                dataType: "string",
+                description: "The type of error on the row "
+            }, {
+                keyName: "message",
+                dataType: "string",
+                description: "Message describing the error in detail."
+            }]
+        },
+            {
+            entityTableName: "bulk_update_trainee_uploads",
+            materialisation: "view",
+            description: "This table contains information about the bulk upload update for trainees",
+            keys: [{
+                keyName: "number_of_trainees",
+                dataType: "integer",
+                description: "Number of trainees present in bulk trainee upload"
+            }, {
+                keyName: "provider_id",
+                dataType: "string",
+                description: "Accredited Provider ID"
+            }, {
+                keyName: "status",
+                dataType: "string",
+                description: "Describes the state of the upload: uploaded, pending, validated, in_progress, succeeded, cancelled, failed"
+            }, {
+                keyName: "submitted_at",
+                dataType: "timestamp",
+                description: "Date and time bulk trainee file was uploaded at"
+            }, {
+                keyName: "submitted_by_id",
+                dataType: "string",
+                description: "ID of user who submitted the bulk trainee upload for processing"
+            }, {
+                keyName: "version",
+                dataType: "string",
+                description: "Version of the code used to handle bulk uploads"
+            }]
+        },
+        {
+            entityTableName: "course_subjects",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "subject_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "subjects"
+            }, {
+                keyName: "course_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "courses"
             }]
         },
         {
@@ -144,6 +233,11 @@ dfeAnalyticsDataform({
                 dataType: "date",
                 description: "Published start date"
             }, {
+                keyName: "start_date",
+                dataType: "date",
+                description: "",
+                historic: true
+            }, {
                 keyName: "study_mode",
                 dataType: "string",
                 description: "study mode, e.g. full-time or part-time"
@@ -156,6 +250,928 @@ dfeAnalyticsDataform({
                 dataType: "string",
                 description: "unique identifier for a course"
             }]
+        },
+        {
+            entityTableName: "degrees",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "country",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "dttp_id",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "grade",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "grade_uuid",
+                dataType: "string",
+                description: "A universal unique identifier that will map to the reference data on grades"
+            }, {
+                keyName: "graduation_year",
+                dataType: "integer",
+                description: ""
+            }, {
+                keyName: "institution",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "institution_uuid",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "locale_code",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "non_uk_degree",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "other_grade",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "slug",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "subject",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "subject_uuid",
+                dataType: "string",
+                description: "A universal unique identifier that will map to the reference data on subjects"
+            }, {
+                keyName: "trainee_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "trainees"
+            }, {
+                keyName: "uk_degree",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "uk_degree_uuid",
+                dataType: "string",
+                description: "A universal unique identifier that will map to the reference data on UK degrees"
+            }]
+        },
+        {
+            entityTableName: "disabilities",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "id",
+                dataType: "string",
+                description: "Same as id",
+                alias: "disability_id"
+            }]
+        },
+        {
+            entityTableName: "trs_trn_requests",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "request_id",
+                dataType: "string",
+                description: "unique request id"
+            }, {
+                keyName: "response",
+                dataType: "string",
+                description: "a JSON field in Register, this contains the key / value pair responses from DQT"
+            }, {
+                keyName: "state",
+                dataType: "string",
+                description: "state of the trn request. 0 = requested, 1 = received"
+            }, {
+                keyName: "trainee_id",
+                dataType: "string",
+                description: "trainee id that this request relates to",
+                foreignKeyTable: "trainees"
+            }]
+        },
+        {
+            entityTableName: "dttp_providers",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "dttp_id",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "ukprn",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "dttp_schools",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "status_code",
+                dataType: "integer",
+                description: ""
+            }, {
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "urn",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "dttp_id",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "funding_method_subjects",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "allocation_subject_id",
+                dataType: "string",
+                description: "allocation subject identifier",
+                foreignKeyTable: "allocation_subjects"
+            }, {
+                keyName: "funding_method_id",
+                dataType: "string",
+                description: "funding method identifier",
+                foreignKeyTable: "funding_methods"
+            }]
+        },
+        {
+            entityTableName: "funding_methods",
+            description: "",
+            keys: [{
+                keyName: "amount",
+                dataType: "integer",
+                description: "amount of funding"
+            }, {
+                keyName: "training_route",
+                dataType: "string",
+                description: "training_route funding applies to"
+            }, {
+                keyName: "funding_type",
+                dataType: "string",
+                description: "type of funding"
+            }, {
+                keyName: "academic_cycle_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "academic_cycles"
+            }]
+        },
+        {
+            entityTableName: "hesa_metadata",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                keyName: "course_programme_title",
+                dataType: "string",
+                description: "HESA course_programme_title"
+            }, {
+                keyName: "fundability",
+                dataType: "string",
+                description: "HESA fundability"
+            }, {
+                keyName: "itt_aim",
+                dataType: "string",
+                description: "HESA itt_aim"
+            }, {
+                keyName: "itt_qualification_aim",
+                dataType: "string",
+                description: "HESA itt_qualification_aim"
+            }, {
+                keyName: "placement_school_urn",
+                dataType: "string",
+                description: "HESA placement_school_urn"
+            }, {
+                keyName: "study_length",
+                dataType: "integer",
+                description: "HESA study_length"
+            }, {
+                keyName: "service_leaver",
+                dataType: "string",
+                description: "HESA service_leaver"
+            }, {
+                keyName: "pg_apprenticeship_start_date",
+                dataType: "date",
+                description: "HESA pg_apprenticeship_start_date"
+            }, {
+                keyName: "study_length_unit",
+                dataType: "string",
+                description: "HESA study_length_unit"
+            }, {
+                keyName: "trainee_id",
+                dataType: "string",
+                description: "HESA trainee_id",
+                foreignKeyTable: "trainees"
+            }, {
+                keyName: "year_of_course",
+                dataType: "string",
+                description: "HESA year_of_course"
+            }]
+        },
+        {
+            entityTableName: "training_partners",
+            description: "",
+            keys: [{
+                    keyName: "urn",
+                    dataType: "string",
+                    description: ""
+                },
+                {
+                    keyName: "record_type",
+                    dataType: "string",
+                    description: ""
+                },
+                {
+                    keyName: "name",
+                    dataType: "string",
+                    description: ""
+                },
+                {
+                    keyName: "ukprn",
+                    dataType: "string",
+                    description: "United Kingdom Provider Reference Number"
+                },
+                {
+                    keyName: "school_id",
+                    dataType: "string",
+                    description: ""
+                },
+                {
+                    keyName: "provider_id",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "discarded_at",
+                    dataType: "timestamp",
+                    description: "Timestamp at which a training partner was discarded"
+                }
+            ]
+        },
+        {
+            entityTableName: "training_partner_users",
+            description: "Contains information on association of service users with training partners.",
+            keys: [{
+                    keyName: "training_partner_id",
+                    pastKeyNames: ["lead_partner_id"],
+                    dataType: "string",
+                    description: "Unique id of the training partner."
+                },
+                {
+                    keyName: "user_id",
+                    dataType: "string",
+                    description: "Unique id of the user."
+                }
+            ]
+        },
+        {
+            entityTableName: "nationalisations",
+            description: "",
+            keys: [{
+                keyName: "nationality_id",
+                dataType: "string",
+                description: "allocation subject identifier",
+                foreignKeyTable: "nationalities"
+            }, {
+                keyName: "trainee_id",
+                dataType: "string",
+                description: "trainee identifier",
+                foreignKeyTable: "trainees"
+            }]
+        },
+        {
+            entityTableName: "nationalities",
+            description: "",
+            keys: [{
+                keyName: "name",
+                dataType: "string",
+                description: "name of nationality"
+            }]
+        },
+        {
+            entityTableName: "placements",
+            description: "",
+            keys: [{
+                keyName: "address",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "postcode",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "school_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "schools"
+            }, {
+                keyName: "trainee_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "trainees"
+            }, {
+                keyName: "urn",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "slug",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "potential_duplicate_trainees",
+            description: "",
+            materialisation: "view",
+            keys: [{
+                    keyName: "group_id",
+                    dataType: "string",
+                    description: ""
+                },
+                {
+                    keyName: "trainee_id",
+                    dataType: "string",
+                    description: "",
+                    foreignKeyTable: "trainees"
+                }
+            ]
+        },
+        {
+            entityTableName: "provider_users",
+            description: "",
+            keys: [{
+                keyName: "provider_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "providers"
+            }, {
+                keyName: "user_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "users"
+            }]
+        },
+        {
+            entityTableName: "providers",
+            description: "",
+            keys: [{
+                keyName: "accreditation_id",
+                dataType: "string",
+                description: "accreditation id allocated when a body becomes accredited"
+            }, {
+                keyName: "accredited",
+                dataType: "boolean",
+                description: "Indicates whether the provider is currently accredited."
+            }, {
+                keyName: "code",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "discarded_at",
+                dataType: "timestamp",
+                description: "Timestamp at which a provider was discarded"
+            }, {
+                keyName: "dttp_id",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "ukprn",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "apply_sync_enabled",
+                dataType: "boolean",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "schools",
+            description: "",
+            keys: [{
+                keyName: "open_date",
+                dataType: "date",
+                description: ""
+            }, {
+                keyName: "close_date",
+                dataType: "date",
+                description: ""
+            }, {
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "town",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "postcode",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "urn",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "subject_specialisms",
+            description: "",
+            keys: [{
+                keyName: "allocation_subject_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "allocation_subjects"
+            }, {
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "hecos_code",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "subjects",
+            description: "",
+            keys: [{
+                keyName: "code",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "trainees",
+            description: "",
+            dataFreshnessDays: 3,
+            keys: [{
+                    keyName: "apply_application_id",
+                    dataType: "string",
+                    description: "Foreign key to apply_applications identifier register_apply_applications .id",
+                    foreignKeyTable: "apply_applications"
+                }, {
+                    keyName: "application_choice_id",
+                    dataType: "string",
+                    description: "The id of application choice. Foreign key connecting to apply_applications.apply_id",
+                    foreignKeyTable: "apply_applications",
+                    foreignKeyName: "apply_id"
+                }, {
+                    keyName: "applying_for_bursary",
+                    dataType: "string",
+                    description: "Trainee is applying for a bursary (true) or not (false)"
+                }, {
+                    keyName: "applying_for_grant",
+                    dataType: "string",
+                    description: "Trainee is applying for a grant (true) or not (false)"
+                }, {
+                    keyName: "applying_for_scholarship",
+                    dataType: "string",
+                    description: "Trainee is applying for a scholarship (true) or not (false)"
+                }, {
+                    keyName: "awarded_at",
+                    dataType: "timestamp",
+                    description: "Date QTS or EYTS was awarded"
+                }, {
+                    keyName: "bursary_tier",
+                    dataType: "string",
+                    description: "Bursary tier. Only available for years where bursaries were paid on a tiered basis"
+                }, {
+                    keyName: "commencement_status",
+                    dataType: "string",
+                    description: "Indicates if trainee started on time (0), late (1), or have not started yet (2)"
+                }, {
+                    keyName: "trainee_start_date",
+                    dataType: "date",
+                    description: "Date the trainee started their ITT course"
+                }, {
+                    keyName: "course_allocation_subject_id",
+                    dataType: "string",
+                    description: "",
+                    foreignKeyTable: "allocation_subjects"
+                }, {
+                    keyName: "course_education_phase",
+                    dataType: "string",
+                    description: "Indicates if a course is primary (0) or secondary (1)"
+                }, {
+                    keyName: "course_min_age",
+                    dataType: "string",
+                    description: "Lower age range for course"
+                }, {
+                    keyName: "course_max_age",
+                    dataType: "string",
+                    description: "Upper age range for course"
+                }, {
+                    keyName: "course_subject_one",
+                    dataType: "string",
+                    description: "Course subject on which allocation subject is based"
+                }, {
+                    keyName: "course_subject_two",
+                    dataType: "string",
+                    description: "Additional course subject"
+                }, {
+                    keyName: "course_subject_three",
+                    dataType: "string",
+                    description: "Additional course subject"
+                }, {
+                    keyName: "course_uuid",
+                    dataType: "string",
+                    description: "Foreign key to courses entity uuid, register_courses.uuid"
+                },
+                {
+                    keyName: "date_of_birth",
+                    dataType: "string",
+                    description: "Date of birth of trainee",
+                    hidden: true
+                },
+                {
+                    keyName: "defer_date",
+                    dataType: "date",
+                    description: "Date trainee was deferred"
+                }, {
+                    keyName: "defer_reason",
+                    dataType: "string",
+                    description: "Reason that the trainee deferred"
+                }, {
+                    keyName: "disability_disclosure",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "discarded_at",
+                    dataType: "timestamp",
+                    description: "Timestamp at which a trainee record was discarded"
+                }, {
+                    keyName: "diversity_disclosure",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "dormancy_dttp_id",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "dttp_id",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "dttp_update_sha",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "ebacc",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "email",
+                    dataType: "string",
+                    description: "Email address of the trainee",
+                    hidden: true
+                }, {
+                    keyName: "employing_school_id",
+                    dataType: "string",
+                    description: "Employing school urn",
+                    foreignKeyTable: "schools"
+                }, {
+                    keyName: "employing_school_not_applicable",
+                    dataType: "boolean",
+                    description: "Employing school not applicable, true or false"
+                }, {
+                    keyName: "end_academic_cycle_id",
+                    dataType: "string",
+                    description: "",
+                    foreignKeyTable: "academic_cycles"
+                }, {
+                    keyName: "first_names",
+                    dataType: "string",
+                    description: "First name of the trainee",
+                    hidden: true
+                }, {
+                    keyName: "hesa_id",
+                    dataType: "string",
+                    description: "HESA unique student identifier. Presence of this implies an HEI trainee."
+                }, {
+                    keyName: "hesa_editable",
+                    dataType: "boolean",
+                    description: "TRUE if this trainee is editable in HESA"
+                }, {
+                    keyName: "hesa_updated_at",
+                    dataType: "timestamp",
+                    description: "Timestamp of last HESA update"
+                }, {
+                    keyName: "funding_eligibility",
+                    dataType: "string",
+                    description: "Funding eligibility status of the trainee, derived from the latest available HESA fund_code. Possible values are eligible or not_eligible."
+                }, {
+                    keyName: "iqts_country",
+                    dataType: "string",
+                    description: "Country where training is being undertaken for trainees on iQTS route"
+                }, {
+                    keyName: "itt_end_date",
+                    dataType: "date",
+                    description: "ITT course end date"
+                }, {
+                    keyName: "itt_start_date",
+                    dataType: "date",
+                    description: "ITT course start date"
+                },
+                {
+                    keyName: "last_name",
+                    dataType: "string",
+                    description: "Last name of the trainee",
+                    hidden: true
+                },
+                {
+                    keyName: "training_partner_id",
+                    pastKeyNames: ["lead_partner_id"],
+                    dataType: "string",
+                    description: "Training partner",
+                }, {
+                    keyName: "training_partner_not_applicable",
+                    pastKeyNames: ["lead_partner_not_applicable"],
+                    dataType: "boolean",
+                    description: "Training partner not applicable, true or false",
+                }, {
+                    keyName: "outcome_date",
+                    dataType: "date",
+                    description: ""
+                }, {
+                    keyName: "placement_assignment_dttp_id",
+                    dataType: "string",
+                    description: "",
+                    alias: "placement_assignment_dttp_id_uuid"
+                }, {
+                    keyName: "placement_detail",
+                    dataType: "string",
+                    description: "",
+                }, {
+                    keyName: "progress",
+                    dataType: "string",
+                    description: "progress - various JSON pairs"
+                }, {
+                    keyName: "provider_id",
+                    dataType: "string",
+                    description: "Registers unique provider identifier. Not used by other services.",
+                    foreignKeyTable: "providers"
+                }, {
+                    keyName: "recommended_for_award_at",
+                    dataType: "timestamp",
+                    description: ""
+                }, {
+                    keyName: "record_source",
+                    dataType: "string",
+                    description: "Source of where the trainee record originated from i.e. manual, apply, dttp, hesa_collection, hesa_trn_data"
+                }, {
+                    keyName: "region",
+                    dataType: "string",
+                    description: "Trainee's region"
+                }, {
+                    keyName: "reinstate_date",
+                    dataType: "date",
+                    description: ""
+                }, {
+                    keyName: "slug",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "start_academic_cycle_id",
+                    dataType: "string",
+                    description: "",
+                    foreignKeyTable: "academic_cycles"
+                }, {
+                    keyName: "sex",
+                    dataType: "string",
+                    description: "Trainee sex"
+                }, {
+                    keyName: "state",
+                    dataType: "string",
+                    description: "Current status of trainee - draft(0), submitted_for_trn (1), trn_received (2), recommended_for_award (3), withdrawn (4), deferred (5), awarded(6)"
+                }, {
+                    keyName: "study_mode",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "submission_ready",
+                    dataType: "boolean",
+                    description: ""
+                }, {
+                    keyName: "submitted_for_trn_at",
+                    dataType: "timestamp",
+                    description: "submitted for teacher reference number at"
+                }, {
+                    keyName: "training_initiative",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "training_route",
+                    dataType: "string",
+                    description: "training route - assessment_only (0),provider_led_postgrad (1), early_years_undergrad (2), school_direct_tuition_fee (3),school_direct_salaried (4), pg_teaching_apprenticeship (5), early_years_assessment_only (6), early_years_salaried (7), early_years_postgrad (8), provider_led_undergrad (9), opt_in_undergrad (10), hpitt_postgrad (11), iqts (12)"
+                }, {
+                    keyName: "trn",
+                    dataType: "string",
+                    description: "Trainees's Teacher Reference Number",
+                    hidden: true
+                }, {
+                    keyName: "withdraw_date",
+                    dataType: "date",
+                    description: "Date trainee withdrew from course",
+                    historic: true
+                }, {
+                    keyName: "withdraw_reasons_details",
+                    dataType: "string",
+                    description: "Details of the reason a trainee withdrew from course",
+                    historic: true
+                }, {
+                    keyName: "withdraw_reasons_dfe_details",
+                    dataType: "string",
+                    description: "",
+                    historic: true
+                }, {
+                    keyName: "created_from_hesa",
+                    dataType: "boolean",
+                    description: ""
+                }, {
+                    keyName: "created_from_dttp",
+                    dataType: "boolean",
+                    description: ""
+                }, {
+                    keyName: "slug_sent_to_trs_at",
+                    pastKeyNames: ["slug_sent_to_dqt_at"],
+                    dataType: "timestamp",
+                    description: ""
+                }
+            ]
+        },
+        {
+            entityTableName: "trainee_withdrawal_reasons",
+            description: "",
+            dataFreshnessDays: 7,
+            keys: [{
+                keyName: "trainee_id",
+                dataType: "string",
+                description: "UID of the trainee who withdrew from a course",
+                foreignKeyTable: "trainees"
+            }, {
+                keyName: "withdrawal_reason_id",
+                dataType: "string",
+                description: "UID of the reason a trainee withdrew from a course",
+                foreignKeyTable: "withdrawal_reasons"
+            }, {
+                keyName: "trainee_withdrawal_id",
+                dataType: "string",
+                description: "UID of the trainee withdrawal",
+                foreignKeyTable: "withdrawal_reasons"
+            }]
+        },
+        {
+            entityTableName: "trainee_withdrawals",
+            description: "",
+            dataFreshnessDays: 7,
+            keys: [{
+                keyName: "another_reason",
+                dataType: "string",
+                description: "Reason that the trainee withdrew",
+            }, {
+                keyName: "date",
+                dataType: "date",
+                description: "Date on which the trainee's withdrawal takes place.",
+            }, {
+                keyName: "discarded_at",
+                dataType: "timestamp",
+                description: "Timestamp indicating when the trainee withdrawal record was discarded.",
+            }, {
+                keyName: "future_interest",
+                dataType: "string",
+                description: "Indicates whether the trainee is interested in pursuing teacher training in the future.",
+            }, {
+                keyName: "safeguarding_concern_reasons",
+                dataType: "string",
+                description: "Lists safeguarding concern reasons if there are any.",
+                hidden: true
+            }, {
+                keyName: "trainee_id",
+                dataType: "string",
+                description: "UID of the trainee who withdrew from a course",
+                foreignKeyTable: "trainees"
+            }, {
+                keyName: "trigger",
+                dataType: "string",
+                description: "Specifies who initiated the withdrawal, either the provider or the trainee.",
+            }]
+        },
+        {
+            entityTableName: "withdrawal_reasons",
+            description: "",
+            keys: [{
+                keyName: "name",
+                dataType: "string",
+                description: ""
+            }]
+        },
+        {
+            entityTableName: "users",
+            description: "",
+            keys: [{
+                keyName: "dfe_sign_in_uid",
+                dataType: "string",
+                description: "DfE Sign-in UID. Can be joined on to the anonymised sign_in_uid fields in the Publish user table and Apply provider_users and support_users tables.",
+                hidden: true
+            }, {
+                keyName: "discarded_at",
+                dataType: "timestamp",
+                description: "Timestamp at which a user was discarded"
+            }, {
+                keyName: "dttp_id",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "last_signed_in_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "system_admin",
+                dataType: "boolean",
+                description: ""
+            }, {
+                keyName: "welcome_email_sent_at",
+                dataType: "timestamp",
+                description: ""
+            }, {
+                keyName: "first_name",
+                dataType: "string",
+                description: "First name of the user",
+                hidden: true
+            }, {
+                keyName: "last_name",
+                dataType: "string",
+                description: "Last name of the user",
+                hidden: true
+            }, {
+                keyName: "email",
+                dataType: "string",
+                description: "Email address of the user",
+                hidden: true
+            }]
+        },
+        {
+            entityTableName: "sign_offs",
+            description: "",
+            keys: [{
+                keyName: "id",
+                dataType: "string",
+                description: "",
+                alias: "sign_off_id",
+            }, {
+                keyName: "sign_off_type",
+                dataType: "string",
+                description: ""
+            }, {
+                keyName: "academic_cycle_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "academic_cycles"
+            }, {
+                keyName: "provider_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "providers"
+            }, {
+                keyName: "user_id",
+                dataType: "string",
+                description: "",
+                foreignKeyTable: "users"
+            }]
         }
-    ]
+    ],
+
+    customEventSchema: [{
+        eventType: "api_request",
+        description: "Custom event containing details of requests to the Register API.",
+        keys: []
+    }]
 });
