@@ -290,14 +290,6 @@ function validateAirbyteParams(params) {
         });
     }
     
-    if (params.enableValidationComparison) {
-        if (!params.enableAirbyteSource) {
-            throw new Error("enableValidationComparison requires enableAirbyteSource to be true");
-        }
-        if (!params.transformEntityEvents) {
-            throw new Error("enableValidationComparison requires transformEntityEvents to be true (to compare against)");
-        }
-    }
 }
 
 module.exports = {
