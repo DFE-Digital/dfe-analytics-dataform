@@ -4,7 +4,7 @@ module.exports = (params) => {
   if (!params.enableAirbyteSource) return null;
   if (!params.dataSchema || params.dataSchema.length === 0) return null;
 
-  return params.dataSchema.forEach(tableSchema => {
+  return params.dataSchema.map(tableSchema => {
 
     // Build the list of all known/configured keys from the dataSchema
     const configuredKeys = [

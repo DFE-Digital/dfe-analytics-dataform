@@ -2,6 +2,7 @@
 
 module.exports = (params) => {
     if (!params.enableAirbyteSource) return null;
+    if (!params.airbyteEnableVersioning) return null;
 
     const suffix = params.airbyteConfig.outputSuffix || '_airbyte';
     const primaryKey = params.airbyteConfig.primaryKeyField || 'id';
@@ -21,7 +22,7 @@ module.exports = (params) => {
       )
     : [];
 
-    return params.dataSchema.forEach(tableSchema => {
+    return params.dataSchema.map(tableSchema => {
         const versionTableName = `${tableSchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
 
         publish(tableSchema.entityTableName + "_latest_" + params.eventSourceName + suffix, {

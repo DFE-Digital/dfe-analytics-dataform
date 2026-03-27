@@ -6,7 +6,7 @@ module.exports = (params) => {
     // Only generate assertions for tables which have dataFreshnessDays configured
     .filter(tableSchema => tableSchema.dataFreshnessDays)
     // Generate a separate assertion with a different name for each entityname_latest_eventsourcename table called something like entityname_data_not_fresh_eventsourcename
-    .forEach(tableSchema => {
+    .map(tableSchema => {
       if (!Number.isInteger(tableSchema.dataFreshnessDays) || tableSchema.dataFreshnessDays < 1) {
         throw new Error(`dataFreshnessDays parameter for the ${tableSchema.entityTableName} entityTableName is not a positive integer.`);
       } else if (tableSchema.dataFreshnessDisableDuringRange && params.disableAssertionsNow) {

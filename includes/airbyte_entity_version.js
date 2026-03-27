@@ -1,5 +1,7 @@
 /* Generates {entity}_version_{source}{suffix} tables from Airbyte CDC data. */
 
+const data_functions = require("./data_functions");
+
 module.exports = (params) => {
     if (!params.enableAirbyteSource || !params.airbyteEnableVersioning) return null;
 
