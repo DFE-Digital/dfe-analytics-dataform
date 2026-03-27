@@ -27,7 +27,7 @@ module.exports = (params) => {
             type: "incremental",
             protected: false,
             dependencies: piiAssertionDependencies, 
-            uniqueKey: [primaryKey, "valid_from", "_airbyte_extracted_at"],
+            uniqueKey: [primaryKey, "valid_from", "cdc_updated_at"],
             description: `[AIRBYTE] Version history of ${entitySchema.entityTableName} entities. ${entitySchema.description || ''}`,
             columns: Object.assign(
                 {
@@ -42,7 +42,7 @@ module.exports = (params) => {
                 ...(entitySchema.keys ? getKeys(entitySchema.keys) : [])
             ),
             bigquery: {
-                partitionBy: "DATE(valid_from)",
+                partitionBy: "DATE(cdc_updated_at)",
                 clusterBy: [primaryKey],
                 labels: {
                     eventsource: params.eventSourceName.toLowerCase(),
@@ -54,8 +54,8 @@ module.exports = (params) => {
             tags: [params.eventSourceName.toLowerCase(), 'airbyte'],
             assertions: {
                 uniqueKey: [
-                    /* Airbyte creates duplicates on schema changes; added _airbyte_extracted_at to the unique key assertion. */
-                    [primaryKey, "valid_from", "_airbyte_extracted_at"]
+                    /* Airbyte creates duplicates on schema changes; added cdc_updated_at to the unique key assertion. */
+                    [primaryKey, "valid_from", "cdc_updated_at"]
                 ],
                 nonNull: [primaryKey, "valid_from"],
                 rowConditions: ['valid_from <= valid_to OR valid_to IS NULL']
@@ -74,8 +74,9 @@ WITH
           _airbyte_meta,
           _airbyte_generation_id,
           _ab_cdc_lsn,
-          _ab_cdc_deleted_at,
-          _ab_cdc_updated_at),
+          _ab_cdc_updated_at,
+          _ab_cdc_deleted_at),
+      CAST(SUBSTR(_ab_cdc_updated_at, 1, 23) AS TIMESTAMP) AS cdc_updated_at,
       CAST(created_at AS TIMESTAMP) AS created_at,
       CAST(updated_at AS TIMESTAMP) AS updated_at,
       CAST(_ab_cdc_deleted_at AS TIMESTAMP) AS deleted_at,
@@ -84,15 +85,15 @@ WITH
     WHERE
       ${primaryKey} IS NOT NULL
       ${ctx.incremental() ? `
-      AND _airbyte_extracted_at > (
-        SELECT COALESCE(MAX(_airbyte_extracted_at), TIMESTAMP('2026-01-01'))
+      AND TIMESTAMP(SUBSTR(_ab_cdc_updated_at, 1, 23)) > (
+        SELECT COALESCE(MAX(cdc_updated_at), TIMESTAMP('2026-01-01'))
         FROM ${ctx.self()}
       ) ` : ''}
   ),
 
 /* Deduplicate rows that are identical in all columns.
      This handles:
-     - Full syncs: same data re-appended with new _airbyte_extracted_at
+     - Full syncs: same data re-appended with new cdc_updated_at
      - Schema changes where old rows are re-synced but values haven't changed
      
      It does NOT dedupe when a new field is added and has a different value
@@ -106,10 +107,10 @@ WITH
           PARTITION BY
             REGEXP_REPLACE(
               TO_JSON_STRING(source_data),
-              r'"(_airbyte_raw_id|_airbyte_extracted_at|deleted_at)":\s*"[^"]*"',
+              r'"(_airbyte_raw_id|cdc_updated_at|deleted_at)":\s*"[^"]*"',
               ''
             )
-          ORDER BY _airbyte_extracted_at DESC
+          ORDER BY cdc_updated_at DESC
         ) AS dedup_rn
       FROM source_data
     )
@@ -167,7 +168,7 @@ live_records AS (
         LEAD(updated_at)
           OVER (
             PARTITION BY live_records.${primaryKey}
-            ORDER BY updated_at ASC, _airbyte_extracted_at ASC
+            ORDER BY updated_at ASC, cdc_updated_at ASC
           ),
           deletions.deleted_at
         ) AS valid_to,
@@ -181,13 +182,13 @@ live_records AS (
       ROW_NUMBER()
         OVER (
           PARTITION BY live_records.${primaryKey}
-          ORDER BY updated_at DESC, _airbyte_extracted_at DESC
+          ORDER BY updated_at DESC, cdc_updated_at DESC
         ) = 1
         AND deletions.deleted_at IS NULL AS is_current,
       ROW_NUMBER()
         OVER (
           PARTITION BY live_records.${primaryKey}
-          ORDER BY updated_at DESC, _airbyte_extracted_at DESC
+          ORDER BY updated_at DESC, cdc_updated_at DESC
         ) AS version_number
     FROM live_records
     LEFT JOIN deletions
@@ -195,7 +196,7 @@ live_records AS (
 
 `)
   .postOps(ctx => `${data_functions.setKeyConstraints(ctx, dataform, {
-            primaryKey: primaryKey + ", valid_from" + ", _airbyte_extracted_at"
+            primaryKey: primaryKey + ", valid_from" + ", cdc_updated_at"
             })}
             ${params.expirationDays && ctx.incremental() ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${params.expirationDays};` : ``}
             ${entitySchema.expirationDays && ctx.incremental() ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${entitySchema.expirationDays};` : ``}

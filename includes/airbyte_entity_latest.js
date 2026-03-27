@@ -47,7 +47,7 @@ module.exports = (params) => {
             tags: [params.eventSourceName.toLowerCase(), 'airbyte'],
             description: "[AIRBYTE] Latest version of " + tableSchema.entityTableName + ". Sourced from the Airbyte version table in the " + params.airbyteConfig.datasetName + " dataset. " + (tableSchema.description || ''),
             columns: Object.assign({
-                last_streamed_event_occurred_at: "Timestamp of the last Airbyte CDC update for this entity (_airbyte_extracted_at from the latest version).",
+                last_streamed_event_occurred_at: "Timestamp of the last Airbyte CDC update for this entity (cdc_updated_at from the latest version).",
                 [primaryKey]: {
                     description: `Primary key of the ${tableSchema.entityTableName} entity.`,
                     bigqueryPolicyTags: tableSchema.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
@@ -57,8 +57,8 @@ module.exports = (params) => {
             }, ...getKeys(tableSchema.keys))
         }).query(ctx => `
 SELECT
-    * EXCEPT(_airbyte_raw_id, valid_from, valid_to, is_current, is_deleted, version_number, _airbyte_extracted_at),
-    _airbyte_extracted_at AS last_streamed_event_occurred_at
+    * EXCEPT(_airbyte_raw_id, valid_from, valid_to, is_current, is_deleted, version_number, cdc_updated_at),
+    cdc_updated_at AS last_streamed_event_occurred_at
 FROM
     ${ctx.ref(versionTableName)}
 WHERE
