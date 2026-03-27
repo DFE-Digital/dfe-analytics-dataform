@@ -29,10 +29,7 @@ const validTopLevelParameters = ['eventSourceName',
   'enableAirbyteSource',
   'airbyteConfig',
   'airbyteEnableVersioning',
-  'airbyteEnableFieldUpdates',
-  'airbyteEnableAssertions',
-  'enableValidationComparison',
-  'validationConfig'
+  'airbyteEnableAssertions'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
   'description',
