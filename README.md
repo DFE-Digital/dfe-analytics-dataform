@@ -340,7 +340,7 @@ dfeAnalyticsDataform({
   },
 
   // Airbyte feature flags
-  airbyteEnableVersioning: true,   // Generate _version tables from Airbyte CDC data (default: true)
+  airbyteEnableVersioning: true,   // Generate _version and _latest tables from Airbyte CDC data (default: true)
   airbyteEnableAssertions: true,   // Generate Airbyte-specific assertions (default: true)
 
   dataSchema: [{
@@ -386,7 +386,7 @@ Airbyte output tables are distinguished from `dfe-analytics` output tables by th
 
 | Parameter | Default | Description |
 |---|---|---|
-| `airbyteEnableVersioning` | `true` | If `true`, generates incremental `_version` tables from Airbyte CDC data for each entity in `dataSchema`. |
+| `airbyteEnableVersioning` | `true` | If `true`, generates incremental `_version` and `_latest` tables from Airbyte CDC data for each entity in `dataSchema`. |
 | `airbyteEnableAssertions` | `true` | If `true`, generates Airbyte-specific assertions (PII mismatch, entity data freshness, global heartbeat freshness). |
 
 ### Airbyte tables and assertions created
