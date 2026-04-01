@@ -37,9 +37,13 @@ module.exports = (params) => {
                     valid_from: "Timestamp from which this version was valid (updated_at from the source).",
                     valid_to: "Timestamp until which this version was valid. NULL = current.",
                     is_current: "TRUE if this is the current version.",
+                    is_deleted: "TRUE if this entity is deleted.",
                     version_number: "Sequential version number (1 = latest).",
                     created_at: "Timestamp this entity was first saved in the database.",
-                    updated_at: "Timestamp this entity was last updated in the database."
+                    updated_at: "Timestamp this entity was last updated in the database.",
+                    cdc_updated_at: "Timestamp of the CDC event captured by Airbyte.",
+                    deleted_at: "Timestamp of the CDC event at which the entity was deleted in the source database. NULL if not deleted.",
+                    _airbyte_raw_id: "Unique identifier assigned by Airbyte to each raw record ingested."
                 },
                 ...(entitySchema.keys ? getKeys(entitySchema.keys) : [])
             ),
