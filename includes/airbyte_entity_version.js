@@ -3,6 +3,7 @@
 const data_functions = require("./data_functions");
 
 module.exports = (params) => {
+    if (!params.enableAirbyteSource) return null;
     if (!params.enableAirbyteSource || !params.airbyteEnableVersioning) return null;
 
     const suffix = params.airbyteConfig.outputSuffix || '_airbyte';

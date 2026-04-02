@@ -5,7 +5,6 @@ module.exports = (params) => {
     if (!params.airbyteEnableVersioning) return null;
 
     const suffix = params.airbyteConfig.outputSuffix || '_airbyte';
-    const primaryKey = params.airbyteConfig.primaryKeyField || 'id';
 
     const getKeys = (keys) => {
     return keys.filter(k => !k.historic).map(key => ({
@@ -16,14 +15,15 @@ module.exports = (params) => {
     }))
     };
 
-    const piiAssertionDependencies = params.airbyteEnableAssertions
-    ? params.dataSchema.map(schema =>
-        schema.entityTableName + "_airbyte_pii_fields_not_in_schema_" + params.eventSourceName
-      )
-    : [];
-
     return params.dataSchema.map(tableSchema => {
         const versionTableName = `${tableSchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
+        const primaryKey = entitySchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id';
+        
+        const piiAssertionDependencies = params.airbyteEnableAssertions
+            ? params.dataSchema.map(schema =>
+                schema.entityTableName + "_airbyte_pii_fields_not_in_schema_" + params.eventSourceName
+                )
+            : [];
 
         publish(tableSchema.entityTableName + "_latest_" + params.eventSourceName + suffix, {
             ...params.defaultConfig,
