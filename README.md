@@ -330,7 +330,7 @@ dfeAnalyticsDataform({
     heartbeatDatasetName: "your_heartbeat_dataset", // optional, defaults to datasetName
     heartbeatTableName: "airbyte_heartbeat",        // optional, defaults to 'airbyte_heartbeat'
   },
-  airbyteEnableVersioning: true,   // optional, generate _version tables (default: true)
+  airbyteEnableVersioning: true,   // optional, generate _version and _latest tables (default: true)
   airbyteEnableAssertions: true,   // optional, generate Airbyte assertions (default: true)
 
 
