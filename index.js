@@ -35,7 +35,7 @@ const pipelineSnapshot = require("./includes/pipeline_snapshot");
 
 // Airbyte modules
 const airbyteGlobalDataFreshness = require("./includes/airbyte_global_data_freshness");
-const airbytePiiConfigurationDoesNotMatchSource = require("./includes/airbyte_pii_configuration_does_not_match_source");
+const airbyteFieldsNotInSchema = require("./includes/airbyte_fields_not_in_schema");
 const airbyteEntityLatest = require("./includes/airbyte_entity_latest");
 const airbyteEntityVersion = require("./includes/airbyte_entity_version");
 const airbyteEntityDataNotFresh = require("./includes/airbyte_entity_data_not_fresh");
@@ -200,7 +200,7 @@ module.exports = (params) => {
 
             // Airbyte PII configuration mismatch assertion
             ...(params.airbyteEnableAssertions ? {
-            airbytePiiConfigurationDoesNotMatchSource: airbytePiiConfigurationDoesNotMatchSource(params),
+            airbyteFieldsNotInSchema: airbyteFieldsNotInSchema(params),
             } : {}),
         }
     }

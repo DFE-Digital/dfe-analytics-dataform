@@ -8,7 +8,7 @@ module.exports = (params) => {
 
     // Build the list of all known/configured keys from the dataSchema
     const configuredKeys = [
-      tableSchema.primaryKey || 'id',
+      tableSchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id',
       'created_at',
       'updated_at',
       '_airbyte_raw_id',
@@ -26,17 +26,16 @@ module.exports = (params) => {
 
     // Build SQL array of known column names
     const knownColumnsSQL = uniqueConfiguredKeys
-      .map(k => `"${k}"`)
+      .map(k => `'${k.replace(/'/g, "\\'")}'`)
       .join(', ');
 
     assert(
-      tableSchema.entityTableName + "_airbyte_pii_fields_not_in_schema_" + params.eventSourceName, {
+      tableSchema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName, {
         ...params.defaultConfig,
         type: "assertion",
         description: `Checks that all columns in the Airbyte source table for ${tableSchema.entityTableName} are defined in the dataSchema configuration. ` +
           `If this assertion fails, a new column exists in the source database table that has not been configured in the dataSchema. ` +
-          `You MUST add every new field to the dataSchema with the appropriate 'hidden' setting (true for PII, false otherwise) before the pipeline can proceed. ` +
-          `This prevents PII from being processed without explicit classification.`
+          `You MUST add every new field to the dataSchema with the appropriate 'hidden' setting (true for PII, false otherwise) before the pipeline can proceed.`
       }
     ).tags([params.eventSourceName.toLowerCase(), 'airbyte'])
       .query(ctx => `

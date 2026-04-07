@@ -22,14 +22,14 @@ module.exports = (params) => {
         const sourceTable = `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${params.airbyteConfig.tablePrefix}${entitySchema.entityTableName}\``;
         const primaryKey = entitySchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id';
         
-        const piiAssertionDependencies = params.airbyteEnableAssertions
-          ? params.dataSchema.map(schema => schema.entityTableName + "_airbyte_pii_fields_not_in_schema_" + params.eventSourceName)
+        const fieldAssertionDependencies = params.airbyteEnableAssertions
+          ? params.dataSchema.map(schema => schema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName)
           : [];
 
         return publish(tableName, {
             type: "incremental",
             protected: false,
-            dependencies: piiAssertionDependencies, 
+            dependencies: fieldAssertionDependencies, 
             uniqueKey: [primaryKey, "valid_from", "cdc_updated_at"],
             description: `[AIRBYTE] Version history of ${entitySchema.entityTableName} entities. ${entitySchema.description || ''}`,
             columns: Object.assign(

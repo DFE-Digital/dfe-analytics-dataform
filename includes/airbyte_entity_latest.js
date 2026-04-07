@@ -17,17 +17,17 @@ module.exports = (params) => {
 
     return params.dataSchema.map(tableSchema => {
         const versionTableName = `${tableSchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
-        const primaryKey = entitySchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id';
+        const primaryKey = tableSchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id';
         
-        const piiAssertionDependencies = params.airbyteEnableAssertions
+        const fieldAssertionDependencies = params.airbyteEnableAssertions
             ? params.dataSchema.map(schema =>
-                schema.entityTableName + "_airbyte_pii_fields_not_in_schema_" + params.eventSourceName
+                schema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName
                 )
             : [];
 
         publish(tableSchema.entityTableName + "_latest_" + params.eventSourceName + suffix, {
             ...params.defaultConfig,
-            dependencies: piiAssertionDependencies, 
+            dependencies: fieldAssertionDependencies, 
             type: tableSchema.materialisation || 'table',
             ...((tableSchema.materialisation || 'table') == "table" ? {
                 assertions: {
