@@ -309,52 +309,39 @@ The names of these will vary depending on the ```eventSourceName``` you have spe
 
 ## Airbyte data source support (experimental)
 
-`dfe-analytics-dataform` can optionally process data from [Airbyte](https://airbyte.com/) CDC (Change Data Capture) replication as an alternative or supplement to `dfe-analytics` event streaming. This is useful when your data is replicated to BigQuery using Airbyte rather than (or in addition to) `dfe-analytics`.
-
-This feature is entirely opt-in. Setting `enableAirbyteSource: false` (the default) means no Airbyte-related tables or assertions will be generated, and existing `dfe-analytics` processing is completely unaffected.
+As of v2.5.0, `dfe-analytics-dataform` supports ingesting entity data from [Airbyte](https://airbyte.com/) as an alternative or complementary data source alongside the existing `dfe-analytics` event streaming pipeline. This feature is entirely opt-in. Setting `enableAirbyteSource: false` (the default) means no Airbyte-related tables or assertions will be generated, and existing `dfe-analytics` processing is completely unaffected.
 
 ### Enabling Airbyte processing
 
-Add the following parameters to your `dfeAnalyticsDataform()` call:
+Add the following parameters to your `dfeAnalyticsDataform()` call in `definitions/dfe_analytics_dataform.js`:
 
 ```
 dfeAnalyticsDataform({
   eventSourceName: "my_service",
-  bqEventsTableName: "events",
-  urlRegex: "www.my-service.gov.uk",
-  expirationDays: false,
+  // ... your existing configuration ...
 
-  // Enable Airbyte processing
   enableAirbyteSource: true,
-
   airbyteConfig: {
-    datasetName: "my_airbyte_dataset",        // REQUIRED: BigQuery dataset containing Airbyte tables
-    tablePrefix: "",                           // Optional: prefix for Airbyte table names (default: '')
-    outputSuffix: "_airbyte",                  // Suffix for Airbyte output tables (default: '_airbyte')
-    primaryKeyField: "id",                     // Default primary key field name (default: 'id')
-    heartbeatFreshnessHours: 12,               // Hours before the global freshness assertion fails (default: 12)
-    heartbeatProjectName: null,                // BigQuery project for the heartbeat table (defaults to bqProjectName)
-    heartbeatDatasetName: "rtt_airbyte_production", // Dataset for the heartbeat table
-    heartbeatTableName: "airbyte_heartbeat",   // Name of the heartbeat table
-    heartbeatFreshnessDisableDuringRange: false // Disable heartbeat freshness check during assertionDisableDuringDateRanges
+    datasetName: "your_airbyte_bigquery_dataset",  // required
+    tablePrefix: "",                                // optional, prefix for Airbyte table names
+    outputSuffix: "_airbyte",                       // optional, suffix for output tables (default: '_airbyte')
+    primaryKeyField: "id",                          // optional, default primary key (default: 'id')
+    heartbeatFreshnessHours: 12,                    // optional, hours before heartbeat freshness alert (default: 12)
+    heartbeatDatasetName: "your_heartbeat_dataset", // optional, defaults to datasetName
+    heartbeatTableName: "airbyte_heartbeat",        // optional, defaults to 'airbyte_heartbeat'
   },
+  airbyteEnableVersioning: true,   // optional, generate _version tables (default: true)
+  airbyteEnableAssertions: true,   // optional, generate Airbyte assertions (default: true)
 
-  // Airbyte feature flags
-  airbyteEnableVersioning: true,   // Generate _version and _latest tables from Airbyte CDC data (default: true)
-  airbyteEnableAssertions: true,   // Generate Airbyte-specific assertions (default: true)
 
-  dataSchema: [{
-    entityTableName: "users",
-    description: "Users of the service.",
+ dataSchema: [{
+    entityTableName: "your_table_name",
+    description: "Description of this entity.",
     keys: [{
-      keyName: "email",
+      keyName: "field_name",
       dataType: "string",
-      description: "User email address.",
-      hidden: true
-    }, {
-      keyName: "first_name",
-      dataType: "string",
-      description: "User first name."
+      description: "Description of this field.",
+      hidden: false
     }]
   }]
 });
@@ -365,8 +352,8 @@ dfeAnalyticsDataform({
 When `enableAirbyteSource` is `true`, `dfe-analytics-dataform` will generate additional tables and assertions alongside any existing `dfe-analytics` tables. The Airbyte tables read directly from the Airbyte CDC tables in BigQuery rather than from the `dfe-analytics` events table.
 
 Airbyte output tables are distinguished from `dfe-analytics` output tables by the `outputSuffix` (default `_airbyte`). For example, if your `eventSourceName` is `foo` and you have an entity `bar`, the following Airbyte tables would be created:
-- `bar_version_foo_airbyte` — incremental version history table built from Airbyte CDC data
-- `bar_latest_foo_airbyte` — latest (current) version of each entity
+- `{entity}_version_{eventSourceName}_airbyte` — incremental version history table built from Airbyte CDC data
+- `{entity}_latest_{eventSourceName}_airbyte` — latest (current) version of each entity
 
 ### `airbyteConfig` parameters
 
@@ -378,7 +365,7 @@ Airbyte output tables are distinguished from `dfe-analytics` output tables by th
 | `primaryKeyField` | No | `'id'` | Default primary key field name. Can be overridden per-entity with `primaryKey` in `dataSchema`. |
 | `heartbeatFreshnessHours` | No | `12` | Number of hours after which the global freshness assertion will fail if no new Airbyte sync has occurred. |
 | `heartbeatProjectName` | No | `bqProjectName` | BigQuery project containing the heartbeat table. |
-| `heartbeatDatasetName` | No | `'rtt_airbyte_production'` | BigQuery dataset containing the heartbeat table. |
+| `heartbeatDatasetName` | No | `airbyteConfig.datasetName` | BigQuery dataset containing the heartbeat table. |
 | `heartbeatTableName` | No | `'airbyte_heartbeat'` | Name of the Airbyte heartbeat table. |
 | `heartbeatFreshnessDisableDuringRange` | No | `false` | If `true`, disables the heartbeat freshness assertion during `assertionDisableDuringDateRanges`. |
 
@@ -391,23 +378,28 @@ Airbyte output tables are distinguished from `dfe-analytics` output tables by th
 
 ### Airbyte tables and assertions created
 
-When Airbyte processing is enabled, the following are created for each `entityTableName` (e.g. `bar`) with `eventSourceName` `foo`:
+When `enableAirbyteSource: true` is set, the following tables and assertions are created for each entity in your `dataSchema`:
 
 **Tables:**
-- `bar_version_foo_airbyte` — incremental table containing the version history of each `bar` entity, derived from Airbyte CDC data. Includes `valid_from`, `valid_to`, `is_current`, `is_deleted`, and `version_number` columns. Partitioned by `DATE(cdc_updated_at)` and clustered by the primary key.
-- `bar_latest_foo_airbyte` — table (or view, depending on `materialisation`) containing only the current, non-deleted version of each `bar` entity.
+- `{entity}_version_{eventSourceName}_airbyte` — incremental table containing the version history of each entity, derived from Airbyte CDC data. Includes `valid_from`, `valid_to`, `is_current`, `is_deleted`, and `version_number` columns. Partitioned by `DATE(cdc_updated_at)` and clustered by the primary key.
+- `{entity}_latest_{eventSourceName}_airbyte` — table (or view, depending on `materialisation`) containing only the current, non-deleted version of each entity, sourced from the version table.
 
 **Assertions (when `airbyteEnableAssertions: true`):**
-- `foo_airbyte_global_data_not_fresh` — fails if the Airbyte heartbeat table has not been updated within the configured `heartbeatFreshnessHours`.
-- `bar_airbyte_data_not_fresh_foo` — fails if the Airbyte source table for `bar` has not received updates within the configured `dataFreshnessDays` for that entity (only generated for entities with `dataFreshnessDays` set in `dataSchema`).
-- `bar_airbyte_pii_fields_not_in_schema_foo` — fails if the Airbyte source table for `bar` contains columns that are not configured in the `dataSchema`. **This is a critical PII safety gate** — it prevents unconfigured (potentially PII) columns from being processed. You must add every new column to the `dataSchema` with the appropriate `hidden` setting before the pipeline can proceed.
+| Assertion | Blocks pipeline? | Description |
+|---|---|---|
+| `{entity}_airbyte_fields_not_in_schema_{eventSourceName}` | Yes (version + latest tables depend on it) | Fails if the Airbyte source table contains columns not configured in `dataSchema`. Ensures all fields are explicitly classified for PII handling before data is processed. |
+| `{entity}_airbyte_schema_fields_missing_from_source_{eventSourceName}` | No | Fails if fields configured in `dataSchema` are missing from the Airbyte source table. Informational — alerts you when fields have been removed from the source database. |
+| `{entity}_airbyte_data_not_fresh_{eventSourceName}` | No | Fails if no data has been received for this entity within the configured `dataFreshnessDays`. Only created for entities with `dataFreshnessDays` set. |
+| `{eventSourceName}_airbyte_global_data_not_fresh` | No | Fails if the Airbyte heartbeat table has not been updated within the configured `heartbeatFreshnessHours`. |
 
 ### Important notes
 
 - **PII safety**: When `airbyteEnableAssertions` is `true`, the version tables depend on the PII assertion passing. If a new column appears in an Airbyte source table that is not in your `dataSchema`, the PII assertion will fail and block the version table from updating. You **must** add the new column to your `dataSchema` with the correct `hidden` setting (true for PII, false otherwise).
 - **First run**: The first time you enable Airbyte processing, you should run a **full refresh** of the version tables in Dataform.
-- **`dataSchema` reuse**: The same `dataSchema` used for `dfe-analytics` entity configuration is reused for Airbyte. You do not need to define entities twice.
-- **Existing pipelines**: Enabling Airbyte does not affect existing `dfe-analytics` tables in any way. Both can run side-by-side.
+- **Shared `dataSchema`**: Airbyte modules reuse the same `dataSchema` configuration as the existing dfe-analytics pipeline. No separate schema definition is needed.
+- **Side-by-side operation**: Both dfe-analytics and Airbyte tables can coexist in the same Dataform project. Airbyte output tables are distinguished by the `_airbyte` suffix and tagged with `'airbyte'`.
+- **Per-entity primary keys**: Each entity can specify its own `primaryKey` in `dataSchema`, falling back to `airbyteConfig.primaryKeyField`, then `'id'`.
+- **Data retention**: Both `expirationDays` (top-level) and per-entity `expirationDays` are supported for Airbyte version tables, deleting rows where `valid_from` is older than the retention period.
 
 ## Test framework
 Tests with the jest framework are filed in the `tests` folder
