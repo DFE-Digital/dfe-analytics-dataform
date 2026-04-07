@@ -15,7 +15,7 @@ module.exports = (params) => {
     : params.bqProjectName;
   const heartbeatDataset = (params.airbyteConfig && params.airbyteConfig.heartbeatDatasetName)
     ? params.airbyteConfig.heartbeatDatasetName
-    : 'rtt_airbyte_production';
+    : params.airbyteConfig.datasetName;
   const heartbeatTable = (params.airbyteConfig && params.airbyteConfig.heartbeatTableName)
     ? params.airbyteConfig.heartbeatTableName
     : 'airbyte_heartbeat';
