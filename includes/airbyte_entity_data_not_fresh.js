@@ -20,9 +20,9 @@ module.exports = (params) => {
         }
         ).tags([params.eventSourceName.toLowerCase(),  'airbyte'])
           .query(ctx =>
-            "SELECT MAX(CAST(updated_at AS TIMESTAMP)) AS last_cdc_updated_at FROM " +
+            "SELECT MAX(CAST(updated_at AS TIMESTAMP)) AS last_updated_at FROM " +
                         "`" + params.bqProjectName + "." + params.airbyteConfig.datasetName + "." + params.airbyteConfig.tablePrefix + tableSchema.entityTableName + "`" +
-                        " HAVING last_cdc_updated_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP, INTERVAL " +
+                        " HAVING last_updated_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP, INTERVAL " +
                         tableSchema.dataFreshnessDays +
                         " DAY)"
           )
