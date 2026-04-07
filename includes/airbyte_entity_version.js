@@ -141,9 +141,10 @@ combined AS (
 deletions AS (
     SELECT
       ${primaryKey},
-      deleted_at
+      MAX(deleted_at) AS deleted_at
     FROM combined
     WHERE deleted_at IS NOT NULL
+    GROUP BY ${primaryKey}
   ),
 live_records AS (
     SELECT *
@@ -155,9 +156,10 @@ live_records AS (
 deletions AS (
     SELECT
       ${primaryKey},
-      deleted_at
+      MAX(deleted_at) AS deleted_at
     FROM source_data_deduplicate
     WHERE deleted_at IS NOT NULL
+    GROUP BY ${primaryKey}
         ),
 live_records AS (
     SELECT *
@@ -183,7 +185,7 @@ live_records AS (
         AND LEAD(updated_at)
           OVER (
             PARTITION BY live_records.${primaryKey}
-            ORDER BY updated_at ASC
+            ORDER BY updated_at ASC, cdc_updated_at ASC
           )
           IS NULL AS is_deleted,
       ROW_NUMBER()
