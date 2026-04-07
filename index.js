@@ -89,13 +89,13 @@ module.exports = (params) => {
         enableAirbyteSource: false, // Master switch for Airbyte processing
 
         airbyteConfig: {
-            datasetName: null, // REQUIRED if enableAirbyteSource: BigQuery dataset with Airbyte tables
-            tablePrefix: '', // Optional: prefix for Airbyte table names (e.g., '_airbyte_raw_')
+            datasetName: null, // name of the BigQuery dataset that Airbyte streams data into
+            tablePrefix: '', // prefix for Airbyte table names (e.g., '_airbyte_raw_')
             outputSuffix: '_airbyte', // Suffix for Airbyte output tables (to distinguish from dfe-analytics)
             primaryKeyField: 'id', // Default primary key field name
-            heartbeatFreshnessHours: 12,          // Check Airbyte sync every 12 hours
-            heartbeatProjectName: null,            // Defaults to bqProjectName
-            heartbeatDatasetName: 'rtt_airbyte_production',
+            heartbeatFreshnessHours: 12, // Check Airbyte sync every 12 hours
+            heartbeatProjectName: null, // name of the BigQuery project that Airbyte streams heartbeat data into
+            heartbeatDatasetName: null, // name of the BigQuery dataset that Airbyte streams heartbeat data into
             heartbeatTableName: 'airbyte_heartbeat',
             heartbeatFreshnessDisableDuringRange: false,
         },
