@@ -87,22 +87,24 @@ module.exports = (params) => {
         }], // an array of day or date ranges between which some assertions will be disabled if other parameters are set to disable them. Each range is a hash containing either the integer values fromDay, fromMonth, toDay and toMonth *or* the date values fromDate and toDate. Defaults to an approximation to school holidays each year.
 
         enableAirbyteSource: false, // Master switch for Airbyte processing
-        airbyteEnableVersioning: true, // Generate _version tables from Airbyte
-        airbyteEnableAssertions: true, // Generate Airbyte-specific assertions
+
         airbyteConfig: {
             datasetName: null, // name of the BigQuery dataset that Airbyte streams data into
             tablePrefix: '', // prefix for Airbyte table names (e.g., '_airbyte_raw_')
             tableSuffix: '_airbyte', // Suffix for Airbyte output tables (to distinguish from dfe-analytics)
-            primaryKeyField: 'id', // Default primary key field name
+            primaryKeyField: 'id', // Default primary key field name (can be overridden per entity via tableSchema.primaryKey)
         },
+
         airbyteHeartbeat: {
                 freshnessHours: 12, // Number of hours to wait before triggering an assertion failure, if no new data has been received from Airbyte
-                projectName: params.bqProjectName, // name of the BigQuery project that Airbyte streams heartbeat data into
-                datasetName: params.datasetName, // name of the BigQuery dataset that Airbyte streams heartbeat data into
-                tableName: 'airbyte_heartbeat', // name of the BigQuery table that Airbyte streams heartbeat data into
-                disableFreshnessCheckDuringRange: false, // whether to disable check on the airbyte heartbeat table
+                datasetName: dataform.projectConfig.defaultSchema, // name of the BigQuery dataset for heartbeat data.
+                tableName: 'airbyte_heartbeat', // name of the heartbeat table
+                disableFreshnessCheckDuringRange: false, // Boolean. If true, disables the heartbeat freshness check assertion during the date ranges specified in assertionDisableDuringDateRanges
             },
-        
+
+        airbyteEnableVersioning: true, // Generate _version tables from Airbyte
+        airbyteEnableAssertions: true, // Generate Airbyte-specific assertions
+
         ...params
     };
 

@@ -21,15 +21,13 @@ dfeAnalyticsDataform({
     enableAirbyteSource: true,
     
     airbyteConfig: {
-        datasetName: "rtt_airbyte_production",
-        tablePrefix: "",                        
+        datasetName: "rtt_airbyte_production",                    
         outputSuffix: "_airbyte",               
         primaryKeyField: "id"
     },
 
     airbyteHeartbeat: {
-        heartbeatDatasetName: "rtt_airbyte_production",
-        disableFreshnessCheckDuringRange: false
+        datasetName: "rtt_airbyte_production"
     },
     
     airbyteEnableVersioning: true,
