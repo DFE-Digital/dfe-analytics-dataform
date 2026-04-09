@@ -28,6 +28,7 @@ const validTopLevelParameters = ['eventSourceName',
   // Airbyte parameters
   'enableAirbyteSource',
   'airbyteConfig',
+  'airbyteHeartbeat',
   'airbyteEnableVersioning',
   'airbyteEnableAssertions'
 ];

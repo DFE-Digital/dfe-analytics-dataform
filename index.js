@@ -87,23 +87,22 @@ module.exports = (params) => {
         }], // an array of day or date ranges between which some assertions will be disabled if other parameters are set to disable them. Each range is a hash containing either the integer values fromDay, fromMonth, toDay and toMonth *or* the date values fromDate and toDate. Defaults to an approximation to school holidays each year.
 
         enableAirbyteSource: false, // Master switch for Airbyte processing
-
+        airbyteEnableVersioning: true, // Generate _version tables from Airbyte
+        airbyteEnableAssertions: true, // Generate Airbyte-specific assertions
         airbyteConfig: {
             datasetName: null, // name of the BigQuery dataset that Airbyte streams data into
             tablePrefix: '', // prefix for Airbyte table names (e.g., '_airbyte_raw_')
-            outputSuffix: '_airbyte', // Suffix for Airbyte output tables (to distinguish from dfe-analytics)
+            tableSuffix: '_airbyte', // Suffix for Airbyte output tables (to distinguish from dfe-analytics)
             primaryKeyField: 'id', // Default primary key field name
-            heartbeatFreshnessHours: 12, // Check Airbyte sync every 12 hours
-            heartbeatProjectName: null, // name of the BigQuery project that Airbyte streams heartbeat data into
-            heartbeatDatasetName: null, // name of the BigQuery dataset that Airbyte streams heartbeat data into
-            heartbeatTableName: 'airbyte_heartbeat',
-            heartbeatFreshnessDisableDuringRange: false,
         },
-
-        // Airbyte-specific feature flags
-        airbyteEnableVersioning: true, // Generate _version tables from Airbyte
-        airbyteEnableAssertions: true, // Generate Airbyte-specific assertions
-
+        airbyteHeartbeat: {
+                heartbeatFreshnessHours: 12, // Number of hours to wait before triggering an assertion failure, if no new data has been received from Airbyte
+                heartbeatProjectName: params.bqProjectName, // name of the BigQuery project that Airbyte streams heartbeat data into
+                heartbeatDatasetName: params.datasetName, // name of the BigQuery dataset that Airbyte streams heartbeat data into
+                heartbeatTableName: 'airbyte_heartbeat', // name of the BigQuery table that Airbyte streams heartbeat data into
+                disableFreshnessCheckDuringRange: false, // whether to disable check on the airbyte heartbeat table
+            },
+        
         ...params
     };
 

@@ -1,26 +1,14 @@
-/* This checks the airbyte_heartbeat table to verify Airbyte synced within the last 12 hours. */
+/* Checks that the Airbyte heartbeat table has been updated recently. Triggers an assertion failure if no new data has arrived within the configured number of hours. */
 
 module.exports = (params) => {
   if (!params.enableAirbyteSource) return null;
 
-  // Default to 12 hours
-  // Allow override via params.airbyteConfig.heartbeatFreshnessHours
-  const freshnessHours = (params.airbyteConfig && params.airbyteConfig.heartbeatFreshnessHours)
-    ? params.airbyteConfig.heartbeatFreshnessHours
-    : 12;
+  const freshnessHours = params.airbyteConfig.heartbeatFreshnessHours;
+  const heartbeatProject = params.airbyteConfig.heartbeatProjectName;
+  const heartbeatDataset = params.airbyteConfig.heartbeatDatasetName;
+  const heartbeatTable = params.airbyteConfig.heartbeatTableName;
 
-  // Allow override of heartbeat table location via airbyteConfig
-  const heartbeatProject = (params.airbyteConfig && params.airbyteConfig.heartbeatProjectName)
-    ? params.airbyteConfig.heartbeatProjectName
-    : params.bqProjectName;
-  const heartbeatDataset = (params.airbyteConfig && params.airbyteConfig.heartbeatDatasetName)
-    ? params.airbyteConfig.heartbeatDatasetName
-    : params.airbyteConfig.datasetName;
-  const heartbeatTable = (params.airbyteConfig && params.airbyteConfig.heartbeatTableName)
-    ? params.airbyteConfig.heartbeatTableName
-    : 'airbyte_heartbeat';
-
-  if (params.airbyteConfig.heartbeatFreshnessDisableDuringRange && params.disableAssertionsNow) {
+  if (params.airbyteConfig.disableFreshnessCheckDuringRange && params.disableAssertionsNow) {
     return null;
   }
 

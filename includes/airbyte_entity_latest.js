@@ -4,7 +4,7 @@ module.exports = (params) => {
     if (!params.enableAirbyteSource) return null;
     if (!params.airbyteEnableVersioning) return null;
 
-    const suffix = params.airbyteConfig.outputSuffix || '_airbyte';
+    const suffix = params.airbyteConfig.tableSuffix || '_airbyte';
 
     const getKeys = (keys) => {
     return keys.filter(k => !k.historic).map(key => ({

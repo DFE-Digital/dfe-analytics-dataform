@@ -26,6 +26,11 @@ dfeAnalyticsDataform({
         outputSuffix: "_airbyte",               
         primaryKeyField: "id"
     },
+
+    airbyteHeartbeat: {
+        heartbeatDatasetName: "rtt_airbyte_production",
+        disableFreshnessCheckDuringRange: false
+    },
     
     airbyteEnableVersioning: true,
     airbyteEnableAssertions: true,

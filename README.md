@@ -324,7 +324,7 @@ dfeAnalyticsDataform({
   airbyteConfig: {
     datasetName: "your_airbyte_bigquery_dataset",  // required
     tablePrefix: "",                                // optional, prefix for Airbyte table names
-    outputSuffix: "_airbyte",                       // optional, suffix for output tables (default: '_airbyte')
+    tableSuffix: "_airbyte",                       // optional, suffix for output tables (default: '_airbyte')
     primaryKeyField: "id",                          // optional, default primary key (default: 'id')
     heartbeatFreshnessHours: 12,                    // optional, hours before heartbeat freshness alert (default: 12)
     heartbeatDatasetName: "your_heartbeat_dataset", // optional, defaults to datasetName
@@ -351,7 +351,7 @@ dfeAnalyticsDataform({
 
 When `enableAirbyteSource` is `true`, `dfe-analytics-dataform` will generate additional tables and assertions alongside any existing `dfe-analytics` tables. The Airbyte tables read directly from the Airbyte CDC tables in BigQuery rather than from the `dfe-analytics` events table.
 
-Airbyte output tables are distinguished from `dfe-analytics` output tables by the `outputSuffix` (default `_airbyte`). For example, if your `eventSourceName` is `foo` and you have an entity `bar`, the following Airbyte tables would be created:
+Airbyte output tables are distinguished from `dfe-analytics` output tables by the `tableSuffix` (default `_airbyte`). For example, if your `eventSourceName` is `foo` and you have an entity `bar`, the following Airbyte tables would be created:
 - `{entity}_version_{eventSourceName}_airbyte` — incremental version history table built from Airbyte CDC data
 - `{entity}_latest_{eventSourceName}_airbyte` — latest (current) version of each entity
 
@@ -361,7 +361,7 @@ Airbyte output tables are distinguished from `dfe-analytics` output tables by th
 |---|---|---|---|
 | `datasetName` | **Yes** | `null` | BigQuery dataset containing Airbyte-synced tables. |
 | `tablePrefix` | No | `''` | Prefix prepended to entity table names when reading from Airbyte source tables. |
-| `outputSuffix` | No | `'_airbyte'` | Suffix appended to output table names to distinguish them from `dfe-analytics` tables. |
+| `tableSuffix` | No | `'_airbyte'` | Suffix appended to output table names to distinguish them from `dfe-analytics` tables. |
 | `primaryKeyField` | No | `'id'` | Default primary key field name. Can be overridden per-entity with `primaryKey` in `dataSchema`. |
 | `heartbeatFreshnessHours` | No | `12` | Number of hours after which the global freshness assertion will fail if no new Airbyte sync has occurred. |
 | `heartbeatProjectName` | No | `bqProjectName` | BigQuery project containing the heartbeat table. |
