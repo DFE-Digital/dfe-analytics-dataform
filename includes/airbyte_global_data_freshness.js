@@ -3,10 +3,10 @@
 module.exports = (params) => {
   if (!params.enableAirbyteSource) return null;
 
-  const freshnessHours = params.airbyteConfig.heartbeatFreshnessHours;
-  const heartbeatProject = params.airbyteConfig.heartbeatProjectName;
-  const heartbeatDataset = params.airbyteConfig.heartbeatDatasetName;
-  const heartbeatTable = params.airbyteConfig.heartbeatTableName;
+  const freshnessHours = params.airbyteConfig.freshnessHours;
+  const heartbeatProject = params.airbyteConfig.projectName;
+  const heartbeatDataset = params.airbyteConfig.datasetName;
+  const heartbeatTable = params.airbyteConfig.tableName;
 
   if (params.airbyteConfig.disableFreshnessCheckDuringRange && params.disableAssertionsNow) {
     return null;

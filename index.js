@@ -96,10 +96,10 @@ module.exports = (params) => {
             primaryKeyField: 'id', // Default primary key field name
         },
         airbyteHeartbeat: {
-                heartbeatFreshnessHours: 12, // Number of hours to wait before triggering an assertion failure, if no new data has been received from Airbyte
-                heartbeatProjectName: params.bqProjectName, // name of the BigQuery project that Airbyte streams heartbeat data into
-                heartbeatDatasetName: params.datasetName, // name of the BigQuery dataset that Airbyte streams heartbeat data into
-                heartbeatTableName: 'airbyte_heartbeat', // name of the BigQuery table that Airbyte streams heartbeat data into
+                freshnessHours: 12, // Number of hours to wait before triggering an assertion failure, if no new data has been received from Airbyte
+                projectName: params.bqProjectName, // name of the BigQuery project that Airbyte streams heartbeat data into
+                datasetName: params.datasetName, // name of the BigQuery dataset that Airbyte streams heartbeat data into
+                tableName: 'airbyte_heartbeat', // name of the BigQuery table that Airbyte streams heartbeat data into
                 disableFreshnessCheckDuringRange: false, // whether to disable check on the airbyte heartbeat table
             },
         
