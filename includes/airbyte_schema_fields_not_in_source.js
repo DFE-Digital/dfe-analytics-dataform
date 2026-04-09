@@ -18,7 +18,7 @@ module.exports = (params) => {
       '_ab_cdc_deleted_at',
       '_ab_cdc_lsn',
       '_ab_cdc_updated_at',
-      ...tableSchema.keys.map(key => key.keyName)
+      ...tableSchema.keys.filter(k => !k.historic).map(key => key.keyName)
     ];
 
     // Deduplicate
