@@ -291,6 +291,15 @@ function validateAirbyteParams(params) {
         });
     }
     
+};
+
+function getKeyColumns(keys) {
+    return keys.filter(k => !k.historic).map(key => ({
+        [key.alias || key.keyName]: {
+            description: key.description,
+            bigqueryPolicyTags: key.hidden && key.hiddenPolicyTagLocation ? [key.hiddenPolicyTagLocation] : []
+        }
+    }))
 }
 
 module.exports = {
@@ -299,5 +308,6 @@ module.exports = {
   dateRangesToDisableAssertionsNow,
   attributionParamFields,
   attributionParamFieldMetadata,
-  validateAirbyteParams
+  validateAirbyteParams,
+  getKeyColumns
 }

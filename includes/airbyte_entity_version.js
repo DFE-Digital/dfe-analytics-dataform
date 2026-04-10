@@ -1,21 +1,13 @@
 /* Generates {entity}_version_{source}{suffix} tables from Airbyte CDC data. */
 
 const data_functions = require("./data_functions");
+const parameterFunctions = require("./parameter_functions");
 
 module.exports = (params) => {
     if (!params.enableAirbyteSource) return null;
     if (!params.enableAirbyteSource || !params.airbyteEnableVersioning) return null;
 
     const suffix = params.airbyteConfig.tableSuffix || '_airbyte';
-
-    const getKeys = (keys) => {
-    return keys.filter(k => !k.historic).map(key => ({
-        [key.alias || key.keyName]: {
-          description: key.description,
-          bigqueryPolicyTags: key.hidden && key.hiddenPolicyTagLocation ? [key.hiddenPolicyTagLocation] : []
-        }
-    }))
-    };
 
     return params.dataSchema.map(entitySchema => {
         const tableName = `${entitySchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
@@ -46,7 +38,7 @@ module.exports = (params) => {
                     deleted_at: "Timestamp of the CDC event at which the entity was deleted in the source database. NULL if not deleted.",
                     _airbyte_raw_id: "Unique identifier assigned by Airbyte to each raw record ingested."
                 },
-                ...(entitySchema.keys ? getKeys(entitySchema.keys) : [])
+                ...(entitySchema.keys ? parameterFunctions.getKeyColumns(entitySchema.keys) : [])
             ),
             bigquery: {
                 partitionBy: "DATE(cdc_updated_at)",
