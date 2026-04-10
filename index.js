@@ -35,8 +35,7 @@ const pipelineSnapshot = require("./includes/pipeline_snapshot");
 
 // Airbyte modules
 const airbyteGlobalDataFreshness = require("./includes/airbyte_global_data_freshness");
-const airbyteFieldsNotInSchema = require("./includes/airbyte_fields_not_in_schema");
-const airbyteSchemaFieldsNotInSource = require("./includes/airbyte_schema_fields_not_in_source");
+const airbyteSchemaAssertions = require("./includes/airbyte_schema_assertions");
 const airbyteEntityLatest = require("./includes/airbyte_entity_latest");
 const airbyteEntityVersion = require("./includes/airbyte_entity_version");
 const airbyteEntityDataNotFresh = require("./includes/airbyte_entity_data_not_fresh");
@@ -200,15 +199,11 @@ module.exports = (params) => {
                 airbyteGlobalDataFreshness: airbyteGlobalDataFreshness(params),
             } : {}),
 
-            // Airbyte source fields not in schema assertion
+            // Airbyte schema assertions
             ...(params.airbyteEnableAssertions ? {
-            airbyteFieldsNotInSchema: airbyteFieldsNotInSchema(params),
+            airbyteSchemaAssertions: airbyteSchemaAssertions(params),
             } : {}),
 
-            // Airbyte schema fields not in source assertion
-            ...(params.airbyteEnableAssertions ? {
-            airbyteSchemaFieldsNotInSource: airbyteSchemaFieldsNotInSource(params),
-            } : {}),
         }
     }
 
