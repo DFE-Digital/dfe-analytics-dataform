@@ -45,7 +45,7 @@ module.exports = (params) => {
                     partitionBy: "DATE(created_at)"
                 } : {})
             },
-            tags: [params.eventSourceName.toLowerCase(), 'airbyte'],
+            tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'latest'],
             description: "[AIRBYTE] Latest version of " + tableSchema.entityTableName + ". Sourced from the Airbyte version table in the " + params.airbyteConfig.datasetName + " dataset. " + (tableSchema.description || ''),
             columns: Object.assign({
                 last_streamed_event_occurred_at: "Timestamp of the last Airbyte CDC update for this entity (cdc_updated_at from the latest version).",

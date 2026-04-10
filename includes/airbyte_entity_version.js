@@ -58,7 +58,7 @@ module.exports = (params) => {
                     entitytype: 'version'
                 }
             },
-            tags: [params.eventSourceName.toLowerCase(), 'airbyte'],
+            tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'version'],
             assertions: {
                 uniqueKey: [
                     /* Airbyte creates duplicates on schema changes; added cdc_updated_at to the unique key assertion. */
