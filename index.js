@@ -96,7 +96,7 @@ module.exports = (params) => {
 
         airbyteHeartbeat: {
                 freshnessHours: 12, // Number of hours to wait before triggering an assertion failure, if no new data has been received from Airbyte
-                datasetName: dataform.projectConfig.defaultSchema, // name of the BigQuery dataset for heartbeat data.
+                datasetName: null, // name of the BigQuery dataset for heartbeat data.
                 tableName: 'airbyte_heartbeat', // name of the heartbeat table
                 disableFreshnessCheckDuringRange: false, // Boolean. If true, disables the heartbeat freshness check assertion during the date ranges specified in assertionDisableDuringDateRanges
             },

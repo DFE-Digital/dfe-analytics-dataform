@@ -27,7 +27,9 @@ dfeAnalyticsDataform({
     },
 
     airbyteHeartbeat: {
-        datasetName: "rtt_airbyte_production"
+        datasetName: "rtt_airbyte_production",
+        freshnessHours: 12,
+        tableName: 'airbyte_heartbeat'
     },
     
     airbyteEnableVersioning: true,

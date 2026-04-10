@@ -19,7 +19,7 @@ module.exports = (params) => {
   ).tags([params.eventSourceName.toLowerCase(), 'airbyte'])
     .query(ctx =>
       "SELECT _airbyte_extracted_at AS last_airbyte_sync_at " +
-      "FROM `" + projectName + "." + heartbeat.datasetName + "." + heartbeat.tableName + "` " +
+      "FROM `" + projectName + "." + heartbeat.datasetName + "." + heartbeat.tableName + "`" +
       "WHERE _airbyte_extracted_at < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL " + heartbeat.freshnessHours + " HOUR)"
     )
 }
