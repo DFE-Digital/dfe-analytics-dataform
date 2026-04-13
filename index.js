@@ -177,7 +177,6 @@ module.exports = (params) => {
 
     // NEW: Airbyte processing (only if enabled)
     if (params.enableAirbyteSource) {
-        parameterFunctions.validateAirbyteParams(params);
 
         result = {
             ...result,
