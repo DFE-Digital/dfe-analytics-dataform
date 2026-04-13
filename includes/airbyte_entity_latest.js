@@ -4,7 +4,6 @@ const parameterFunctions = require("./parameter_functions");
 
 module.exports = (params) => {
     if (!params.enableAirbyteSource) return null;
-    if (!params.airbyteEnableVersioning) return null;
 
     const suffix = params.airbyteConfig.tableSuffix || '_airbyte';
 

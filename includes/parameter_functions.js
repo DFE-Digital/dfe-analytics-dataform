@@ -28,9 +28,7 @@ const validTopLevelParameters = ['eventSourceName',
     // Airbyte parameters
     'enableAirbyteSource',
     'airbyteConfig',
-    'airbyteHeartbeat',
-    'airbyteEnableVersioning',
-    'airbyteEnableAssertions'
+    'airbyteHeartbeat'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
     'description',
@@ -185,10 +183,10 @@ function validateParams(params) {
             }
         })
     });
-    
+
     // Airbyte-specific validation
     if (params.enableAirbyteSource) {
-        ['enableAirbyteSource', 'airbyteEnableVersioning', 'airbyteEnableAssertions'].forEach(param => {
+        ['enableAirbyteSource'].forEach(param => {
             if (params[param] !== undefined && typeof params[param] !== 'boolean') {
                 throw new Error(`${param} must be a boolean value (true or false), not "${params[param]}".`);
             }

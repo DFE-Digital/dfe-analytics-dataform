@@ -101,9 +101,6 @@ module.exports = (params) => {
                 disableFreshnessCheckDuringRange: false, // Boolean. If true, disables the heartbeat freshness check assertion during the date ranges specified in assertionDisableDuringDateRanges
             },
 
-        airbyteEnableVersioning: true, // Generate _version tables from Airbyte
-        airbyteEnableAssertions: true, // Generate Airbyte-specific assertions
-
         ...params
     };
 
@@ -122,16 +119,19 @@ module.exports = (params) => {
     params.disableAssertionsNow = parameterFunctions.dateRangesToDisableAssertionsNow(params.assertionDisableDuringDateRanges, new Date());
 
     // Build result object
-    let result = {};
+    let result = {
+        events: events(params),
+        eventsDataNotFresh: eventsDataNotFresh(params),
+        customEventDataNotFresh: customEventDataNotFresh(params),
+        dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
+        version
+        };
 
     // EXISTING: dfe-analytics processing
     // Publish and return datasets - assertions first for quick access in the Dataform UI
     if (params.transformEntityEvents) {
-        result = {
-            events: events(params),
-            eventsDataNotFresh: eventsDataNotFresh(params),
+        Object.assign(result, {
             entityDataNotFresh: entityDataNotFresh(params),
-            customEventDataNotFresh: customEventDataNotFresh(params),
             entityTableCheckScheduled: entityTableCheckScheduled(params),
             entityTableCheckImport: entityTableCheckImport(params),
             entityIdsDoNotMatch: entityIdsDoNotMatch(params),
@@ -139,7 +139,6 @@ module.exports = (params) => {
             pageviewWithFunnel: pageviewWithFunnel(params),
             sessions: sessions(params),
             session_details: session_details(params),
-            dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
             entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
             unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
             unhandledCustomEventIsBeingStreamed: unhandledCustomEventIsBeingStreamed(params),
@@ -156,56 +155,29 @@ module.exports = (params) => {
             migrateHistoricEventsToCurrentHiddenPIIConfiguration: migrateHistoricEventsToCurrentHiddenPIIConfiguration(params),
             entityAt: entityAt(params),
             pipelineTableSnapshot: pipelineTableSnapshot(version, params),
-            pipelineSnapshot: pipelineSnapshot(version, params),
-            version: version
-        };
+            pipelineSnapshot: pipelineSnapshot(version, params)
+        });
     } else {
-        result = {
-            events: events(params),
-            eventsDataNotFresh: eventsDataNotFresh(params),
-            customEventDataNotFresh: customEventDataNotFresh(params),
+        Object.assign(result, {
             flattenedCustomEvent: flattenedCustomEvent(params),
             hiddenPIIConfigurationDoesNotMatchEventsStreamed: hiddenPIIConfigurationDoesNotMatchEventsStreamed(params),
             pageviewWithFunnel: pageviewWithFunnel(params),
             sessions: sessions(params),
             session_details: session_details(params),
-            dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
-            pipelineSnapshot: pipelineSnapshot(version, params),
-            version: version
-        };
+            pipelineSnapshot: pipelineSnapshot(version, params)
+        });
     }
 
-    // NEW: Airbyte processing (only if enabled)
+    // Airbyte processing (only if enabled)
     if (params.enableAirbyteSource) {
-
-        result = {
-            ...result,
-            // Airbyte _latest tables
+        Object.assign(result, {
+            airbyteEntityVersion: airbyteEntityVersion(params),
             airbyteEntityLatest: airbyteEntityLatest(params),
-
-            // Airbyte _version tables
-            ...(params.airbyteEnableVersioning ? {
-                airbyteEntityVersion: airbyteEntityVersion(params)
-            } : {}),
-
-            // Airbyte entity data not fresh check
-            ...(params.airbyteEnableAssertions ? {
-                airbyteEntityDataNotFresh: airbyteEntityDataNotFresh(params)
-            } : {}),
-
-            // Airbyte global data freshness (heartbeat) check
-            ...(params.airbyteEnableAssertions ? {
-                airbyteGlobalDataFreshness: airbyteGlobalDataFreshness(params),
-            } : {}),
-
-            // Airbyte schema assertions
-            ...(params.airbyteEnableAssertions ? {
+            airbyteEntityDataNotFresh: airbyteEntityDataNotFresh(params),
+            airbyteGlobalDataFreshness: airbyteGlobalDataFreshness(params),
             airbyteSchemaAssertions: airbyteSchemaAssertions(params),
-            } : {}),
-
-        }
+        });
     }
 
-    result.version = version;
     return result;
 }

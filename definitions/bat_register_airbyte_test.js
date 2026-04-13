@@ -32,9 +32,6 @@ dfeAnalyticsDataform({
         tableName: 'airbyte_heartbeat'
     },
     
-    airbyteEnableVersioning: true,
-    airbyteEnableAssertions: true,
-    
     dataSchema: [{
             entityTableName: "academic_cycles",
             description: "",
