@@ -1,6 +1,8 @@
 # dfe-analytics-dataform
 Dataform package containing commonly used SQL functions and table definitions, for use with event data streamed to BigQuery using DfE-Digital/dfe-analytics: https://github.com/DFE-Digital/dfe-analytics.
 
+As of v2.5.0, `dfe-analytics-dataform` also supports ingestion of entity data from [Airbyte](https://airbyte.com/) as a data source alongside the existing `dfe-analytics` event stream. To opt in to this feature, set `enableAirbyteSource: true`. By default, no Airbyte-related tables or assertions will be generated, and existing `dfe-analytics` processing will be unaffected.
+
 ## How to install
 1. Set up your Dataform project - see [Google documentation](https://cloud.google.com/dataform/docs/overview).
 2. Ensure that it is connected to your BigQuery project.
@@ -63,19 +65,43 @@ dfeAnalyticsDataform({
 
 12. If you are using ```dfe-analytics-dotnet```, replace the entire ```dataSchema: [ ... ],``` parameter with ```transformEntityEvents: false,``` - since the .NET port of ```dfe-analytics``` does not yet stream entity events into BigQuery.
 
-13. In the unlikely event that your ```events``` table is stored in a different BigQuery project to the project named in your ```defaultDatabase``` parameter in your GCP Dataform release configuration, add the line ```bqProjectName: 'name_of_the_bigquery_project_your_events_table_is_in',``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
+13. If you are using Airbyte, add the following parameters to your existing `dfeAnalyticsDataform()` configuration block in `definitions/dfe_analytics_dataform.js` to enable Airbyte processing:
 
-14. If your ```events``` table is stored in a different dataset to the dataset configured in your GCP Dataform release configuration, add the line ```bqDatasetName: "name_of_the_bigquery_project_your_events_table_is_in",``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
+```
+dfeAnalyticsDataform({
+  eventSourceName: "Short name for your event source here - this might be a short name for your service, for example",
+  // ... your existing configuration ...
 
-15. In the unlikely event that one or more of the tables in your database being streamed by ```dfe-analytics``` has a primary key that is not ```id```, add the line ```primaryKey: 'name_of_primary_key_for_this_table'``` to the element of the dataSchema that represents this table, alongside the ```entityTableName```.
+  enableAirbyteSource: true,
+  airbyteConfig: {
+    datasetName: "name of the BigQuery dataset that your Airbyte table is located in"
+  },
+  airbyteHeartbeat: {
+    datasetName: "name of the BigQuery dataset that your Airbyte Heartbeat table is located in",
+    tableName: "name of your airbyte_heartbeat table, defaults to airbyte_heartbeat"
+  }
 
-16. If your ```dfe-analytics``` implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table, add the line ```bqEventsTableNameSpace: 'your_namespace_here'``` after the line that sets the ```bqEventsTableName``` parameter. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per value of ```namespace``` - this allows configuration options to differ between namespaces.
+  dataSchema: [{
+    // ... your existing configuration ...
+  }]
+});
+```
+Airbyte modules reuse the same `dataSchema` configuration as the existing `dfe-analytics` pipeline. If you already have a `dataSchema` configured, there is no need to create a new one. If you do not have one configured already, you will need to add one.
 
-17. Commit your changes and merge to the ```main```/```master``` branch of the Github repository linked to your Dataform repository.
+14. In the unlikely event that your ```events``` table is stored in a different BigQuery project to the project named in your ```defaultDatabase``` parameter in your GCP Dataform release configuration, add the line ```bqProjectName: 'name_of_the_bigquery_project_your_events_table_is_in',``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
 
-18. Leave your development workspace. Run a one-off [manual compilation](https://cloud.google.com/dataform/docs/release-configurations#manual-compilation) of your production release configuration.
+15. If your ```events``` table is stored in a different dataset to the dataset configured in your GCP Dataform release configuration, add the line ```bqDatasetName: "name_of_the_bigquery_project_your_events_table_is_in",``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
 
-19. Run a 'full refresh' execution of your entire pipeline using this release configuration, and resolve any configuration errors this flags (e.g. omissions made when specifying a ```dataSchema```).
+16. In the unlikely event that one or more of the tables in your database being streamed by ```dfe-analytics``` has a primary key that is not ```id```, add the line ```primaryKey: 'name_of_primary_key_for_this_table'``` to the element of the dataSchema that represents this table, alongside the ```entityTableName```.
+
+17. If your ```dfe-analytics``` implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table, add the line ```bqEventsTableNameSpace: 'your_namespace_here'``` after the line that sets the ```bqEventsTableName``` parameter. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per value of ```namespace``` - this allows configuration options to differ between namespaces.
+
+18. Commit your changes and merge to the ```main```/```master``` branch of the Github repository linked to your Dataform repository.
+
+19. Leave your development workspace. Run a one-off [manual compilation](https://cloud.google.com/dataform/docs/release-configurations#manual-compilation) of your production release configuration.
+
+20. Run a 'full refresh' execution of your entire pipeline using this release configuration, and resolve any configuration errors this flags (e.g. omissions made when specifying a ```dataSchema```).
+
 
 ## Additional configuration options
 You may in addition to step 8 of the setup instructions wish to configure the following options by adding them to the JSON passed to the ```dfeAnalyticsDataform()``` JavaScript function.
@@ -102,6 +128,17 @@ You may in addition to step 8 of the setup instructions wish to configure the fo
 - ```searchEngineRefererDomainRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to work out whether an HTTP referer's domain name is a search engine (regardless of whether paid or organic). Defaults to ```'(?i)(google|bing|yahoo|aol|ask.co|baidu|duckduckgo|dogpile|ecosia|entireweb|exalead|gigablast|hotbot|info.com|lycos|metacrawler|mojeek|qwant|searx|startpage|swisscows|webcrawler|yandex|yippy)'``` if not specified.
 - ```disabled``` - ```true``` or ```false```. Defaults to ```false```. If set to ```true``` then calling the package will not do anything.
 - ```webRequestEventExpirationDays``` - integer number of days after which ```dfe-analytics-dataform``` will delete web request events from your events tables, pageview table and sessions table
+
+In addition to step 13 of the setup instructions, the following Airbyte-related options can be added to the JSON passed to the ```dfeAnalyticsDataform()``` JavaScript function
+- ```airbyteConfig``` - configuration block for Airbyte processing. Required when ```enableAirbyteSource``` is true. Contains:
+- ```tablePrefix``` - 
+- ```tableSuffix``` - 
+- ```defaultPrimaryKeyField``` -
+- ```freshnessHours``` - 
+- ```datasetName``` -
+- ```tableName``` - 
+- ```disableFreshnessCheckDuringRange``` - 
+
 
 ## Updating to a new version
 Users are notified through internal channels when a new version of ```dfe-analytics-dataform``` is released. To update:
@@ -191,6 +228,8 @@ Unless ```enableMonitoring: false``` is set, ```dfe-analytics-dataform``` will a
 
 Similar monitoring for custom event data is not supported because there is no source database which this data can be compared to.
 
+When Airbyte is enabled, a separate freshness check is available via the heartbeat table. If the Airbyte heartbeat table has not been updated within the configured ```freshnessHours``` (in ```airbyteHeartbeat```), the ```{eventSourceName}_airbyte_global_data_not_fresh``` assertion will fail.
+
 ### Hidden fields
 ```dfe-analytics-dataform``` is intended for use with the ```dfe-analytics``` Ruby gem. When used together they have the capability to use [BigQuery column-level access control](https://cloud.google.com/bigquery/docs/column-level-security-intro) to restrict access to certain 'hidden' fields. ```dfe-analytics``` is responsible for ensuring that hidden fields are streamed into the ```hidden_data``` field in your events table, while ```dfe-analytics-dataform``` is responsible for ensuring that data in that field remains hidden once it has been transformed into the other tables generated by ```dfe-analytics-dataform```. If your Dataform pipeline transforms hidden data into fields in other tables which you also wish to hide, you are responsible for attaching policy tags to these fields. Google provides [documentation](https://cloud.google.com/dataform/docs/policy-tags) describing how to do this.
 
@@ -208,6 +247,8 @@ dfe-analytics-dataform also contains two assertions which will fail and alert yo
 - ```hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed``` will fail when some events in a sample representing 1% of historic events did not match your hidden field configuration. To prevent this failure, update these events to migrate the fields in ```data``` into ```hidden_data``` using the ```your-eventSourceName-here_migrate_historic_events_to_current_hidden_pii_configuration``` stored procedure which ```dfe-analytics-dataform``` will create in your Dataform output dataset.
 
 If either of these assertions fail, most tables generated by ```dfe-analytics-dataform``` will not be updated. This is essential to ensure that data hidden fields is not copied into non-hidden fields in other tables generated by ```dfe-analytics-dataform```.
+
+When Airbyte is enabled, the ```{entity}_airbyte_fields_not_in_schema_{eventSourceName}``` assertion serves a similar purpose — it blocks the pipeline if any field in the Airbyte source table has not been explicitly classified with ```hidden: true``` or ```hidden: false``` in your ```dataSchema```. This prevents accidental exposure of sensitive data through the Airbyte output tables.
 
 #### Hiding fields in tables *not* managed by ```dfe-analytics-dataform```
 ```dfe-analytics-dataform``` is only capable of hiding fields in tables that it generates. If data is present in other tables in your BigQuery project, you must ensure that the correct policy tag is attached to these fields.
@@ -278,6 +319,7 @@ If a data retention schedule has been configured via the top-level, custom event
 - Custom events in flattened custom events tables which are older than either the top-level or custom event-level ```expirationDays``` parameter (whichever is more recent)
 - Pageviews and sessions in the ```pageview_with_funnels```, ```sessions``` and ```session_details``` tables which are older than ```expirationDays``` or ```webRequestEventExpirationDays``` (whichever is more recent)
 - Checksum calculations in the ```entity_table_check_import``` and ```entity_table_check_scheduled``` tables which are older than ```expirationDays```
+- When Airbyte is enabled, versions in the Airbyte ```_version``` tables which are older than either the top-level or entity-level ```expirationDays``` parameter (whichever is more recent)
 
 Where possible deletion occurs via means of partition or table expiry to ensure that data deletion occurs even if the Dataform pipeline does not run. If this is not possible then in many cases tables are recreated from source each night, which has the effect of deleting data where it has been deleted from source. In the remaining cases ```dfe-analytics-dataform``` will run ```DELETE``` DML statements to achieve this. 
 
@@ -307,99 +349,18 @@ The names of these will vary depending on the ```eventSourceName``` you have spe
 - Assertions called ```foo_hidden_pii_configuration_does_not_match_entity_events_streamed_yesterday``` and ```foo_hidden_pii_configuration_does_not_match_sample_of_historic_entity_events_streamed```. See section "Hidden fields" above for more information.
 - An assertion called ```foo_entities_have_not_been_backfilled``` which fails if no ```import_entity_table_check``` or ```import_entity``` events exist in the source events table for a particular ```entity_table_name``` configured in ```dataSchema```. Likely causes of this are not running an import as part of ```dfe-analytics``` installation, not running an import on a newly created table in the application database, or deletion of the latest import of the table due to enforcement of a data retention schedule
 
-## Airbyte data source support (experimental)
+### Additional tables and assertions created when Airbyte is enabled
 
-As of v2.5.0, `dfe-analytics-dataform` supports ingesting entity data from [Airbyte](https://airbyte.com/) as an alternative or complementary data source alongside the existing `dfe-analytics` event streaming pipeline. This feature is entirely opt-in. Setting `enableAirbyteSource: false` (the default) means no Airbyte-related tables or assertions will be generated, and existing `dfe-analytics` processing is completely unaffected.
+When ```enableAirbyteSource: true``` is set, the following additional tables and assertions are created for each entity in your ```dataSchema```. For example if your ```eventSourceName``` is ```foo``` and you have an entity ```bar```:
 
-### Enabling Airbyte processing
+- An incremental table called ```bar_version_foo_airbyte```, containing the version history of the ```bar``` entity derived from Airbyte. Includes ```valid_from```, ```valid_to```, ```is_current```, ```is_deleted```, and ```version_number``` fields.
+- A table (or view, depending on ```materialisation```) called ```bar_latest_foo_airbyte```, containing only the current, non-deleted version of each ```bar``` entity, sourced from the version table.
+- An assertion called ```bar_airbyte_fields_not_in_schema_foo``` which **blocks** the version and latest tables if the Airbyte source table contains columns not configured in ```dataSchema```. You must add any new fields to your ```dataSchema``` with an explicit ```hidden: true``` or ```hidden: false``` classification to unblock the pipeline.
+- An assertion called ```bar_airbyte_schema_fields_missing_from_source_foo``` which fails (but does **not** block the pipeline) if fields configured in ```dataSchema``` are missing from the Airbyte source table. This alerts you to schema drift.
+- If you have configured an entity-level ```dataFreshnessDays``` parameter, an assertion called ```bar_airbyte_data_not_fresh_foo``` which fails if no data has been received for this entity within the configured number of days.
+- An assertion called ```foo_airbyte_global_data_not_fresh``` which fails if the Airbyte heartbeat table has not been updated within the configured ```freshnessHours```.
 
-Add the following parameters to your `dfeAnalyticsDataform()` call in `definitions/dfe_analytics_dataform.js`:
-
-```
-dfeAnalyticsDataform({
-  eventSourceName: "my_service",
-  // ... your existing configuration ...
-
-  enableAirbyteSource: true,
-  airbyteConfig: {
-    datasetName: "your_airbyte_bigquery_dataset",  // required
-    tablePrefix: "",                                // optional, prefix for Airbyte table names
-    tableSuffix: "_airbyte",                       // optional, suffix for output tables (default: '_airbyte')
-    primaryKeyField: "id",                          // optional, default primary key (default: 'id')
-    heartbeatFreshnessHours: 12,                    // optional, hours before heartbeat freshness alert (default: 12)
-    heartbeatDatasetName: "your_heartbeat_dataset", // optional, defaults to datasetName
-    heartbeatTableName: "airbyte_heartbeat",        // optional, defaults to 'airbyte_heartbeat'
-  },
-  airbyteEnableVersioning: true,   // optional, generate _version and _latest tables (default: true)
-  airbyteEnableAssertions: true,   // optional, generate Airbyte assertions (default: true)
-
-
- dataSchema: [{
-    entityTableName: "your_table_name",
-    description: "Description of this entity.",
-    keys: [{
-      keyName: "field_name",
-      dataType: "string",
-      description: "Description of this field.",
-      hidden: false
-    }]
-  }]
-});
-```
-
-### How it works
-
-When `enableAirbyteSource` is `true`, `dfe-analytics-dataform` will generate additional tables and assertions alongside any existing `dfe-analytics` tables. The Airbyte tables read directly from the Airbyte CDC tables in BigQuery rather than from the `dfe-analytics` events table.
-
-Airbyte output tables are distinguished from `dfe-analytics` output tables by the `tableSuffix` (default `_airbyte`). For example, if your `eventSourceName` is `foo` and you have an entity `bar`, the following Airbyte tables would be created:
-- `{entity}_version_{eventSourceName}_airbyte` — incremental version history table built from Airbyte CDC data
-- `{entity}_latest_{eventSourceName}_airbyte` — latest (current) version of each entity
-
-### `airbyteConfig` parameters
-
-| Parameter | Required | Default | Description |
-|---|---|---|---|
-| `datasetName` | **Yes** | `null` | BigQuery dataset containing Airbyte-synced tables. |
-| `tablePrefix` | No | `''` | Prefix prepended to entity table names when reading from Airbyte source tables. |
-| `tableSuffix` | No | `'_airbyte'` | Suffix appended to output table names to distinguish them from `dfe-analytics` tables. |
-| `primaryKeyField` | No | `'id'` | Default primary key field name. Can be overridden per-entity with `primaryKey` in `dataSchema`. |
-| `heartbeatFreshnessHours` | No | `12` | Number of hours after which the global freshness assertion will fail if no new Airbyte sync has occurred. |
-| `heartbeatProjectName` | No | `bqProjectName` | BigQuery project containing the heartbeat table. |
-| `heartbeatDatasetName` | No | `airbyteConfig.datasetName` | BigQuery dataset containing the heartbeat table. |
-| `heartbeatTableName` | No | `'airbyte_heartbeat'` | Name of the Airbyte heartbeat table. |
-| `heartbeatFreshnessDisableDuringRange` | No | `false` | If `true`, disables the heartbeat freshness assertion during `assertionDisableDuringDateRanges`. |
-
-### Airbyte feature flags
-
-| Parameter | Default | Description |
-|---|---|---|
-| `airbyteEnableVersioning` | `true` | If `true`, generates incremental `_version` and `_latest` tables from Airbyte CDC data for each entity in `dataSchema`. |
-| `airbyteEnableAssertions` | `true` | If `true`, generates Airbyte-specific assertions (PII mismatch, entity data freshness, global heartbeat freshness). |
-
-### Airbyte tables and assertions created
-
-When `enableAirbyteSource: true` is set, the following tables and assertions are created for each entity in your `dataSchema`:
-
-**Tables:**
-- `{entity}_version_{eventSourceName}_airbyte` — incremental table containing the version history of each entity, derived from Airbyte CDC data. Includes `valid_from`, `valid_to`, `is_current`, `is_deleted`, and `version_number` columns. Partitioned by `DATE(cdc_updated_at)` and clustered by the primary key.
-- `{entity}_latest_{eventSourceName}_airbyte` — table (or view, depending on `materialisation`) containing only the current, non-deleted version of each entity, sourced from the version table.
-
-**Assertions (when `airbyteEnableAssertions: true`):**
-| Assertion | Blocks pipeline? | Description |
-|---|---|---|
-| `{entity}_airbyte_fields_not_in_schema_{eventSourceName}` | Yes (version + latest tables depend on it) | Fails if the Airbyte source table contains columns not configured in `dataSchema`. Ensures all fields are explicitly classified for PII handling before data is processed. |
-| `{entity}_airbyte_schema_fields_missing_from_source_{eventSourceName}` | No | Fails if fields configured in `dataSchema` are missing from the Airbyte source table. Informational — alerts you when fields have been removed from the source database. |
-| `{entity}_airbyte_data_not_fresh_{eventSourceName}` | No | Fails if no data has been received for this entity within the configured `dataFreshnessDays`. Only created for entities with `dataFreshnessDays` set. |
-| `{eventSourceName}_airbyte_global_data_not_fresh` | No | Fails if the Airbyte heartbeat table has not been updated within the configured `heartbeatFreshnessHours`. |
-
-### Important notes
-
-- **PII safety**: When `airbyteEnableAssertions` is `true`, the version tables depend on the PII assertion passing. If a new column appears in an Airbyte source table that is not in your `dataSchema`, the PII assertion will fail and block the version table from updating. You **must** add the new column to your `dataSchema` with the correct `hidden` setting (true for PII, false otherwise).
-- **First run**: The first time you enable Airbyte processing, you should run a **full refresh** of the version tables in Dataform.
-- **Shared `dataSchema`**: Airbyte modules reuse the same `dataSchema` configuration as the existing dfe-analytics pipeline. No separate schema definition is needed.
-- **Side-by-side operation**: Both dfe-analytics and Airbyte tables can coexist in the same Dataform project. Airbyte output tables are distinguished by the `_airbyte` suffix and tagged with `'airbyte'`.
-- **Per-entity primary keys**: Each entity can specify its own `primaryKey` in `dataSchema`, falling back to `airbyteConfig.primaryKeyField`, then `'id'`.
-- **Data retention**: Both `expirationDays` (top-level) and per-entity `expirationDays` are supported for Airbyte version tables, deleting rows where `valid_from` is older than the retention period.
+Both `dfe-analytics` and Airbyte tables coexist in the same Dataform project. Airbyte output tables are distinguished by the ```_airbyte``` suffix (or the value of ```tableSuffix```) and tagged with ```'airbyte'``` in Dataform.
 
 ## Test framework
 Tests with the jest framework are filed in the `tests` folder
