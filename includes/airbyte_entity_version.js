@@ -56,8 +56,7 @@ module.exports = (params) => {
                 ),
                 bigquery: {
                     partitionBy: "DATE(valid_to)",
-                    clusterBy: [primaryKey],
-                    updatePartitionFilter: "valid_to >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)",
+                    clusterBy: [primaryKey, "is_current"],
                     labels: {
                         eventsource: params.eventSourceName.toLowerCase(),
                         sourcedataset: params.bqDatasetName.toLowerCase(),
