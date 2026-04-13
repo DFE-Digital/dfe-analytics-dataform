@@ -86,21 +86,21 @@ dfeAnalyticsDataform({
   }]
 });
 ```
-Airbyte modules reuse the same `dataSchema` configuration as the existing `dfe-analytics` pipeline. If you already have a `dataSchema` configured, there is no need to create a new one. If you do not have one configured already, you will need to add one.
+14. Airbyte modules reuse the same `dataSchema` configuration as the existing `dfe-analytics` pipeline. If you already have     a `dataSchema` configured, there is no need to create a new one. If you do not have one configured already, you will        need to add one.
 
-14. In the unlikely event that your ```events``` table is stored in a different BigQuery project to the project named in your ```defaultDatabase``` parameter in your GCP Dataform release configuration, add the line ```bqProjectName: 'name_of_the_bigquery_project_your_events_table_is_in',``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
+15. In the unlikely event that your ```events``` table is stored in a different BigQuery project to the project named in your ```defaultDatabase``` parameter in your GCP Dataform release configuration, add the line ```bqProjectName: 'name_of_the_bigquery_project_your_events_table_is_in',``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
 
-15. If your ```events``` table is stored in a different dataset to the dataset configured in your GCP Dataform release configuration, add the line ```bqDatasetName: "name_of_the_bigquery_project_your_events_table_is_in",``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
+16. If your ```events``` table is stored in a different dataset to the dataset configured in your GCP Dataform release configuration, add the line ```bqDatasetName: "name_of_the_bigquery_project_your_events_table_is_in",``` just before the line which sets ```bqDatasetName``` parameter in ```dfe_analytics_dataform.js```.
 
-16. In the unlikely event that one or more of the tables in your database being streamed by ```dfe-analytics``` has a primary key that is not ```id```, add the line ```primaryKey: 'name_of_primary_key_for_this_table'``` to the element of the dataSchema that represents this table, alongside the ```entityTableName```.
+17. In the unlikely event that one or more of the tables in your database being streamed by ```dfe-analytics``` has a primary key that is not ```id```, add the line ```primaryKey: 'name_of_primary_key_for_this_table'``` to the element of the dataSchema that represents this table, alongside the ```entityTableName```.
 
-17. If your ```dfe-analytics``` implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table, add the line ```bqEventsTableNameSpace: 'your_namespace_here'``` after the line that sets the ```bqEventsTableName``` parameter. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per value of ```namespace``` - this allows configuration options to differ between namespaces.
+18. If your ```dfe-analytics``` implementation uses the ```namespace``` field to distinguish between multiple interfaces or applications that result in data streamed to the same ```events``` table, add the line ```bqEventsTableNameSpace: 'your_namespace_here'``` after the line that sets the ```bqEventsTableName``` parameter. To use ```dfe-analytics-dataform``` with more than one ```bqEventsTableNameSpace```, call ```dfeAnalyticsDataform();``` once per value of ```namespace``` - this allows configuration options to differ between namespaces.
 
-18. Commit your changes and merge to the ```main```/```master``` branch of the Github repository linked to your Dataform repository.
+19. Commit your changes and merge to the ```main```/```master``` branch of the Github repository linked to your Dataform repository.
 
-19. Leave your development workspace. Run a one-off [manual compilation](https://cloud.google.com/dataform/docs/release-configurations#manual-compilation) of your production release configuration.
+20. Leave your development workspace. Run a one-off [manual compilation](https://cloud.google.com/dataform/docs/release-configurations#manual-compilation) of your production release configuration.
 
-20. Run a 'full refresh' execution of your entire pipeline using this release configuration, and resolve any configuration errors this flags (e.g. omissions made when specifying a ```dataSchema```).
+21. Run a 'full refresh' execution of your entire pipeline using this release configuration, and resolve any configuration errors this flags (e.g. omissions made when specifying a ```dataSchema```).
 
 
 ## Additional configuration options
@@ -129,15 +129,18 @@ You may in addition to step 8 of the setup instructions wish to configure the fo
 - ```disabled``` - ```true``` or ```false```. Defaults to ```false```. If set to ```true``` then calling the package will not do anything.
 - ```webRequestEventExpirationDays``` - integer number of days after which ```dfe-analytics-dataform``` will delete web request events from your events tables, pageview table and sessions table
 
-In addition to step 13 of the setup instructions, the following Airbyte-related options can be added to the JSON passed to the ```dfeAnalyticsDataform()``` JavaScript function
-- ```airbyteConfig``` - configuration block for Airbyte processing. Required when ```enableAirbyteSource``` is true. Contains:
-- ```tablePrefix``` - 
-- ```tableSuffix``` - 
-- ```defaultPrimaryKeyField``` -
-- ```freshnessHours``` - 
-- ```datasetName``` -
-- ```tableName``` - 
-- ```disableFreshnessCheckDuringRange``` - 
+In addition to step 13 of the setup instructions, the following Airbyte-related options can be added to the JSON passed to the ```dfeAnalyticsDataform()``` JavaScript function:
+
+```airbyteConfig``` - configuration block for Airbyte processing. Required when ```enableAirbyteSource``` is true. Contains:
+- ```datasetName``` - name of the BigQuery dataset that Airbyte streams data into. Required when ```enableAirbyteSource``` is ```true```.
+- ```tableSuffix``` - suffix appended to output table names to distinguish Airbyte tables from ```dfe-analytics``` tables. For example, if set to ```'_airbyte'``` and your entity is ```users```, the output tables will be named ```users_version_{eventSourceName}_airbyte``` and ```users_latest_{eventSourceName}_airbyte```. Defaults to ```'_airbyte'``` if not specified.
+- ```defaultPrimaryKeyField``` - the default primary key field name used for all entities when reading from Airbyte source tables. Can be overridden on a per-entity basis by setting ```primaryKey``` in ```dataSchema```. Defaults to ```'id'``` if not specified.
+
+```airbyteHeartbeat``` - configuration block for Airbyte heartbeat freshness monitoring. Contains the following parameters:
+- ```freshnessHours``` - number of hours to wait before triggering an assertion failure, if no new data has been received from Airbyte. For example, if set to ```12```, the ```{eventSourceName}_airbyte_global_data_not_fresh``` assertion will fail if the heartbeat table has not been updated in the last 12 hours. Defaults to ```12``` if not specified.
+- ```datasetName``` - name of the BigQuery dataset containing the Airbyte heartbeat table. Defaults to the value of ```airbyteConfig.datasetName``` if not specified.
+- ```tableName``` - name of the Airbyte heartbeat table. Defaults to ```'airbyte_heartbeat'``` if not specified.
+- ```disableFreshnessCheckDuringRange``` - ```true``` or ```false```. If set to ```true```, disables the heartbeat freshness check assertion when today's date falls within one of the date ranges specified in ```assertionDisableDuringDateRanges```. Defaults to ```false``` if not specified.
 
 
 ## Updating to a new version
