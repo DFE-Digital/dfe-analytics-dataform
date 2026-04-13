@@ -55,9 +55,9 @@ module.exports = (params) => {
                     ...(entitySchema.keys ? parameterFunctions.getKeyColumns(entitySchema.keys) : [])
                 ),
                 bigquery: {
-                    partitionBy: "DATE(cdc_updated_at)",
-                    clusterBy: ["is_current", primaryKey],
-                    updatePartitionFilter: "cdc_updated_at >= TIMESTAMP(DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY))",
+                    partitionBy: "DATE(valid_to)",
+                    clusterBy: [primaryKey],
+                    updatePartitionFilter: "valid_to >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)",
                     labels: {
                         eventsource: params.eventSourceName.toLowerCase(),
                         sourcedataset: params.bqDatasetName.toLowerCase(),
@@ -105,6 +105,18 @@ WITH
       AND _airbyte_extracted_at > extracted_at_checkpoint` : ''}
   ),
 
+${ctx.incremental() ? ` 
+ /* Re-read current versions so the window can include them when computing valid_to. */
+combined AS (
+    SELECT * EXCEPT (valid_from, valid_to, is_deleted, is_current, version_number)
+    FROM ${ctx.self()}
+    WHERE valid_to IS NULL
+
+    UNION ALL
+    
+    SELECT * FROM source_data
+  ),
+
 /* Deduplicate rows that are identical in all columns.
      This handles:
      - Full syncs: same data re-appended with new cdc_updated_at
@@ -112,98 +124,87 @@ WITH
      
      It does NOT dedupe when a new field is added and has a different value
      (e.g. old row has NULL, new row has 'some_value') */
-  source_data_deduplicate AS (
+  deduplicate AS (
+    SELECT *
+    FROM combined
+    QUALIFY ROW_NUMBER() OVER (
+      PARTITION BY id, updated_at
+      ORDER BY cdc_updated_at DESC
+      ) = 1
+  ),
+`: `
+
+/* Deduplicate rows that are identical in all columns.
+     This handles:
+     - Full syncs: same data re-appended with new cdc_updated_at
+     - Schema changes where old rows are re-synced but values haven't changed
+     
+     It does NOT dedupe when a new field is added and has a different value
+     (e.g. old row has NULL, new row has 'some_value') */
+  deduplicate AS (
     SELECT *
     FROM source_data
     QUALIFY ROW_NUMBER() OVER (
       PARTITION BY id, updated_at
       ORDER BY cdc_updated_at DESC
       ) = 1
-  ),
-
-${ctx.incremental() ? ` 
- /* Re-read current versions so the window can include them when computing valid_to. */
-combined AS (
-    SELECT * EXCEPT (valid_from, valid_to, is_deleted, is_current, version_number)
-    FROM ${ctx.self()}
-    WHERE is_current = TRUE
-
-    UNION ALL
-    
-    SELECT * FROM source_data_deduplicate
-  ),
+  ),`}
 
 /* Filter out deletion rows, they signal that the previous version ended. Keep them in a separate CTE. */
 deletions AS (
     SELECT
       ${primaryKey},
       MAX(deleted_at) AS deleted_at
-    FROM combined
+    FROM deduplicate
     WHERE deleted_at IS NOT NULL
     GROUP BY ${primaryKey}
   ),
 live_records AS (
     SELECT *
-    FROM combined
-    WHERE deleted_at IS NULL
-  )
-`: `
-/* Filter out deletion rows, they signal that the previous version ended. Keep them in a separate CTE. */
-deletions AS (
-    SELECT
-      ${primaryKey},
-      MAX(deleted_at) AS deleted_at
-    FROM source_data_deduplicate
-    WHERE deleted_at IS NOT NULL
-    GROUP BY ${primaryKey}
-        ),
-live_records AS (
-    SELECT *
-    FROM source_data_deduplicate
+    FROM deduplicate
     WHERE deleted_at IS NULL
   )
 
-`}
-    SELECT
-      live_records.*,
-      updated_at AS valid_from,
-      /* valid_to is either the next version's updated_at,
-         or if no next version exists, the deletion timestamp (if deleted) */
-      COALESCE(
-        LEAD(updated_at)
-          OVER (
-            PARTITION BY live_records.${primaryKey}
-            ORDER BY updated_at ASC, cdc_updated_at ASC
-          ),
-          deletions.deleted_at
-        ) AS valid_to,
-      deletions.deleted_at IS NOT NULL
-        AND LEAD(updated_at)
-          OVER (
-            PARTITION BY live_records.${primaryKey}
-            ORDER BY updated_at ASC, cdc_updated_at ASC
-          )
-          IS NULL AS is_deleted,
-      ROW_NUMBER()
-        OVER (
-          PARTITION BY live_records.${primaryKey}
-          ORDER BY updated_at DESC, cdc_updated_at DESC
-        ) = 1
-        AND deletions.deleted_at IS NULL AS is_current,
-      ROW_NUMBER()
-        OVER (
-          PARTITION BY live_records.${primaryKey}
-          ORDER BY updated_at ASC, cdc_updated_at ASC
-        ) AS version_number
-    FROM live_records
-    LEFT JOIN deletions USING (${primaryKey})
+SELECT
+  live_records.*,
+  updated_at AS valid_from,
+  /* valid_to is either the next version's updated_at,
+      or if no next version exists, the deletion timestamp (if deleted) */
+  COALESCE(
+    LEAD(updated_at)
+      OVER (
+        PARTITION BY live_records.${primaryKey}
+        ORDER BY updated_at ASC, cdc_updated_at ASC
+      ),
+      deletions.deleted_at
+    ) AS valid_to,
+  deletions.deleted_at IS NOT NULL
+    AND LEAD(updated_at)
+      OVER (
+        PARTITION BY live_records.${primaryKey}
+        ORDER BY updated_at ASC, cdc_updated_at ASC
+      )
+      IS NULL AS is_deleted,
+  ROW_NUMBER()
+    OVER (
+      PARTITION BY live_records.${primaryKey}
+      ORDER BY updated_at DESC, cdc_updated_at DESC
+    ) = 1
+    AND deletions.deleted_at IS NULL AS is_current,
+  ROW_NUMBER()
+    OVER (
+      PARTITION BY live_records.${primaryKey}
+      ORDER BY updated_at ASC, cdc_updated_at ASC
+    ) AS version_number
+FROM live_records
+LEFT JOIN deletions USING (${primaryKey})
 
 `)
-            .postOps(ctx => `${data_functions.setKeyConstraints(ctx, dataform, {
-            primaryKey: primaryKey + ", valid_from" 
-            })}
-            ${params.expirationDays ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${params.expirationDays};` : ``}
-            ${entitySchema.expirationDays ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${entitySchema.expirationDays};` : ``}
-        `)
-    });
+      .postOps(ctx => `${data_functions.setKeyConstraints(ctx, dataform, {
+      primaryKey: primaryKey + ", valid_from" 
+      })}
+      ${params.expirationDays ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${params.expirationDays};` : ``}
+      ${entitySchema.expirationDays ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${entitySchema.expirationDays};` : ``}
+    `)
+  });
 };
