@@ -6,7 +6,7 @@ As of v2.5.0, `dfe-analytics-dataform` also supports ingestion of entity data fr
 ## How to install
 1. Set up your Dataform project - see [Google documentation](https://cloud.google.com/dataform/docs/overview).
 2. Ensure that it is connected to your BigQuery project.
-3. Ensure that it is synchronised with its own dedicated Github repository.
+3. Ensure that it is synchronised with its own dedicated GitHub repository. Grant the Data Insights team (https://github.com/orgs/DFE-Digital/teams/data-insights) access to the newly created GitHub repository with the 'maintain' role.
 4. Set up a production release configuration - see [Google documentation](https://cloud.google.com/dataform/docs/release-configurations).
 5. Add the following line within the dependencies block of the package.json file in your Dataform project, replacing the Xs with the [latest version number of this package](https://github.com/DFE-Digital/dfe-analytics-dataform/releases).:
 ```
