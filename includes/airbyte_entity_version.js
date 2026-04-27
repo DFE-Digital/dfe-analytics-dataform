@@ -56,6 +56,7 @@ module.exports = (params) => {
                 ),
                 bigquery: {
                     partitionBy: "DATE(valid_to)",
+                    updatePartitionFilter: "valid_to IS NULL",
                     clusterBy: [primaryKey, "is_current"],
                     labels: {
                         eventsource: params.eventSourceName.toLowerCase(),
@@ -100,8 +101,7 @@ WITH
     FROM ${sourceTable}
     WHERE
       ${primaryKey} IS NOT NULL
-      ${ctx.incremental() ? `
-      AND _airbyte_extracted_at > extracted_at_checkpoint` : ''}
+      AND _airbyte_extracted_at > extracted_at_checkpoint
   ),
 
 ${ctx.incremental() ? ` 

@@ -81,7 +81,7 @@ module.exports = (params) => {
                 source_columns.column_name AS unconfigured_column,
             FROM source_columns
             LEFT JOIN configured_columns USING (column_name)
-            FULL JOIN optional_columns USING (column_name)
+            LEFT JOIN optional_columns USING (column_name)
             WHERE configured_columns.column_name IS NULL
                 AND optional_columns.column_name IS NULL
             ORDER BY source_columns.column_name
@@ -101,7 +101,7 @@ module.exports = (params) => {
                 '${tableSchema.entityTableName}' AS entity_table_name,
                 configured_columns.column_name AS missing_column,
             FROM configured_columns
-            FULL JOIN optional_columns USING (column_name)
+            LEFT JOIN optional_columns USING (column_name)
             LEFT JOIN source_columns USING (column_name)
             WHERE source_columns.column_name IS NULL
                 AND optional_columns.column_name IS NULL
