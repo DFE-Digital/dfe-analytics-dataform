@@ -4,7 +4,7 @@
    - One row per change event (insert/update/delete) captured by Change Data Capture
    - Each row contains the full entity state at the time of the change
    - Airbyte sync mode is incremental + append, so it only adds new entries when there are changes
-   - In full syncs, the same data re-appended with a new _ab_cdc_updated_at
+   - In full syncs, the same data re-appended with a new _airbyte_extracted_at and _ab_cdc_updated_at
    - Key Airbyte metadata columns:
        _airbyte_raw_id        - Unique ID assigned by Airbyte to each raw record
        _airbyte_extracted_at  - Timestamp when Airbyte extracted the record (PARTITION column)
@@ -55,8 +55,11 @@ module.exports = (params) => {
                     ...(entitySchema.keys ? parameterFunctions.getKeyColumns(entitySchema.keys) : [])
                 ),
                 bigquery: {
-                    partitionBy: "DATE(valid_to)",
-                    updatePartitionFilter: "valid_to IS NULL",
+                    /* - Partition 0: current versions (valid_to IS NULL)  — touched on every run
+                       - Partition 1: historical versions (valid_to IS NOT NULL) — written once, never touched again */
+                    partitionBy: "RANGE_BUCKET(valid_to_partition_number, GENERATE_ARRAY(0, 2, 1))",
+                    /* updatePartitionFilter ensures the MERGE only scans/rewrites current versions */
+                    updatePartitionFilter: "valid_to_partition_number = 0",
                     clusterBy: [primaryKey, "is_current"],
                     labels: {
                         eventsource: params.eventSourceName.toLowerCase(),
@@ -102,68 +105,46 @@ WITH
     WHERE
       ${primaryKey} IS NOT NULL
       AND _airbyte_extracted_at > extracted_at_checkpoint
-  ),
+    QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY CAST(${primaryKey} AS STRING), TIMESTAMP(updated_at)
+    ORDER BY _airbyte_extracted_at DESC) = 1
 
-${ctx.incremental() ? ` 
- /* Re-read current versions so the window can include them when computing valid_to. */
-combined AS (
-    SELECT * EXCEPT (valid_from, valid_to, is_deleted, is_current, version_number)
-    FROM ${ctx.self()}
-    WHERE valid_to IS NULL
-
+    ${ctx.incremental() ? ` 
+    /* Re-read current versions */
     UNION ALL
-    
-    SELECT * FROM source_data
-  ),
 
-/* Deduplicate rows that are identical in all columns.
-     This handles:
-     - Full syncs: same data re-appended with new cdc_updated_at
-     - Schema changes where old rows are re-synced but values haven't changed
-     
-     It does NOT dedupe when a new field is added and has a different value
-     (e.g. old row has NULL, new row has 'some_value') */
-  deduplicate AS (
-    SELECT *
-    FROM combined
-    QUALIFY ROW_NUMBER() OVER (
-      PARTITION BY id, updated_at
-      ORDER BY cdc_updated_at DESC
-      ) = 1
-  ),
-`: `
+    SELECT * EXCEPT (valid_from, valid_to, is_deleted, is_current, version_number, valid_to_partition_number)
+    FROM ${ctx.self()}
+    WHERE
+      valid_to_partition_number = 0
+      AND NOT EXISTS(
+        SELECT 1
+        FROM source_data s
+        WHERE
+          s.${primaryKey} = current_versions.${primaryKey}
+          AND s.updated_at = current_versions.updated_at
+        )
 
-/* Deduplicate rows that are identical in all columns.
-     This handles:
-     - Full syncs: same data re-appended with new cdc_updated_at
-     - Schema changes where old rows are re-synced but values haven't changed
-     
-     It does NOT dedupe when a new field is added and has a different value
-     (e.g. old row has NULL, new row has 'some_value') */
-  deduplicate AS (
-    SELECT *
-    FROM source_data
-    QUALIFY ROW_NUMBER() OVER (
-      PARTITION BY id, updated_at
-      ORDER BY cdc_updated_at DESC
-      ) = 1
-  ),`}
+    `: ``}
+
+  ),
 
 /* Filter out deletion rows, they signal that the previous version ended. Keep them in a separate CTE. */
 deletions AS (
     SELECT
       ${primaryKey},
       MAX(deleted_at) AS deleted_at
-    FROM deduplicate
+    FROM source_data
     WHERE deleted_at IS NOT NULL
     GROUP BY ${primaryKey}
   ),
 live_records AS (
     SELECT *
-    FROM deduplicate
+    FROM source_data
     WHERE deleted_at IS NULL
-  )
+  ),
 
+versioned AS (
 SELECT
   live_records.*,
   updated_at AS valid_from,
@@ -197,13 +178,19 @@ SELECT
     ) AS version_number
 FROM live_records
 LEFT JOIN deletions USING (${primaryKey})
+)
+
+SELECT
+  *,
+  IF(valid_to IS NULL, 0, 1) AS valid_to_partition_number
+FROM versioned
 
 `)
-      .postOps(ctx => `${data_functions.setKeyConstraints(ctx, dataform, {
+            .postOps(ctx => `${data_functions.setKeyConstraints(ctx, dataform, {
       primaryKey: primaryKey + ", valid_from" 
       })}
       ${params.expirationDays ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${params.expirationDays};` : ``}
       ${entitySchema.expirationDays ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${entitySchema.expirationDays};` : ``}
     `)
-  });
+    });
 };
