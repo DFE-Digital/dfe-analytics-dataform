@@ -78,12 +78,13 @@ module.exports = (params) => {
                 }
             })
             .preOps(ctx => `DECLARE extracted_at_checkpoint DEFAULT (
-        ${ctx.when(ctx.incremental(), `SELECT MAX(valid_to) FROM ${ctx.self()}`, `SELECT TIMESTAMP("2026-01-01")`)}
+        ${ctx.when(ctx.incremental(), `SELECT MAX(_airbyte_extracted_at) FROM ${ctx.self()} WHERE valid_to_partition_number = 0`, `SELECT TIMESTAMP("2026-01-01")`)}
         )`)
             .query(ctx => `
         
 WITH
   source_data AS (
+  /* Read new rows from the Airbyte source */
     SELECT
       CAST(${primaryKey} AS STRING) AS ${primaryKey},
       * EXCEPT (
@@ -117,13 +118,6 @@ WITH
     FROM ${ctx.self()}
     WHERE
       valid_to_partition_number = 0
-      AND NOT EXISTS(
-        SELECT 1
-        FROM source_data s
-        WHERE
-          s.${primaryKey} = current_versions.${primaryKey}
-          AND s.updated_at = current_versions.updated_at
-        )
 
     `: ``}
 
