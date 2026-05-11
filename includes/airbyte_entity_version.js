@@ -170,9 +170,10 @@ ${ctx.incremental() ? `
           PARTITION BY live_records.${primaryKey}
           ORDER BY updated_at ASC, cdc_updated_at ASC
         ),
-        deletions.deleted_at
+        IF(deletions.deleted_at > cdc_updated_at, deletions.deleted_at, NULL)
       ) AS valid_to,
       deletions.deleted_at IS NOT NULL
+        AND deletions.deleted_at > updated_at
         AND LEAD(updated_at) OVER (
           PARTITION BY live_records.${primaryKey}
           ORDER BY updated_at ASC, cdc_updated_at ASC
@@ -181,7 +182,7 @@ ${ctx.incremental() ? `
         PARTITION BY live_records.${primaryKey}
         ORDER BY updated_at DESC, cdc_updated_at DESC
       ) = 1
-        AND deletions.deleted_at IS NULL AS is_current,
+        AND (deletions.deleted_at IS NULL OR deletions.deleted_at <= cdc_updated_at) AS is_current,
       ROW_NUMBER() OVER (
         PARTITION BY live_records.${primaryKey}
         ORDER BY updated_at ASC, cdc_updated_at ASC
