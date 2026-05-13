@@ -182,11 +182,23 @@ ${ctx.incremental() ? `
 
 
 `)
-            .postOps(ctx => `${data_functions.setKeyConstraints(ctx, dataform, {
-      primaryKey: primaryKey + ", valid_from" 
+      .postOps(ctx => `
+      ${data_functions.setKeyConstraints(ctx, dataform, {
+        primaryKey: primaryKey + ", valid_from"
       })}
-      ${params.expirationDays ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${params.expirationDays};` : ``}
-      ${entitySchema.expirationDays ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${entitySchema.expirationDays};` : ``}
+
+      ${params.expirationDays
+        ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${params.expirationDays};`
+        : ``}
+
+      ${entitySchema.expirationDays
+        ? `DELETE FROM ${ctx.self()} WHERE DATE(valid_from) < CURRENT_DATE - ${entitySchema.expirationDays};`
+        : ``}
+
+      ALTER TABLE ${ctx.self()}
+      SET OPTIONS (
+        partition_expiration_days = ${params.expirationDays || `NULL`}
+      );
     `)
     });
 };
