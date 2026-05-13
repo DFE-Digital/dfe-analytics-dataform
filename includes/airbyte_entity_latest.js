@@ -55,8 +55,7 @@ SELECT
 FROM
     ${ctx.ref(versionTableName)}
 WHERE
-    is_current = TRUE
-    AND is_deleted = FALSE
+    valid_to IS NULL
 `)
     });
 };

@@ -14,13 +14,6 @@
        _ab_cdc_deleted_at     - Non-null only for deletion events
        _ab_cdc_lsn            - CDC log sequence number
    - other columns vary per entity (defined in dataSchema keys)
-  
-  Incremental approach:
-   - Output table is partitioned via RANGE_BUCKET on valid_to_partition_number:
-       0 = current versions (valid_to IS NULL)
-       1 = historical versions (valid_to IS NOT NULL)
-   - updatePartitionFilter = "valid_to_partition_number = 0" means the MERGE only rewrites the current-versions partition. Historical partitions are never touched after being written, no matter how large the table grows.
-   - Checkpoint = MAX(_airbyte_extracted_at) WHERE valid_to_partition_number = 0.
 */
 
 const data_functions = require("./data_functions");
@@ -56,16 +49,15 @@ module.exports = (params) => {
                         updated_at: "Timestamp this entity was last updated in the database.",
                         cdc_updated_at: "Timestamp of the CDC event captured by Airbyte.",
                         deleted_at: "Timestamp of the CDC event at which the entity was deleted in the source database. NULL if not deleted.",
-                        _airbyte_raw_id: "Unique identifier assigned by Airbyte to each raw record ingested."
+                        _airbyte_raw_id: "Unique identifier assigned by Airbyte to each raw record ingested.",
+                        _airbyte_extracted_at: "Timestamp of the Airbyte extraction"
                     },
                     ...(entitySchema.keys ? parameterFunctions.getKeyColumns(entitySchema.keys) : [])
                 ),
                 bigquery: {
-                    /* - Partition 0: current versions (valid_to IS NULL)
-                       - Partition 1: historical versions (valid_to IS NOT NULL) */
-                    partitionBy: "RANGE_BUCKET(valid_to_partition_number, GENERATE_ARRAY(0, 2, 1))",
+                    partitionBy: "DATE(valid_to)",
                     /* updatePartitionFilter ensures the MERGE only scans/rewrites current versions */
-                    updatePartitionFilter: "valid_to_partition_number = 0",
+                    updatePartitionFilter: "valid_to IS NULL",
                     clusterBy: [primaryKey, "is_current"],
                     labels: {
                         eventsource: params.eventSourceName.toLowerCase(),
@@ -84,7 +76,7 @@ module.exports = (params) => {
                 }
             })
             .preOps(ctx => `DECLARE extracted_at_checkpoint DEFAULT (
-        ${ctx.when(ctx.incremental(), `SELECT MAX(_airbyte_extracted_at) FROM ${ctx.self()} WHERE valid_to_partition_number = 0`, `SELECT TIMESTAMP("2026-01-01")`)}
+        ${ctx.when(ctx.incremental(), `SELECT MAX(_airbyte_extracted_at) FROM ${ctx.self()} WHERE valid_to IS NULL`, `SELECT TIMESTAMP("2026-01-01")`)}
         )`)
             .query(ctx => `
         
@@ -131,10 +123,10 @@ ${ctx.incremental() ? `
     
     UNION ALL
 
-    SELECT * EXCEPT (valid_from, valid_to, is_deleted, is_current, version_number, valid_to_partition_number)
+    SELECT * EXCEPT (valid_from, valid_to, is_deleted, is_current, version_number)
     FROM ${ctx.self()}
     WHERE
-      valid_to_partition_number = 0
+      valid_to IS NULL
       AND NOT EXISTS (
         SELECT 1
         FROM source_data s
@@ -158,9 +150,7 @@ ${ctx.incremental() ? `
     SELECT *
     FROM ${ctx.incremental() ? `combined_with_current_versions` : `source_data`}
     WHERE deleted_at IS NULL
-  ),
-
-  versioned AS (
+  )
     SELECT
       live_records.*,
       updated_at AS valid_from,
@@ -189,12 +179,7 @@ ${ctx.incremental() ? `
       ) AS version_number
     FROM live_records
     LEFT JOIN deletions USING (${primaryKey})
-  )
 
-SELECT
-  *,
-  IF(valid_to IS NULL, 0, 1) AS valid_to_partition_number
-FROM versioned
 
 `)
             .postOps(ctx => `${data_functions.setKeyConstraints(ctx, dataform, {
