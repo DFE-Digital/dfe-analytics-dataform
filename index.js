@@ -1,4 +1,4 @@
-const version = "2.4.2";
+const version = "2.5.0";
 
 const parameterFunctions = require("./includes/parameter_functions");
 
@@ -33,6 +33,13 @@ const migrateHistoricEventsToCurrentHiddenPIIConfiguration = require("./includes
 const pipelineTableSnapshot = require("./includes/pipeline_table_snapshot");
 const pipelineSnapshot = require("./includes/pipeline_snapshot");
 
+// Airbyte modules
+const airbyteGlobalDataFreshness = require("./includes/airbyte_global_data_freshness");
+const airbyteSchemaAssertions = require("./includes/airbyte_schema_assertions");
+const airbyteEntityLatest = require("./includes/airbyte_entity_latest");
+const airbyteEntityVersion = require("./includes/airbyte_entity_version");
+const airbyteEntityDataNotFresh = require("./includes/airbyte_entity_data_not_fresh");
+
 module.exports = (params) => {
     // Set default values of parameters if parameters with the same name have not been passed to dfeAnalyticsDataform()
     params = {
@@ -54,7 +61,7 @@ module.exports = (params) => {
         searchEngineRefererDomainRegex: "(?i)(google|bing|yahoo|aol|ask.co|baidu|duckduckgo|dogpile|ecosia|entireweb|exalead|gigablast|hotbot|info.com|lycos|metacrawler|mojeek|qwant|searx|startpage|swisscows|webcrawler|yandex|yippy)", // re-2 formatted regular expression to use to work out whether an HTTP referer is a search enginer (regardless of whether paid or organic)
         funnelDepth: 10, // Number of steps forwards/backwards to analyse in funnels - higher allows deeper analysis, lower reduces CPU usage
         requestPathGroupingRegex: '[0-9a-zA-Z]*[0-9][0-9a-zA-Z]*', // re2-formatted regular expression to replace with the string 'UID' when grouping request paths
-        attributionParameters: ['utm_source', 'utm_campaign', 'utm_medium', 'utm_content', 'gclid', 'gcsrc','fbclid','dclid','gad_source','ds_rl','gbraid','msclkid'], // list of parameters to extract from the request_query array of structs at the beginning of funnels
+        attributionParameters: ['utm_source', 'utm_campaign', 'utm_medium', 'utm_content', 'gclid', 'gcsrc', 'fbclid', 'dclid', 'gad_source', 'ds_rl', 'gbraid', 'msclkid'], // list of parameters to extract from the request_query array of structs at the beginning of funnels
         attributionDomainExclusionRegex: "(?i)(signin.education.gov.uk)", //re2-formatted regular expression to use to detect domain names which should be excluded from attribution modelling - for example, the domain name of an authentication service which 
         expirationDays: null, // Number of days after which all data streamed by dfe-analytics or managed by dfe-analytics-dataform for a particular eventDataSource should be deleted. Must be either an integer value or false.
         webRequestEventExpirationDays: null, // the number of days after which web_request events should be deleted, along with data in tables generated from them by dfe-analytics-dataform
@@ -77,6 +84,23 @@ module.exports = (params) => {
             toMonth: 1,
             toDay: 7
         }], // an array of day or date ranges between which some assertions will be disabled if other parameters are set to disable them. Each range is a hash containing either the integer values fromDay, fromMonth, toDay and toMonth *or* the date values fromDate and toDate. Defaults to an approximation to school holidays each year.
+
+        enableAirbyteSource: false, // Master switch for Airbyte processing
+
+        airbyteConfig: {
+            datasetName: null, // name of the BigQuery dataset that Airbyte streams data into
+            tablePrefix: '', // prefix for Airbyte table names (e.g., '_airbyte_raw_')
+            tableSuffix: '_airbyte', // Suffix for Airbyte output tables (to distinguish from dfe-analytics)
+            defaultPrimaryKeyField: 'id', // Default primary key field name (can be overridden per entity via tableSchema.primaryKey)
+        },
+
+        airbyteHeartbeat: {
+                freshnessHours: 12, // Number of hours to wait before triggering an assertion failure, if no new data has been received from Airbyte
+                datasetName: null, // name of the BigQuery dataset for heartbeat data.
+                tableName: 'airbyte_heartbeat', // name of the heartbeat table
+                disableFreshnessCheckDuringRange: false, // Boolean. If true, disables the heartbeat freshness check assertion during the date ranges specified in assertionDisableDuringDateRanges
+            },
+
         ...params
     };
 
@@ -94,13 +118,20 @@ module.exports = (params) => {
     // Work out whether to disable assertions now if eventsDataFreshnessDisableDuringRange or dataSchema.dataFreshnessDisableDuringRange is true
     params.disableAssertionsNow = parameterFunctions.dateRangesToDisableAssertionsNow(params.assertionDisableDuringDateRanges, new Date());
 
+    // Build result object
+    let result = {
+        events: events(params),
+        eventsDataNotFresh: eventsDataNotFresh(params),
+        customEventDataNotFresh: customEventDataNotFresh(params),
+        dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
+        version
+        };
+
+    // EXISTING: dfe-analytics processing
     // Publish and return datasets - assertions first for quick access in the Dataform UI
     if (params.transformEntityEvents) {
-        return {
-            events: events(params),
-            eventsDataNotFresh: eventsDataNotFresh(params),
+        Object.assign(result, {
             entityDataNotFresh: entityDataNotFresh(params),
-            customEventDataNotFresh: customEventDataNotFresh(params),
             entityTableCheckScheduled: entityTableCheckScheduled(params),
             entityTableCheckImport: entityTableCheckImport(params),
             entityIdsDoNotMatch: entityIdsDoNotMatch(params),
@@ -108,7 +139,6 @@ module.exports = (params) => {
             pageviewWithFunnel: pageviewWithFunnel(params),
             sessions: sessions(params),
             session_details: session_details(params),
-            dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
             entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
             unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
             unhandledCustomEventIsBeingStreamed: unhandledCustomEventIsBeingStreamed(params),
@@ -125,22 +155,29 @@ module.exports = (params) => {
             migrateHistoricEventsToCurrentHiddenPIIConfiguration: migrateHistoricEventsToCurrentHiddenPIIConfiguration(params),
             entityAt: entityAt(params),
             pipelineTableSnapshot: pipelineTableSnapshot(version, params),
-            pipelineSnapshot: pipelineSnapshot(version, params),
-            version: version
-        }
+            pipelineSnapshot: pipelineSnapshot(version, params)
+        });
     } else {
-        return {
-            events: events(params),
-            eventsDataNotFresh: eventsDataNotFresh(params),
-            customEventDataNotFresh: customEventDataNotFresh(params),
+        Object.assign(result, {
             flattenedCustomEvent: flattenedCustomEvent(params),
             hiddenPIIConfigurationDoesNotMatchEventsStreamed: hiddenPIIConfigurationDoesNotMatchEventsStreamed(params),
             pageviewWithFunnel: pageviewWithFunnel(params),
             sessions: sessions(params),
             session_details: session_details(params),
-            dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
-            pipelineSnapshot: pipelineSnapshot(version, params),
-            version: version
-        }
+            pipelineSnapshot: pipelineSnapshot(version, params)
+        });
     }
+
+    // Airbyte processing (only if enabled)
+    if (params.enableAirbyteSource) {
+        Object.assign(result, {
+            airbyteEntityVersion: airbyteEntityVersion(params),
+            airbyteEntityLatest: airbyteEntityLatest(params),
+            airbyteEntityDataNotFresh: airbyteEntityDataNotFresh(params),
+            airbyteGlobalDataFreshness: airbyteGlobalDataFreshness(params),
+            airbyteSchemaAssertions: airbyteSchemaAssertions(params),
+        });
+    }
+
+    return result;
 }
