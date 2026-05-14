@@ -3,7 +3,7 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
-    disabled: false,
+    disabled: true,
     transformEntityEvents: true,
     eventSourceName: "apply",
     bqProjectName: "rugged-abacus-218110",
