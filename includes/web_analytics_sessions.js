@@ -714,21 +714,7 @@ user_session_metrics AS (
         page_entry_time,
         page_exit_time,
         page_duration_seconds AS duration,
-        stitched_pre_auth_page,
-        continuity_type_to_current_page,
-        has_exact_referrer_match_to_previous_page,
-        continued_after_30m_by_exact_referrer,
-        current_iuid_method,
-        current_resolution_stage,
-        identity_resolution_priority,
-        assigned_by_activity_window_fallback,
-        window_assignment_reason,
-        window_assignment_supporting_evidence,
-        parent_request_uuid_pass1,
-        parent_match_confidence_pass1,
-        parent_match_source_pass1,
-        chain_id_pass1,
-        likely_shunt_arrival
+        continuity_type_to_current_page
       )
       ORDER BY page_entry_time, request_uuid
     ) AS pages_visited_details,
@@ -762,14 +748,6 @@ user_sessions_final AS (
     "known_user" AS behavioural_user_type,
 
     auid_distinct_iuid_count,
-    includes_low_confidence_identity_propagation,
-    includes_activity_window_identity_assignment,
-    includes_repair_walk_identity_assignment,
-    includes_overlapping_identity_window_context,
-    includes_post_conflict_identity_window_context,
-    includes_unknown_preexisting_activity_window_context,
-    includes_6h_referrer_continuity,
-    includes_stitched_pre_auth_pages,
 
     multiple_auid_session,
 
