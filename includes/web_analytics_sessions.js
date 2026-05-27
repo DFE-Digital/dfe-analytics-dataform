@@ -1,4 +1,4 @@
-const identityConfig = require("../definitions/web_analytics_identity_inference_config");
+const identityConfig = require("../definitions/web_analytics_identity_inference_config_upd");
 const parameter_functions = require("./parameter_functions");
 
 module.exports = params => {
@@ -6,41 +6,68 @@ module.exports = params => {
     return true;
   }
 
-  const webAnalytics = identityConfig[params.eventSourceName];
+    /* --------------------------------------------------------------------------
+     1. Mode flags
+  -------------------------------------------------------------------------- */
 
-  if (!webAnalytics) {
-    throw new Error(
-      `enableSessionDetailsTable is true but no web analytics config was found for eventSourceName '${params.eventSourceName}'.`
-    );
-  }
+  const enableIdentityResolution =
+    params.enableWebRequestIdentityResolution === true;
+
+  const sessionBuildMode = enableIdentityResolution
+    ? "identity_aware"
+    : "device_only";
+
+  /* --------------------------------------------------------------------------
+     2. Optional service-specific config
+
+     Session generation should not require identity config.
+     Identity config is only mandatory in the identity-resolution script itself.
+  -------------------------------------------------------------------------- */
+
+  const webAnalytics = identityConfig[params.eventSourceName] || {};
 
   const paths = webAnalytics.paths || {};
+
   const startDate =
     webAnalytics.startDate ||
     "2025-06-01";
+
+  /* --------------------------------------------------------------------------
+     3. Dynamic table names
+  -------------------------------------------------------------------------- */
 
   const finalName =
     params.sessionDetailsTableName ||
     `session_details_cfg_${params.eventSourceName}`;
 
+  const rawEventsName =
+    `events_${params.eventSourceName}`;
+
   const identityEventsName =
     params.identityEventsTableName ||
     `identity_solved_events_cfg_${params.eventSourceName}`;
 
-  const homePagePaths = paths.homePagePaths || ["/", "/?"];
-  const signInPagePaths = paths.signInPagePaths || ["/sign-in"];
-  const signOutPagePaths = paths.signOutPagePaths || ["/sign-out"];
+  const sessionInputEventsName = enableIdentityResolution
+    ? identityEventsName
+    : rawEventsName;
 
-  const preAuthPagePaths =
-    paths.preAuthPagePaths ||
-    paths.preAuthPages ||
-    [...new Set([...homePagePaths, ...signInPagePaths])];
+  /* --------------------------------------------------------------------------
+     4. Path config
+  -------------------------------------------------------------------------- */
+
+  const unique = values => [...new Set(values)];
+
+  const preAuthPagePaths = paths.preAuth || ["/", "/?"];
 
   const incrementalReadLookbackHours =
     params.sessionIncrementalReadLookbackHours || 12;
 
   const incrementalReplaceLookbackHours =
     params.sessionIncrementalReplaceLookbackHours || 6;
+
+  /* --------------------------------------------------------------------------
+     5. SQL helper functions
+  -------------------------------------------------------------------------- */
 
   function sqlString(value) {
     return `'${String(value).replace(/'/g, "\\'")}'`;
@@ -105,9 +132,10 @@ module.exports = params => {
       uniqueKey: [["session_id"]]
     },
     tags,
-    description:
-      "Session-level table built from resolved identity events. Each row is a user or anonymous device session.",
-    dependencies: [...(params.dependencies || []), identityEventsName],
+     description: enableIdentityResolution
+      ? "This table contains data on sessions and accompanying metrics. This service is configured to also use the identity resolution script which infers the identity of the user of each web request event using a server-side methodology. Each row is a single session. This table uses the Google Analytics definition of a session: A session is a group of user interactions with the website that that occur continuously without a break of more than 30 minutes of inactivity or until the user navigates away from the site. This does not include sessions or page visits from bots."
+      : "This table contains data on sessions and accompanying metrics. This service is NOT configured to infer the identities of users, which means that the sessions are constructed using only device level identifiers. Each row is a single session. This table uses the Google Analytics definition of a session: A session is a group of user interactions with the website that that occur continuously without a break of more than 30 minutes of inactivity or until the user navigates away from the site. This does not include sessions or page visits from bots.",
+    dependencies: [...(params.dependencies || []), sessionInputEventsName],
     columns: {
       session_id: "Stable hashed session identifier.",
       user_id: "Resolved user identity for user sessions. Null for anonymous device sessions.",
@@ -128,8 +156,19 @@ module.exports = params => {
       journey_id: "Identifier joining adjacent device and user sessions where applicable."
     }
   }).query(ctx => `
+
 WITH
 
+/* --------------------------------------------------------------------------
+   1. Base page-view style web events from final identity output
+
+   Identity has already done the heavy attribution work. This layer consumes
+   current_iuid and accompanying resolution metadata.
+-------------------------------------------------------------------------- */
+
+/* This JS function will create the base events table from either the identity resolved events (if enableWebRequestIdentityResolution = true) or the raw events table (if enableWebRequestIdentityResolution = false) */
+
+${enableIdentityResolution ? `
 /* --------------------------------------------------------------------------
    1. Base page-view style web events from final identity output
 
@@ -196,7 +235,51 @@ events AS (
     AND SAFE_CAST(response_status AS STRING) NOT LIKE "3__"
     AND SAFE_CAST(response_status AS STRING) NOT LIKE "4__"
     AND occurred_at >= event_read_checkpoint
-),
+)
+` : `
+/* --------------------------------------------------------------------------
+   1. Base page-view style web events from raw events output
+
+   Identity resolution is disabled. This layer only exposes the fields needed
+   for device-session construction.
+-------------------------------------------------------------------------- */
+
+events AS (
+  SELECT
+    request_uuid,
+    anonymised_user_agent_and_ip,
+    CAST(NULL AS STRING) AS user_id,
+
+    occurred_at,
+    namespace,
+    request_path,
+    request_query,
+    request_path_and_query AS page_path_and_query,
+    request_referer_domain,
+
+    IF(
+      SUBSTR(request_referer_path_and_query, -1) = "?",
+      SPLIT(request_referer_path_and_query, "?")[OFFSET(0)],
+      request_referer_path_and_query
+    ) AS referer_path_and_query,
+
+    request_method,
+    SAFE_CAST(response_status AS STRING) AS response_status,
+    response_content_type,
+    device_category,
+
+    ${attributionParamFields()}
+
+  FROM ${ctx.ref(rawEventsName)}
+  WHERE event_type = "web_request"
+    AND anonymised_user_agent_and_ip IS NOT NULL
+    AND COALESCE(device_category, "") != "bot"
+    AND CONTAINS_SUBSTR(COALESCE(response_content_type, ""), "text/html")
+    AND SAFE_CAST(response_status AS STRING) NOT LIKE "3__"
+    AND SAFE_CAST(response_status AS STRING) NOT LIKE "4__"
+    AND occurred_at >= event_read_checkpoint
+)
+`},
 
 events_with_medium AS (
   SELECT
@@ -205,6 +288,15 @@ events_with_medium AS (
   FROM events
 ),
 
+anonymous_events AS (
+  SELECT *
+  FROM events_with_medium
+  WHERE user_id IS NULL
+),
+
+/* This JS function will prevent the script running the user session construction if enableWebRequestIdentityResolution = false. */
+
+${enableIdentityResolution ? `
 /* --------------------------------------------------------------------------
    2. Signed-in / resolved user sessions
 
@@ -353,12 +445,6 @@ signed_in_session_start_events AS (
 pre_auth_pages AS (
   SELECT request_path
   FROM UNNEST(${sqlStringArray(preAuthPagePaths)}) AS request_path
-),
-
-anonymous_events AS (
-  SELECT *
-  FROM events_with_medium
-  WHERE user_id IS NULL
 ),
 
 stitched_pre_auth_pages AS (
@@ -719,12 +805,18 @@ user_sessions_final AS (
     pages_visited_details
 
   FROM user_session_metrics
-),
+),` : ``}
 
 /* --------------------------------------------------------------------------
    5. Anonymous device sessions from remaining anonymous events
 -------------------------------------------------------------------------- */
 
+/* This JS conditional selects either:
+   - unresolved anonymous events after user-session stitching, when identity resolution is on
+   - all anonymous/device events, when identity resolution is off
+*/
+
+${enableIdentityResolution ? `
 remaining_anonymous_events AS (
   SELECT
     e.*
@@ -736,6 +828,13 @@ remaining_anonymous_events AS (
    AND u.stitched_pre_auth_page = TRUE
   WHERE u.session_id IS NULL
 ),
+` : `
+remaining_anonymous_events AS (
+  SELECT
+    *
+  FROM anonymous_events
+),
+`}
 
 remaining_anonymous_events_ordered AS (
   SELECT
@@ -780,13 +879,7 @@ remaining_anonymous_events_with_boundaries AS (
         THEN "Continued from previous device page: exact referrer match after more than 30 minutes"
 
       ELSE "Started a new device session after a gap"
-    END AS continuity_type_to_current_page,
-
-    CASE
-      WHEN prev_occurred_at IS NULL THEN NULL
-      WHEN referer_path_and_query = prev_page_path_and_query THEN TRUE
-      ELSE FALSE
-    END AS has_exact_referrer_match_to_previous_page
+    END AS continuity_type_to_current_page
 
   FROM remaining_anonymous_events_ordered
 ),
@@ -874,24 +967,12 @@ device_session_page_times AS (
       SECOND
     ) AS page_duration_seconds,
 
+    continuity_type_to_current_page
+
+    ${enableIdentityResolution ? `,
     auid_distinct_iuid_count,
-    auid_risk_classification,
-
-    current_iuid_method,
-    current_resolution_stage,
-    current_iteration,
-    is_currently_resolved,
-    identity_resolution_priority,
-
-    matched_windows_total,
-    matched_clean_windows,
-    matched_non_clean_windows,
-    matched_overlapping_windows,
-    matched_post_conflict_windows,
-    matched_unknown_preexisting_activity_windows,
-
-    continuity_type_to_current_page,
-    has_exact_referrer_match_to_previous_page
+    auid_risk_classification
+    ` : ``}
 
   FROM remaining_anonymous_events_with_session_id
 ),
@@ -900,29 +981,18 @@ device_session_metrics AS (
   SELECT
     session_id,
 
+    ${enableIdentityResolution ? `
     MAX(COALESCE(auid_distinct_iuid_count, 0)) AS auid_distinct_iuid_count,
+
     LOGICAL_OR(
       auid_risk_classification IN (
         "UNCERTAIN_SINGLE_IUID_UNANCHORED_ACTIVITY",
         "HIGH_RISK_MULTI_IUID_AUID"
       )
     ) AS has_unresolved_user_evidence,
-
-    FALSE AS includes_low_confidence_identity_propagation,
-    FALSE AS includes_activity_window_identity_assignment,
-    FALSE AS includes_repair_walk_identity_assignment,
-
-    LOGICAL_OR(matched_overlapping_windows > 0)
-      AS includes_overlapping_identity_window_context,
-
-    LOGICAL_OR(matched_post_conflict_windows > 0)
-      AS includes_post_conflict_identity_window_context,
-
-    LOGICAL_OR(matched_unknown_preexisting_activity_windows > 0)
-      AS includes_unknown_preexisting_activity_window_context,
-
-    FALSE AS includes_6h_referrer_continuity,
-    FALSE AS includes_stitched_pre_auth_pages,
+    ` : `
+    FALSE AS has_unresolved_user_evidence,
+    `}
 
     COUNT(DISTINCT anonymised_user_agent_and_ip) > 1 AS multiple_auid_session,
 
@@ -944,21 +1014,7 @@ device_session_metrics AS (
         page_entry_time,
         page_exit_time,
         page_duration_seconds AS duration,
-        CAST(NULL AS BOOL) AS stitched_pre_auth_page,
-        continuity_type_to_current_page,
-        has_exact_referrer_match_to_previous_page,
-        CAST(FALSE AS BOOL) AS continued_after_30m_by_exact_referrer,
-        current_iuid_method,
-        current_resolution_stage,
-        identity_resolution_priority,
-        CAST(FALSE AS BOOL) AS assigned_by_activity_window_fallback,
-        CAST(NULL AS STRING) AS window_assignment_reason,
-        CAST(NULL AS STRING) AS window_assignment_supporting_evidence,
-        CAST(NULL AS STRING) AS parent_request_uuid_pass1,
-        CAST(NULL AS STRING) AS parent_match_confidence_pass1,
-        CAST(NULL AS STRING) AS parent_match_source_pass1,
-        CAST(NULL AS STRING) AS chain_id_pass1,
-        CAST(NULL AS BOOL) AS likely_shunt_arrival
+        continuity_type_to_current_page
       )
       ORDER BY page_entry_time, request_uuid
     ) AS pages_visited_details,
@@ -989,20 +1045,15 @@ device_sessions_final AS (
     CAST(NULL AS STRING) AS user_id,
     FALSE AS user_signed_in,
     "device_session" AS session_type,
+
     CASE
       WHEN has_unresolved_user_evidence THEN "unknown_user"
       ELSE "anonymous_only"
     END AS behavioural_user_type,
 
+    ${enableIdentityResolution ? `
     auid_distinct_iuid_count,
-    includes_low_confidence_identity_propagation,
-    includes_activity_window_identity_assignment,
-    includes_repair_walk_identity_assignment,
-    includes_overlapping_identity_window_context,
-    includes_post_conflict_identity_window_context,
-    includes_unknown_preexisting_activity_window_context,
-    includes_6h_referrer_continuity,
-    includes_stitched_pre_auth_pages,
+    ` : ``}
 
     multiple_auid_session,
 
@@ -1040,6 +1091,7 @@ device_sessions_final AS (
   FROM device_session_metrics
 ),
 
+${enableIdentityResolution ? `
 /* --------------------------------------------------------------------------
    6. Combine user and device sessions
 -------------------------------------------------------------------------- */
@@ -1153,34 +1205,7 @@ approved_device_to_user_journeys AS (
       previous_session_id,
       "--",
       user_session_id
-    ))) AS journey_id,
-
-    first_page_auid AS stitching_auid,
-    stitch_gap_minutes,
-    has_exact_referrer_match,
-
-    GREATEST(
-      COALESCE(user_session_auid_distinct_iuid_count, 0),
-      COALESCE(previous_session_auid_distinct_iuid_count, 0)
-    ) AS max_auid_distinct_iuid_count,
-
-    CASE
-      WHEN GREATEST(
-        COALESCE(user_session_auid_distinct_iuid_count, 0),
-        COALESCE(previous_session_auid_distinct_iuid_count, 0)
-      ) <= 1
-        THEN "single_user_device_within_30_minutes"
-
-      WHEN GREATEST(
-        COALESCE(user_session_auid_distinct_iuid_count, 0),
-        COALESCE(previous_session_auid_distinct_iuid_count, 0)
-      ) > 1
-       AND stitch_gap_minutes <= 5
-       AND has_exact_referrer_match
-        THEN "multi_user_device_exact_referrer_within_5_minutes"
-
-      ELSE NULL
-    END AS journey_stitch_reason
+    ))) AS journey_id
 
   FROM immediately_preceding_session_on_user_first_page_auid
   WHERE previous_session_type = "device_session"
@@ -1204,24 +1229,14 @@ approved_device_to_user_journeys AS (
 journey_session_map AS (
   SELECT
     device_session_id AS session_id,
-    journey_id,
-    TRUE AS stitched_to_adjacent_session,
-    user_session_id AS stitched_partner_session_id,
-    stitch_gap_minutes,
-    has_exact_referrer_match,
-    journey_stitch_reason
+    journey_id
   FROM approved_device_to_user_journeys
 
   UNION ALL
 
   SELECT
     user_session_id AS session_id,
-    journey_id,
-    TRUE AS stitched_to_adjacent_session,
-    device_session_id AS stitched_partner_session_id,
-    stitch_gap_minutes,
-    has_exact_referrer_match,
-    journey_stitch_reason
+    journey_id
   FROM approved_device_to_user_journeys
 ),
 
@@ -1234,13 +1249,7 @@ all_sessions_with_journey_id AS (
       ELSE FALSE
     END AS known_multi_user_device,
 
-    COALESCE(j.journey_id, s.session_id) AS journey_id,
-    COALESCE(j.stitched_to_adjacent_session, FALSE)
-      AS stitched_to_adjacent_session,
-    j.stitched_partner_session_id,
-    j.stitch_gap_minutes,
-    j.has_exact_referrer_match,
-    j.journey_stitch_reason
+    COALESCE(j.journey_id, s.session_id) AS journey_id
 
   FROM all_sessions s
   LEFT JOIN journey_session_map j
@@ -1254,6 +1263,25 @@ final AS (
     ? `WHERE session_start_timestamp >= session_replace_checkpoint`
     : ``}
 )
+` : `
+/* --------------------------------------------------------------------------
+   6. Final device-only sessions
+
+   Identity resolution is disabled, so there are no user sessions and no
+   device-to-user journey stitching.
+-------------------------------------------------------------------------- */
+
+final AS (
+  SELECT
+    *,
+    FALSE AS known_multi_user_device,
+    session_id AS journey_id
+  FROM device_sessions_final
+  ${ctx.incremental()
+    ? `WHERE session_start_timestamp >= session_replace_checkpoint`
+    : ``}
+)
+`}
 
 SELECT *
 FROM final

@@ -1,8 +1,8 @@
-const identityConfig = require("../definitions/web_analytics_identity_inference_config");
+const identityConfig = require("../definitions/web_analytics_identity_inference_config_upd");
 const parameter_functions = require("./parameter_functions");
 
 module.exports = params => {
-  if (!params.enableSessionDetailsTable) {
+  if (!params.enableWebRequestIdentityResolution) {
     return true;
   }
 
@@ -14,7 +14,7 @@ module.exports = params => {
 
   if (!webAnalytics) {
     throw new Error(
-      `enableSessionDetailsTable is true but no web analytics config was found for eventSourceName '${params.eventSourceName}'.`
+      `enableWebRequestIdentityResolution is true but no web analytics config was found for eventSourceName '${params.eventSourceName}'.`
     );
   }
 
@@ -28,33 +28,33 @@ module.exports = params => {
      2. Identity config
   -------------------------------------------------------------------------- */
 
-  const anchorSources = identity.anchorSources || [
-    {
-      entityTableName: identity.anchorEntityTableName,
-      requestPaths: identity.anchorRequestPaths || [],
-      dataField: identity.anchorDataField || "data",
-      userIdKey: identity.anchorUserIdKey || "id",
-      requestMethods: identity.anchorRequestMethods || ["GET"]
-    }
-  ];
-
-  const signOutPaths = identity.signOutPaths || [];
+  const anchorSources = identity.anchorSources || [];
 
   /* --------------------------------------------------------------------------
      3. Path config
   -------------------------------------------------------------------------- */
 
-  const homePagePaths = paths.homePagePaths || ["/", "/?"];
-  const signInPagePaths = paths.signInPagePaths || ["/sign-in"];
-  const signOutPagePaths = paths.signOutPagePaths || ["/sign-out"];
-  const excludedPathsForActivity =
-    paths.excludedPathsForActivity || ["/", "/sign-in", "/sign-out"];
-  const authPrefixes = paths.authPrefixes || [];
-  const adminPagePatterns = paths.adminPagePatterns || [];
+  const unique = values => [...new Set(values)];
 
-  const homeAndSignInPaths = [
-    ...new Set([...homePagePaths, ...signInPagePaths])
-  ];
+  const preAuthPagePaths = paths.preAuth || ["/", "/?"];
+  const signInPagePaths = paths.signIn || ["/sign-in"];
+  const signOutPaths = paths.signOut || ["/sign-out"];
+
+  const authPrefixes = paths.authPrefixes || [];
+  const adminPagePatterns = paths.adminPatterns || [];
+
+  const preAuthAndSignInPagePaths = unique([
+    ...preAuthPagePaths,
+    ...signInPagePaths
+  ]);
+
+  const publicAndAuthPagePaths = unique([
+    ...preAuthPagePaths,
+    ...signInPagePaths,
+    ...signOutPaths
+  ]);
+
+  const excludedPathsForActivity = publicAndAuthPagePaths;
 
   /* --------------------------------------------------------------------------
      4. Dynamic table names
@@ -792,7 +792,7 @@ referrer_children AS (
   FROM events_supp child
   WHERE child.request_referer_path_and_query IS NOT NULL
     AND NOT (
-      ${sqlInList("child.request_referer_path_and_query", homePagePaths)}
+      ${sqlInList("child.request_referer_path_and_query", preAuthPagePaths)}
       AND ${sqlNotInList("child.request_path", signInPagePaths)}
     )
 ),
@@ -884,7 +884,7 @@ p1_bootstrap_first_child_after_callback AS (
    AND child.walk_is_anchor = FALSE
    AND child.is_navigable_parent = TRUE
   WHERE child.request_referer_path_and_query IS NULL
-     OR ${sqlInList("child.request_referer_path_and_query", homePagePaths)}
+     OR ${sqlInList("child.request_referer_path_and_query", preAuthPagePaths)}
 
   QUALIFY ROW_NUMBER() OVER (
     PARTITION BY anc.anchor_request_uuid
@@ -913,12 +913,12 @@ p1_slash_prev_by_auid_single_user AS (
     'P2_HOME_REFERRER_PREVIOUS_PARENT_BY_AUID_10M_SINGLE_IUID_ONLY' AS match_source
 
   FROM prev_by_auid child
-  WHERE ${sqlInList("child.request_referer_path_and_query", homePagePaths)}
+  WHERE ${sqlInList("child.request_referer_path_and_query", preAuthPagePaths)}
     AND ${sqlNotInList("child.request_path", signInPagePaths)}
     AND child.prev_parent_request_uuid_auid != child.request_uuid
     AND child.prev_parent_request_uuid_auid IS NOT NULL
     AND child.prev_parent_occurred_at_auid >= TIMESTAMP_SUB(child.occurred_at, INTERVAL 10 MINUTE)
-    AND ${sqlNotInList("child.prev_parent_request_path_auid", homePagePaths)}
+    AND ${sqlNotInList("child.prev_parent_request_path_auid", preAuthPagePaths)}
     AND child.auid_distinct_iuid_count = 1
 ),
 
@@ -937,10 +937,7 @@ p1_null_prev_by_auid_single_user AS (
     AND child.prev_parent_request_uuid_auid IS NOT NULL
     AND child.prev_parent_request_uuid_auid != child.request_uuid
     AND child.prev_parent_occurred_at_auid >= TIMESTAMP_SUB(child.occurred_at, INTERVAL 10 MINUTE)
-    AND ${sqlNotInList("child.prev_parent_request_path_auid", [
-      ...homePagePaths,
-      ...signInPagePaths
-    ])}
+    AND ${sqlNotInList("child.prev_parent_request_path_auid", preAuthAndSignInPagePaths)}
 ),
 
 p1_parent_candidates AS (
@@ -1108,10 +1105,7 @@ shunt_parents AS (
 
   FROM events_supp e
   WHERE (e.is_navigable_parent OR e.walk_is_anchor)
-    AND ${sqlNotInList("e.request_path", [
-      ...homePagePaths,
-      ...signInPagePaths
-    ])}
+    AND ${sqlNotInList("e.request_path", preAuthAndSignInPagePaths)}
     AND ${sqlNotStartsWithAny("e.request_path", authPrefixes)}
     AND e.auid IS NOT NULL
 ),
@@ -1126,7 +1120,7 @@ shunt_children AS (
 
   FROM events_supp e
   WHERE e.request_referer_path_and_query IS NOT NULL
-    AND ${sqlNotInList("e.request_referer_path_and_query", homePagePaths)}
+    AND ${sqlNotInList("e.request_referer_path_and_query", preAuthPagePaths)}
     AND e.auid IS NOT NULL
 ),
 
@@ -2098,13 +2092,7 @@ events_with_window_context AS (
     wg.has_single_unambiguous_clean_window,
 
     (
-      ${sqlNotInList("e.request_path", [
-        ...new Set([
-          ...homePagePaths,
-          ...signInPagePaths,
-          ...signOutPagePaths
-        ])
-      ])}
+      ${sqlNotInList("e.request_path", publicAndAuthPagePaths)}
       AND ${sqlNotStartsWithAny("e.request_path", authPrefixes)}
     ) AS is_not_obvious_public_or_auth_event,
 
@@ -2116,7 +2104,7 @@ events_with_window_context AS (
       wg.eligible_window_start IS NOT NULL
       AND e.occurred_at >= wg.eligible_window_start
       AND e.occurred_at <= TIMESTAMP_ADD(wg.eligible_window_start, INTERVAL 30 MINUTE)
-      AND ${sqlNotInList("e.request_path", homePagePaths)}
+      AND ${sqlNotInList("e.request_path", preAuthPagePaths)}
       AND ${sqlNotInList("e.request_path", signInPagePaths)}
     ) AS is_near_window_start_post_auth_activity
 
@@ -2496,7 +2484,7 @@ referrer_children AS (
     AND NOT (
       ${sqlInList(
         "child.request_referer_path_and_query",
-        homePagePaths
+        preAuthPagePaths
       )}
       AND ${sqlNotInList("child.request_path", signInPagePaths)}
     )
@@ -2590,7 +2578,7 @@ repair_home_or_null_prev_parent AS (
       child.request_referer_path_and_query IS NULL
       OR ${sqlInList(
         "child.request_referer_path_and_query",
-        homePagePaths
+        preAuthPagePaths
       )}
     )
     AND ${sqlNotInList("child.request_path", signInPagePaths)}
@@ -2601,7 +2589,7 @@ repair_home_or_null_prev_parent AS (
     )
     AND ${sqlNotInList(
       "child.prev_parent_request_path_auid",
-      homePagePaths
+      preAuthPagePaths
     )}
 ),
 
@@ -2644,7 +2632,7 @@ repair_near_window_start_resolved_parent AS (
       child.eligible_window_start,
       INTERVAL 30 MINUTE
     )
-    AND ${sqlNotInList("child.request_path", homePagePaths)}
+    AND ${sqlNotInList("child.request_path", preAuthPagePaths)}
     AND ${sqlNotInList("child.request_path", signInPagePaths)}
 
   QUALIFY ROW_NUMBER() OVER (
@@ -3339,7 +3327,7 @@ referrer_children AS (
   FROM children_to_repair child
   WHERE child.request_referer_path_and_query IS NOT NULL
     AND NOT (
-      ${sqlInList("child.request_referer_path_and_query", homePagePaths)}
+      ${sqlInList("child.request_referer_path_and_query", preAuthPagePaths)}
       AND ${sqlNotInList("child.request_path", signInPagePaths)}
     )
 ),
@@ -3452,7 +3440,7 @@ home_or_null_children AS (
   FROM children_to_repair child
   WHERE (
       child.request_referer_path_and_query IS NULL
-      OR ${sqlInList("child.request_referer_path_and_query", homePagePaths)}
+      OR ${sqlInList("child.request_referer_path_and_query", preAuthPagePaths)}
     )
     AND ${sqlNotInList("child.request_path", signInPagePaths)}
 ),
@@ -3507,7 +3495,7 @@ repair_home_or_null_closest_parent AS (
    AND parent.occurred_at >= TIMESTAMP_SUB(child.occurred_at, INTERVAL 30 MINUTE)
    AND parent.request_uuid != child.request_uuid
 
-  WHERE ${sqlNotInList("parent.request_path", homePagePaths)}
+  WHERE ${sqlNotInList("parent.request_path", preAuthPagePaths)}
 
   QUALIFY ROW_NUMBER() OVER (
     PARTITION BY child.request_uuid
@@ -3542,7 +3530,7 @@ repair_home_or_null_closest_resolved_parent AS (
    AND parent.occurred_at >= TIMESTAMP_SUB(child.occurred_at, INTERVAL 30 MINUTE)
    AND parent.request_uuid != child.request_uuid
 
-  WHERE ${sqlNotInList("parent.request_path", homePagePaths)}
+  WHERE ${sqlNotInList("parent.request_path", preAuthPagePaths)}
 
   QUALIFY ROW_NUMBER() OVER (
     PARTITION BY child.request_uuid
@@ -3573,7 +3561,7 @@ near_window_start_children AS (
   WHERE child.eligible_window_start IS NOT NULL
     AND child.occurred_at >= child.eligible_window_start
     AND child.occurred_at <= TIMESTAMP_ADD(child.eligible_window_start, INTERVAL 30 MINUTE)
-    AND ${sqlNotInList("child.request_path", homePagePaths)}
+    AND ${sqlNotInList("child.request_path", preAuthPagePaths)}
     AND ${sqlNotInList("child.request_path", signInPagePaths)}
 ),
 

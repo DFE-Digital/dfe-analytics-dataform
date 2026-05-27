@@ -14,7 +14,8 @@ const entityIdsDoNotMatch = require("./includes/entity_ids_do_not_match");
 const entityImportIdsDoNotMatch = require("./includes/entity_import_ids_do_not_match");
 const pageviewWithFunnel = require("./includes/pageview_with_funnels");
 const sessions = require("./includes/sessions");
-const session_details = require("./includes/session_details");
+const webRequestIdentityInference = require("./includes/web_request_identity_inference");
+const sessionDetails = require("./includes/web_analytics_sessions");
 const entityVersion = require("./includes/entity_version");
 const entityFieldUpdates = require("./includes/entity_field_updates");
 const flattenedEntityVersion = require("./includes/flattened_entity_version");
@@ -47,6 +48,7 @@ module.exports = (params) => {
         compareChecksums: false, // whether to enable an assertion to compare checksums and row counts in entity_table_check events to checksums and row counts in BigQuery
         transformEntityEvents: true, // whether to generate tables that transform entity CRUD events into flattened tables
         enableSessionTables: true, // whether to generate the sessions and pageview_with_funnels tables
+        enableWebRequestIdentityResolution: false, // whether to infer user identities using a server side methodology
         enableSessionDetailsTable: true, // whether to generate the session_details table
         enableMonitoring: true, // whether to send summary monitoring data to the monitoring.pipeline_snapshots table in the cross-service GCP project
         urlRegex: null, // re-2 formatted regular expression to use to identify whether a URL is this service's own URL or an external one. If your service only has one domain name set this to 'www.yourdomainname.gov.uk' (without the protocol). If you have more than one use something like '(?i)(www.domain1.gov.uk|www.domain2.gov.uk|www.domain3.gov.uk)'
@@ -107,7 +109,8 @@ module.exports = (params) => {
             entityImportIdsDoNotMatch: entityImportIdsDoNotMatch(params),
             pageviewWithFunnel: pageviewWithFunnel(params),
             sessions: sessions(params),
-            session_details: session_details(params),
+            webRequestIdentityInference: webRequestIdentityInference(params),
+            sessionDetails: sessionDetails(params),
             dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
             entitiesAreMissingExpectedFields: entitiesAreMissingExpectedFields(params),
             unhandledFieldOrEntityIsBeingStreamed: unhandledFieldOrEntityIsBeingStreamed(params),
@@ -137,7 +140,8 @@ module.exports = (params) => {
             hiddenPIIConfigurationDoesNotMatchEventsStreamed: hiddenPIIConfigurationDoesNotMatchEventsStreamed(params),
             pageviewWithFunnel: pageviewWithFunnel(params),
             sessions: sessions(params),
-            session_details: session_details(params),
+            webRequestIdentityInference: webRequestIdentityInference(params),
+            sessionDetails: sessionDetails(params),
             dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
             pipelineSnapshot: pipelineSnapshot(version, params),
             version: version
