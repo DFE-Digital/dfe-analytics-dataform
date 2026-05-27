@@ -153,7 +153,7 @@ module.exports = (version, params) => {
         entity_table_check_scheduled_metrics,
         events_table_metrics;
       EXCEPTION WHEN ERROR THEN
-        IF LOWER(@@error.message) LIKE "%access denied%" THEN RAISE USING MESSAGE = "Your Dataform service account does not have the required permissions to send data to the monitoring.pipeline_snapshots table in the cross-teacher-services GCP project. Please ask the Data & Insights team on Slack (#twd_data_insights) to give your Dataform service account the BigQuery Data Editor role on this table.";
+        IF LOWER(@@error.message) LIKE "%access denied%" THEN RAISE USING MESSAGE = "Your Dataform service account does not have the required permissions to send data to the monitoring.pipeline_snapshots table in the cross-teacher-services GCP project. Please ask the Data & Insights team on Teams (SD Data Insights) to give your Dataform service account the BigQuery Data Editor role on this table.";
         ELSE RAISE;
         END IF;
       END;
