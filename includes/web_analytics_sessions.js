@@ -1,4 +1,4 @@
-const identityConfig = require("../definitions/session_details_config_find_placements");
+const identityConfig = require("../definitions/web_analytics_identity_inference_config");
 const parameter_functions = require("./parameter_functions");
 
 module.exports = params => {
