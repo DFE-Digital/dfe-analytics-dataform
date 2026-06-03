@@ -38,14 +38,14 @@ module.exports = params => {
 
   const finalName =
     params.sessionDetailsTableName ||
-    `session_details_cfg_${params.eventSourceName}`;
+    `session_details_${params.eventSourceName}`;
 
   const rawEventsName =
     `events_${params.eventSourceName}`;
 
   const identityEventsName =
     params.identityEventsTableName ||
-    `identity_solved_events_cfg_${params.eventSourceName}`;
+    `identity_solved_events_${params.eventSourceName}`;
 
   const sessionInputEventsName = enableIdentityResolution
     ? identityEventsName

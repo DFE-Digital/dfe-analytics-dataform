@@ -1,40 +1,229 @@
-const identityConfig = require("../definitions/web_analytics_identity_inference_config_upd");
-const parameter_functions = require("./parameter_functions");
+/* 
+IdentityConfig: 
 
-module.exports = params => {
-  if (!params.enableWebRequestIdentityResolution) {
-    return true;
-  }
+Load the service-specific identity-inference configuration. This configuration file allows the same pipeline generator to be reused for multiple web analytics event sources.
+   
+Each service can define its own: 
+    - identity-bearing anchor requests: Any authenticated database update can be a valid anchor if the update event is linked to the triggering web request by request_uuid and the extracted user ID is the authenticated actor.
+    - sign-in and sign-out paths
+    - authenticated area paths 
+    - admin page patterns
+    - earliest valid source data date (typically this will be chosen based on the amount of data that can be processed. Testing suggest 10 million web request events is the maximum that can be processed in a single run.)
+*/
+  const identityConfig = require("../definitions/web_analytics_identity_inference_config_upd");
 
-  /* --------------------------------------------------------------------------
-     1. Load service-specific config
-  -------------------------------------------------------------------------- */
+/* Load dfe-analytics shared parameter helper functions. */
+  const parameter_functions = require("./parameter_functions");
+
+/* Export a function that receives the pipeline parameters and dynamically defines the required Dataform models. The SQL and table names generated later in this file 
+   depend on these params. */
+  module.exports = params => {
+    if (!params.enableWebRequestIdentityResolution) {
+      return true;
+    }
+
+/* --------------------------------------------------------------------------
+   1a. Load and validate service-specific configuration
+
+   Select the configuration object for the current event source.
+
+   Example:
+     params.eventSourceName = "itt_mentors"
+
+   The matching configuration must exist at:
+     identityConfig["itt_mentors"]
+
+   This service-level configuration contains the identity rules and path
+   definitions used to generate the SQL throughout the pipeline.
+
+   Each configured service must include:
+     - identity: rules for extracting trusted identity anchors (Defined as: Any 
+     authenticated database update can be a valid anchor if the update event is 
+     linked to the triggering web request by request_uuid and the extracted user ID 
+     is the authenticated actor.)
+     - paths: service-specific public, authentication, sign-out, and admin paths.
+
+   The pipeline fails immediately if:
+     - the current event source has no matching configuration entry;
+     - the matching configuration is missing the required `identity` object;
+     - the matching configuration is missing the required `paths` object.
+
+   Failing early prevents the pipeline from generating incomplete SQL or
+   silently applying identity resolution logic with missing service specific
+   rules.
+------------------------------------------------------------------------------ */
 
   const webAnalytics = identityConfig[params.eventSourceName];
 
   if (!webAnalytics) {
     throw new Error(
-      `enableWebRequestIdentityResolution is true but no web analytics config was found for eventSourceName '${params.eventSourceName}'.`
+      `Web-request identity resolution is enabled for event source ` +
+      `'${params.eventSourceName}', but no matching service configuration was found. ` +
+      `Add an entry at identityConfig['${params.eventSourceName}'].`
     );
   }
 
-  const identity = webAnalytics.identity || {};
-  const paths = webAnalytics.paths || {};
+  const identity = webAnalytics.identity;
+
+  if (!identity) {
+    throw new Error(
+      `Web-request identity resolution configuration for event source ` +
+      `'${params.eventSourceName}' is missing the required 'identity' object. ` +
+      `Add identity rules at identityConfig['${params.eventSourceName}'].identity.`
+    );
+  }
+
+  const paths = webAnalytics.paths;
+
+  if (!paths) {
+    throw new Error(
+      `Web-request identity resolution configuration for event source ` +
+      `'${params.eventSourceName}' is missing the required 'paths' object. ` +
+      `Add path rules at identityConfig['${params.eventSourceName}'].paths.`
+    );
+  }
+
+/*
+  The start date will be set to either the startDate defined in the service specific
+  config file or '2025-01-01'. This date is chosen because prior to this date, and
+  a less stable device identifier was collected and therefore cannot be reliable used.
+*/
+
   const startDate =
     webAnalytics.startDate ||
-    "2025-06-01"; /* Anonymised user agent and IP was incorrectly captured before this date */
+    "2025-01-01";
 
-  /* --------------------------------------------------------------------------
-     2. Identity config
-  -------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   1b. Configure and validate trusted identity anchor sources
 
-  const anchorSources = identity.anchorSources || [];
+   Define the request patterns that can provide trusted links between:
+     - an anonymous user identifier (AUID); and
+     - a known inferred user identifier (IUID).
 
-  /* --------------------------------------------------------------------------
-     3. Path config
-  -------------------------------------------------------------------------- */
+   Each element of `identity.anchorSources` represents one type of
+   identity bearing request. The SQL generator uses these definitions to
+   extract known IUIDs from qualifying events and create the anchor table that
+   supports all downstream identity inference.
 
-  const unique = values => [...new Set(values)];
+   Each anchor-source definition must include:
+     - entityTableName:
+         The source entity associated with the qualifying request.
+
+     - requestPaths:
+         One or more request paths that identify the relevant endpoint.
+         Paths may include a trailing wildcard where prefix matching is needed.
+
+     - requestMethods:
+         One or more qualifying HTTP methods.
+         If omitted, the SQL-generation helper defaults this to ["GET"].
+
+     - dataField:
+         The nested event-data field containing the identity-bearing value.
+
+     - userIdKey:
+         The key used to extract the IUID from the nested data field.
+
+   The pipeline fails immediately if `identity.anchorSources` is missing, is
+   not an array, or contains no entries. Identity propagation cannot operate
+   without at least one configured source of trusted identity anchors.
+------------------------------------------------------------------------------ */
+
+  const anchorSources = identity.anchorSources;
+
+  if (!Array.isArray(anchorSources) || anchorSources.length === 0) {
+    throw new Error(
+      `Web-request identity resolution configuration for event source ` +
+      `'${params.eventSourceName}' must include at least one trusted identity-anchor source. ` +
+      `Add one or more entries to ` +
+      `identityConfig['${params.eventSourceName}'].identity.anchorSources.`
+    );
+  }
+
+  /*
+    Validate each trusted anchor source definition before generating SQL.
+  */
+
+  anchorSources.forEach((source, index) => {
+    const sourceLocation =
+      `identityConfig['${params.eventSourceName}'].identity.anchorSources[${index}]`;
+
+    if (!source || typeof source !== "object") {
+      throw new Error(
+        `${sourceLocation} must be an object containing a trusted anchor-source definition.`
+      );
+    }
+
+    if (!source.entityTableName) {
+      throw new Error(
+        `${sourceLocation} is missing the required 'entityTableName' value.`
+      );
+    }
+
+    if (!Array.isArray(source.requestPaths) || source.requestPaths.length === 0) {
+      throw new Error(
+        `${sourceLocation} must include at least one value in 'requestPaths'.`
+      );
+    }
+
+    if (
+      source.requestMethods !== undefined &&
+      (
+        !Array.isArray(source.requestMethods) ||
+        source.requestMethods.length === 0
+      )
+    ) {
+      throw new Error(
+        `${sourceLocation}.requestMethods must be a non-empty array when provided.`
+      );
+    }
+
+    if (!source.dataField) {
+      throw new Error(
+        `${sourceLocation} is missing the required 'dataField' value.`
+      );
+    }
+
+    if (!source.userIdKey) {
+      throw new Error(
+        `${sourceLocation} is missing the required 'userIdKey' value.`
+      );
+    }
+  });
+
+
+/* --------------------------------------------------------------------------
+    1c. Incremental Run config
+
+    Number of additional hours to rebuild before the calculated incremental 
+    checkpoint. 
+
+    The pipeline deliberately reprocesses an overlap period on each incremental
+    run. This allows identity chains, activity windows, and downstream sessions
+    that cross the rebuild boundary to be reconstructed consistently.
+------------------------------------------------------------------------------ */
+
+  const identityIncrementalRebuildHours =
+    params.identityIncrementalRebuildHours || 6;
+
+/* --------------------------------------------------------------------------
+  1d. Path config
+
+   Define the page paths used by the identity-resolution rules.
+
+   These path groups influence how the pipeline interprets navigation events,
+   authentication transitions, activity window evidence, and admin activity.
+
+   Some path groups may legitimately be empty:
+     - authPrefixes:
+         A service may not have a clearly defined authenticated area prefix.
+
+     - adminPatterns:
+         A service may not expose admin pages or may not require admin
+         identity normalisation.
+
+   An empty array should be used where a category is intentionally not
+   applicable to the service.
+------------------------------------------------------------------------------ */
 
   const preAuthPagePaths = paths.preAuth || ["/", "/?"];
   const signInPagePaths = paths.signIn || ["/sign-in"];
@@ -42,6 +231,9 @@ module.exports = params => {
 
   const authPrefixes = paths.authPrefixes || [];
   const adminPagePatterns = paths.adminPatterns || [];
+
+/* This is a small helper function that removes duplicates from an array */
+  const unique = values => [...new Set(values)];
 
   const preAuthAndSignInPagePaths = unique([
     ...preAuthPagePaths,
@@ -54,47 +246,128 @@ module.exports = params => {
     ...signOutPaths
   ]);
 
-  const excludedPathsForActivity = publicAndAuthPagePaths;
+  /*
+    Validate optional path groups after applying defaults.
 
-  /* --------------------------------------------------------------------------
-     4. Dynamic table names
-  -------------------------------------------------------------------------- */
+    Each path group is used as an array when generating SQL conditions.
+    Empty arrays are valid for optional categories such as authenticated-area
+    prefixes and admin-page patterns.
+  */
+  [
+    ["preAuth", preAuthPagePaths],
+    ["signIn", signInPagePaths],
+    ["signOut", signOutPaths],
+    ["authPrefixes", authPrefixes],
+    ["adminPatterns", adminPagePatterns]
+  ].forEach(([pathGroupName, configuredPaths]) => {
+    if (!Array.isArray(configuredPaths)) {
+      throw new Error(
+        `Web-request identity resolution configuration for event source ` +
+        `'${params.eventSourceName}' must define paths.${pathGroupName} as an array.`
+      );
+    }
+  });
 
-  const stagingSchema = params.stagingDataset || "web_analytics_staging_tables";
+/* --------------------------------------------------------------------------
+    1e. Define service specific table names
+
+    Define the BigQuery dataset and model names used throughout the identity-
+    resolution pipeline.
+
+    The pipeline is generated dynamically for each event source. Appending
+    `params.eventSourceName` to each model name allows the same shared pipeline
+    logic to create separate tables for different services.
+
+    Intermediate identity resolution models are published to the shared
+    `web_analytics_staging_tables` dataset. Intermediate models are necessary to
+    ensure that the query is not to complex for BigQuery to run.
+
+    The generated model names broadly correspond to the pipeline stages:
+      - source web events
+      - trusted identity anchors
+      - AUID risk classification
+      - initial direct identity assignment
+      - conservative recursive propagation
+      - activity-window fallback
+      - targeted post-window repair
+      - solved event output after admin identity normalisation
+
+    Some recursive stages use separate input, run, and persisted-state tables.
+    This is necessary because the durable staging tables are incremental, but
+    recursive SQL must run in a standard table rather than inside an incremental
+    MERGE operation.
+
+    The input table detects whether the model is running incrementally and
+    creates a filtered rebuild scope. The standard run table performs the
+    recursive walk on that scope. The persisted-state table then replaces the
+    overlapping rebuild period with the newly calculated results while retaining
+    the historical state outside that period.
+------------------------------------------------------------------------------ */
+
+  const stagingSchema = "web_analytics_staging_tables";
 
   const eventsTableName = `events_${params.eventSourceName}`;
 
+  const anchorsAllName =
+    `identity_anchors_all_${params.eventSourceName}`;
+
+  const auidStateName =
+    `identity_auid_state_${params.eventSourceName}`;
+
   const classifyEventsName =
-    `identity_classify_events_cfg_${params.eventSourceName}`;
+  `identity_classify_events_${params.eventSourceName}`;
+
+  const conservativeWalkInputName =
+    `identity_conservative_recursive_walk_input_${params.eventSourceName}`;
+
+  const conservativeWalkRunName =
+    `identity_conservative_recursive_walk_run_${params.eventSourceName}`;
 
   const conservativeWalkName =
-    `identity_conservative_recursive_walk_cfg_${params.eventSourceName}`;
+    `identity_conservative_recursive_walk_${params.eventSourceName}`;
 
   const activityWindowsName =
-    `identity_activity_windows_cfg_${params.eventSourceName}`;
+    `identity_activity_windows_${params.eventSourceName}`;
+
+  const secondWalkInputName =
+    `identity_second_recursive_walk_input_${params.eventSourceName}`;
+
+  const secondWalkRunName =
+    `identity_second_recursive_walk_run_${params.eventSourceName}`;
 
   const secondWalkName =
-    `identity_second_recursive_walk_cfg_${params.eventSourceName}`;
+    `identity_second_recursive_walk_${params.eventSourceName}`;
 
   const resolvedAdminName =
-    `identity_solved_events_cfg_${params.eventSourceName}`;
+    `identity_solved_events_${params.eventSourceName}`;
 
-  /* --------------------------------------------------------------------------
-     5. SQL helper functions
-  -------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+     1f. SQL helper functions
 
+     These JavaScript helpers generate reusable SQL fragments. They allow the 
+     same pipeline to adapt to service specific arrays of paths, prefixes, 
+     anchor sources, and incremental run settings without duplicating SQL 
+     for each service.
+-------------------------------------------------------------------------- */
+
+/* Convert a JavaScript value into an escaped SQL string literal. */
   function sqlString(value) {
     return `'${String(value).replace(/'/g, "\\'")}'`;
   }
 
+/* Convert a JavaScript array into a BigQuery SQL array of escaped strings.*/
   function sqlStringArray(values = []) {
     return `[${values.map(sqlString).join(", ")}]`;
   }
 
+/* Build a qualified SQL field reference such as `e.request_path`. */
   function sqlFieldRef(alias, fieldName) {
     return `${alias}.${fieldName}`;
   }
 
+/* Generate a BigQuery `IN UNNEST([...])` condition. Return FALSE 
+for an empty list so the generated SQL remains valid and correctly 
+matches no rows. */
   function sqlInList(field, values = []) {
     if (!values.length) {
       return "FALSE";
@@ -102,6 +375,9 @@ module.exports = params => {
     return `${field} IN UNNEST(${sqlStringArray(values)})`;
   }
 
+/* Generate a BigQuery `NOT IN UNNEST([...])` condition. Return FALSE for 
+an empty list so the generated SQL remains valid and correctly matches 
+no rows. */
   function sqlNotInList(field, values = []) {
     if (!values.length) {
       return "TRUE";
@@ -109,15 +385,10 @@ module.exports = params => {
     return `${field} NOT IN UNNEST(${sqlStringArray(values)})`;
   }
 
-  function sqlStartsWithAny(field, prefixes = []) {
-    if (!prefixes.length) {
-      return "FALSE";
-    }
-    return prefixes
-      .map(prefix => `STARTS_WITH(${field}, ${sqlString(prefix)})`)
-      .join(" OR ");
-  }
-
+/* Generate an AND condition that checks whether a field starts with none of 
+the configured prefixes. Return TRUE for an empty list so no paths are excluded 
+when a service has no authenticated-area prefixes. This is a JS function to allow the length
+of the input list to be dynamic. */
   function sqlNotStartsWithAny(field, prefixes = []) {
     if (!prefixes.length) {
       return "TRUE";
@@ -127,6 +398,10 @@ module.exports = params => {
       .join(" AND ");
   }
 
+/* Generate an OR condition that checks whether a field matches any configured
+   regular expression pattern. Return FALSE for an empty list so that no rows
+   are treated as admin page events when a service has no admin patterns. This 
+   is a JS function to allow the length of the input list to be dynamic.  */
   function sqlRegexpContainsAny(field, patterns = []) {
     if (!patterns.length) {
       return "FALSE";
@@ -136,60 +411,73 @@ module.exports = params => {
       .join(" OR ");
   }
 
-  function sqlPathMatchesAny(field, paths = []) {
-    if (!paths.length) {
-      return "FALSE";
-    }
 
-    return paths
-      .map(path => {
-        if (path.includes("*")) {
-          return `STARTS_WITH(${field}, ${sqlString(path.replace("*", ""))})`;
-        }
+/* Escape characters that have a special meaning inside a regular expression.
+   This allows configured paths to be treated literally except for `*`, which
+   is deliberately supported as a wildcard. */
+function escapeRegex(value) {
+  return value.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+}
 
+/* Generate a SQL condition that matches any configured request path.
+
+   Exact paths use equality. Paths containing `*` are converted into anchored
+   regular expressions, where each `*` matches zero or more characters.
+   All other regular-expression characters are escaped and treated literally.
+
+   Return FALSE for an empty list so that no paths are matched. */
+
+function sqlPathMatchesAny(field, paths = []) {
+  if (!paths.length) {
+    return "FALSE";
+  }
+
+  return paths
+    .map(path => {
+      if (!path.includes("*")) {
         return `${field} = ${sqlString(path)}`;
-      })
-      .join(" OR ");
-  }
+      }
 
-  function sqlAnchorSourceQueries(alias, sources = []) {
-    const validSources = sources.filter(source =>
-      source.entityTableName &&
-      source.requestPaths?.length &&
-      source.dataField &&
-      source.userIdKey
-    );
+      const regexPattern = path
+        .split("*")
+        .map(escapeRegex)
+        .join(".*");
 
-    if (!validSources.length) {
-      return `
-        SELECT
-          NULL AS request_uuid,
-          NULL AS occurred_at,
-          NULL AS event_date,
-          NULL AS auid,
-          NULL AS iuid
-        WHERE FALSE
-      `;
-    }
+      return `REGEXP_CONTAINS(${field}, ${sqlString(`^${regexPattern}$`)})`;
+    })
+    .join(" OR ");
+}
 
-    return validSources
-      .map(source => `
-        SELECT DISTINCT
-          ${alias}.request_uuid,
-          ${alias}.occurred_at,
-          DATE(${alias}.occurred_at) AS event_date,
-          ${alias}.anonymised_user_agent_and_ip AS auid,
-          d.value[SAFE_OFFSET(0)] AS iuid
-        FROM events_base ${alias}
-        JOIN UNNEST(${sqlFieldRef(alias, source.dataField)}) AS d
-        WHERE ${alias}.entity_table_name = ${sqlString(source.entityTableName)}
-          AND (${sqlPathMatchesAny(`${alias}.request_path`, source.requestPaths)})
-          AND ${sqlInList(`${alias}.request_method`, source.requestMethods || ["GET"])}
-          AND d.key = ${sqlString(source.userIdKey)}
-          AND d.value[SAFE_OFFSET(0)] IS NOT NULL
-      `)
-      .join("\nUNION ALL\n");
-  }
+/* Generate one trusted-anchor extraction query for each configured anchor
+   source and combine the results with UNION ALL.
+
+   JavaScript is required because services may define different numbers of
+   anchor sources, and each source may use different request paths, methods,
+   nested data fields, and user-ID keys. */
+function sqlAnchorSourceQueries(sources) {
+  return sources
+    .map(source => `
+      SELECT DISTINCT
+        e.request_uuid,
+        e.occurred_at,
+        DATE(e.occurred_at) AS event_date,
+        e.anonymised_user_agent_and_ip AS auid,
+        d.value[SAFE_OFFSET(0)] AS iuid
+      FROM events_base e
+      JOIN UNNEST(e.${source.dataField}) AS d
+      WHERE e.entity_table_name = ${sqlString(source.entityTableName)}
+        AND (${sqlPathMatchesAny("e.request_path", source.requestPaths)})
+        AND ${sqlInList(
+          "e.request_method",
+          source.requestMethods || ["GET"]
+        )}
+        AND d.key = ${sqlString(source.userIdKey)}
+        AND d.value[SAFE_OFFSET(0)] IS NOT NULL
+    `)
+    .join("\nUNION ALL\n");
+}
+
+  /* Replace these with actual ones once working */ 
 
   function stagingConfig(description, extra = {}) {
     return {
@@ -203,150 +491,429 @@ module.exports = params => {
     };
   }
 
-/* --------------------------------------------------------------------------
-   6. Component 1: classify events
--------------------------------------------------------------------------- */
+  function incrementalEventConfig(description, extra = {}) {
+    return stagingConfig(description, {
+      type: "incremental",
+      protected: false,
+      uniqueKey: ["request_uuid"],
+      bigquery: {
+        partitionBy: "event_date",
+        clusterBy: ["auid", "current_iuid"]
+      },
+      ...extra
+    });
+  }
 
-publish(classifyEventsName, stagingConfig("Classify events for identity resolution")).query(ctx => `
+  /* Generate pre-operations for durable incremental event-state tables. On a full refresh, rebuild from the configured start date. 
+  
+  On an incremental run: 
+  1. calculate an overlapping rebuild checkpoint from the latest stored date 
+  2. move the checkpoint back by one day and the configured additional hours 
+  3. delete the affected rows before rebuilding that period. 
+  
+  Dataform's `ctx.incremental()` value is evaluated when the model is compiled and determines which SQL should be generated. */
+
+  function identityEventCheckpointPreOps(ctx) {
+    return `
+      DECLARE identity_rebuild_checkpoint TIMESTAMP DEFAULT (
+        ${
+          ctx.incremental()
+            ? `SELECT TIMESTAMP_SUB(
+                  TIMESTAMP(
+                    DATE_SUB(
+                      COALESCE(MAX(event_date), DATE(${sqlString(startDate)})),
+                      INTERVAL 1 DAY
+                    )
+                  ),
+                  INTERVAL ${identityIncrementalRebuildHours} HOUR
+                )
+                FROM ${ctx.self()}`
+            : `SELECT TIMESTAMP(${sqlString(startDate)})`
+        }
+      );
+
+      ${
+        ctx.incremental()
+          ? `DELETE FROM ${ctx.self()}
+            WHERE event_date >= DATE(identity_rebuild_checkpoint)
+              AND occurred_at >= identity_rebuild_checkpoint;`
+          : ``
+      }
+      `;
+        }
+
+/* Generate pre-operations for the temporary input tables used before recursive
+   identity walks.
+
+   Recursive SQL is executed in a standard table rather than directly inside an
+   incremental MERGE model. To keep each run efficient, the recursive walk
+   should process only the current incremental rebuild scope rather than the
+   full event history.
+
+   Dataform can determine whether a run is incremental only within a model
+   configured as incremental. This temporary input model therefore:
+     1. calculates the rebuild checkpoint using the same overlap logic as the
+        durable incremental state tables;
+     2. clears its existing contents on each incremental run; and
+     3. repopulates itself only with the events that fall within the current
+        rebuild scope.
+
+   The resulting scoped input table is then read by the standard recursive-run
+   table. */
+   
+    function recursiveWalkInputScopePreOps(ctx) {
+      return `
+        DECLARE identity_rebuild_checkpoint TIMESTAMP DEFAULT (
+          ${
+            ctx.incremental()
+              ? `SELECT TIMESTAMP_SUB(
+                    TIMESTAMP(
+                      DATE_SUB(
+                        COALESCE(MAX(event_date), DATE(${sqlString(startDate)})),
+                        INTERVAL 1 DAY
+                      )
+                    ),
+                    INTERVAL ${identityIncrementalRebuildHours} HOUR
+                  )
+                  FROM ${ctx.self()}`
+              : `SELECT TIMESTAMP(${sqlString(startDate)})`
+          }
+        );
+
+    ${
+      ctx.incremental()
+        ? `DELETE FROM ${ctx.self()} WHERE TRUE;`
+        : ``
+    }
+  `;
+}
+ 
+/* --------------------------------------------------------------------------
+
+  2A. Prepare identity evidence: build all-time trusted anchors 
+ 
+  Create the table of trusted links between: 
+  - an identity-bearing request
+  - the anonymous user identifier observed on that request (AUID)
+  - the known authenticated user identifier extracted from the configured 
+    source data (IUID). 
+  
+  This model is rebuilt across the full valid source data period rather than 
+  incrementally because historical anchors affect the all time risk classification 
+  of each AUID in the next stage. 
+  
+  Grain: One row per identity bearing request UUID. 
+  
+  Output: identity_anchors_all_[event source] 
+
+------------------------------------------------------------------------------ */
+
+  publish(
+    anchorsAllName,
+    stagingConfig("All-time trusted identity anchors for identity resolution", {
+      type: "table",
+      bigquery: {
+        partitionBy: "event_date",
+        clusterBy: ["auid", "iuid"]
+      }
+    })
+  ).query(ctx => `
+
+  WITH
+
+  events_base AS (
+    SELECT *
+    FROM ${ctx.ref(eventsTableName)}
+    WHERE occurred_at >= TIMESTAMP(${sqlString(startDate)})
+      AND anonymised_user_agent_and_ip IS NOT NULL
+  ),
+
+  raw_anchors AS (
+    ${sqlAnchorSourceQueries(anchorSources)}
+  ),
+
+  anchors AS (
+    SELECT
+      request_uuid,
+      MIN(auid) AS auid,
+      MIN(event_date) AS event_date,
+      MIN(occurred_at) AS occurred_at,
+      MIN(iuid) AS iuid
+    FROM raw_anchors
+    WHERE iuid IS NOT NULL
+    GROUP BY request_uuid
+  )
+
+  SELECT *
+  FROM anchors
+
+  `);
+
+  /* --------------------------------------------------------------------------
+    2B. Prepare identity evidence: classify all-time AUID identity state 
+    
+    Create an all-time identity-risk profile for each anonymous user identifier 
+    (AUID) observed in valid web-request activity. This model determines whether 
+    activity associated with an AUID can: 
+      - be assigned directly to a known inferred user identifier (IUID)
+      - remain anonymous because no trusted identity evidence exists
+      - enter the conservative recursive identity-propagation stage. 
+      
+    This model is rebuilt across the full valid source data period rather than 
+    incrementally because later activity can change the risk classification of 
+    an AUID. For example, an AUID previously linked to one IUID may later be 
+    observed with a second IUID and must then be treated as high risk. 
+    
+    Grain: One row per AUID observed in web request activity. 
+    
+    Output: identity_auid_state_[event source]
+   -------------------------------------------------------------------------- */
+
+    publish(
+      auidStateName,
+      stagingConfig("All-time AUID identity state for identity resolution", {
+        type: "table",
+        bigquery: {
+          clusterBy: ["auid", "auid_risk_classification"]
+        }
+      })
+    ).query(ctx => `
+
+    WITH
+
+    /* Restrict the source data to the valid processing period and remove events without
+    an AUID, as these cannot be assigned an inferred identity. */
+
+    events_base AS (
+      SELECT *
+      FROM ${ctx.ref(eventsTableName)}
+      WHERE occurred_at >= TIMESTAMP(${sqlString(startDate)})
+        AND anonymised_user_agent_and_ip IS NOT NULL
+    ),
+
+    /* Create a table of web requests only, as the identity inference code is only intended to
+    infer and propagate an identity for these events. Other event types may provide trusted identity 
+    anchors. */
+
+    web_events_base AS (
+      SELECT *
+      FROM events_base
+      WHERE event_type = 'web_request'
+    ),
+
+    /* Load the trusted all time AUID to IUID anchor evidence created in the preceding model. */
+    anchors AS (
+      SELECT *
+      FROM ${ctx.ref(anchorsAllName)}
+    ),
+
+    /* Identify each calendar date on which an AUID generated web-request activity.
+
+   Grain:
+     One row per AUID and active date. */
+     
+    auid_active_dates AS (
+      SELECT DISTINCT
+        anonymised_user_agent_and_ip AS auid,
+        DATE(occurred_at) AS event_date
+      FROM web_events_base
+    ),
+
+    /* Identify each calendar date on which an AUID has trusted anchor evidence.
+
+      Grain: One row per anchored AUID and date. */
+
+    auid_anchor_dates AS (
+      SELECT DISTINCT
+        auid,
+        event_date
+      FROM anchors
+    ),
+
+    /* Summarise the complete trusted anchor history for each AUID.
+
+      single_known_iuid is used downstream only where the AUID has exactly one
+      distinct known IUID. The risk classification below enforces that condition.
+
+      Grain: One row per anchored AUID. */
+        
+    auid_anchor_summary AS (
+      SELECT
+        auid,
+        COUNT(DISTINCT iuid) AS distinct_iuid_count_ever,
+        MIN(iuid) AS single_known_iuid
+      FROM anchors
+      GROUP BY auid
+    ),
+
+    /* Combine web-request activity dates with trusted anchor evidence.
+
+      AUIDs with no trusted anchors are retained so they can be classified as
+      anonymous-only. active_dates_without_trusted_anchor is an intermediate
+      classification input and is not persisted in the final output.
+
+      Grain: One row per AUID observed in web-request activity. */
+
+    auid_classification_inputs AS (
+      SELECT
+        e.auid,
+
+        IFNULL(MAX(s.distinct_iuid_count_ever), 0)
+          AS distinct_iuid_count_ever,
+
+        ANY_VALUE(s.single_known_iuid)
+          AS single_known_iuid,
+
+        COUNTIF(a.auid IS NULL)
+          AS active_dates_without_trusted_anchor
+
+      FROM auid_active_dates e
+      LEFT JOIN auid_anchor_dates a
+        ON e.auid = a.auid
+      AND e.event_date = a.event_date
+      LEFT JOIN auid_anchor_summary s
+        ON e.auid = s.auid
+      GROUP BY e.auid
+    ),
+
+    /* Assign each AUID to a risk class and determine whether its events require
+      deeper recursive identity inference.
+
+      LOW_RISK_EXCLUSIVE_ANCHORED_AUID means:
+        - the AUID has only ever been linked to one IUID; and
+        - every date containing web-request activity also contains trusted anchor
+          evidence.
+
+      These AUIDs can receive direct identity assignment without a recursive walk.
+
+      AUIDs with uncertain single-IUID or multi-IUID histories are passed to later
+      stages, which attempt to infer identity using a conservative deterministic
+      ruleset.
+
+      Anonymous-only AUIDs remain unresolved because no trusted identity evidence
+      is available to propagate.
+
+      Grain: One row per AUID observed in web-request activity. */
+
+    classified_auids AS (
+      SELECT
+        auid,
+        distinct_iuid_count_ever,
+        single_known_iuid,
+
+        CASE
+          WHEN distinct_iuid_count_ever = 0
+            THEN 'NO_KNOWN_IUID_ANONYMOUS_ONLY'
+
+          WHEN distinct_iuid_count_ever = 1
+            AND active_dates_without_trusted_anchor = 0
+            THEN 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
+
+          WHEN distinct_iuid_count_ever = 1
+            AND active_dates_without_trusted_anchor > 0
+            THEN 'UNCERTAIN_SINGLE_IUID_UNANCHORED_ACTIVITY'
+
+          WHEN distinct_iuid_count_ever > 1
+            THEN 'HIGH_RISK_MULTI_IUID_AUID'
+
+          ELSE 'UNKNOWN'
+        END AS auid_risk_classification,
+
+        CASE
+          WHEN distinct_iuid_count_ever = 0
+            THEN FALSE
+
+          WHEN distinct_iuid_count_ever = 1
+            AND active_dates_without_trusted_anchor = 0
+            THEN FALSE
+
+          ELSE TRUE
+        END AS requires_walk
+
+      FROM auid_classification_inputs
+    )
+
+    SELECT *
+    FROM classified_auids
+
+`);
+
+/* -------------------------------------------------------------------------- 
+  3. Classify events and apply direct identity assignments 
+  
+  Create the initial event-level identity-resolution state. For each valid web-request event: 
+  - attach the all-time identity-risk profile for its AUID 
+  - identify whether the request is a trusted identity anchor
+  - assign a known IUID to trusted anchor events 
+  - directly assign activity on low-risk exclusive AUIDs 
+  - leave anonymous or uncertain activity unresolved for later stages. 
+  
+  This is an incremental model. Each run rebuilds an overlapping recent period so that identity 
+  chains, activity windows, and downstream sessions crossing the incremental boundary can be 
+  reconstructed consistently. 
+  
+  Grain: One row per valid web-request event. 
+  
+  Output: identity_classify_events_[event source] 
+------------------------------------------------------------------------------ */
+
+publish(
+  classifyEventsName,
+  incrementalEventConfig("Classify events for identity resolution")
+)
+.preOps(ctx => identityEventCheckpointPreOps(ctx))
+.query(ctx => `
 
 WITH
 
-events_base AS (
-  SELECT *
-  FROM ${ctx.ref(`events_${params.eventSourceName}`)}
-  WHERE occurred_at >= TIMESTAMP(${sqlString(startDate)})
-    AND anonymised_user_agent_and_ip IS NOT NULL
-),
+/* Load events within the current incremental rebuild scope. Events without 
+an AUID are excluded because they cannot be assigned or used to propagate an 
+inferred identity. */
 
-web_events_base AS (
-  SELECT *
-  FROM events_base
-  WHERE event_type = 'web_request'
-),
+  events_base AS (
+    SELECT *
+    FROM ${ctx.ref(`events_${params.eventSourceName}`)}
+    WHERE occurred_at >= identity_rebuild_checkpoint
+      AND occurred_at >= TIMESTAMP(${sqlString(startDate)})
+      AND anonymised_user_agent_and_ip IS NOT NULL
+  ),
 
-raw_anchors AS (
-  ${sqlAnchorSourceQueries("e", anchorSources)}
-),
+/* Restrict the output to web request activity. Other event types may provide 
+trusted anchor evidence upstream, but the identity inference output is intended 
+to resolve web request events only. */
 
-/* De-duplicate anchors as the duplicates will cause an explosion of rows in the self-joins used in the recursive walks */
+  web_events_base AS (
+    SELECT *
+    FROM events_base
+    WHERE event_type = 'web_request'
+  ),
 
-anchors AS (
-  SELECT
-    request_uuid,
-    MIN(auid) AS auid,
-    MIN(event_date) AS event_date,
-    MIN(occurred_at) AS occurred_at,
-    MIN(iuid) AS iuid
-  FROM raw_anchors
-  WHERE iuid IS NOT NULL
-  GROUP BY request_uuid
-),
+/* Load the all time trusted AUID to IUID anchor evidence created in stage 2A. */
 
-auid_events_by_date AS (
-  SELECT
-    anonymised_user_agent_and_ip AS auid,
-    DATE(occurred_at) AS event_date,
-    COUNT(*) AS event_count
-  FROM web_events_base
-  GROUP BY 1, 2
-),
+  anchors AS (
+    SELECT *
+    FROM ${ctx.ref(anchorsAllName)}
+  ),
 
-auid_anchors_by_date AS (
-  SELECT
-    auid,
-    event_date,
-    COUNT(*) AS sign_in_event_count,
-    COUNT(DISTINCT iuid) AS distinct_iuid_count_on_date,
-    ARRAY_AGG(DISTINCT iuid IGNORE NULLS ORDER BY iuid) AS iuids_on_date
-  FROM anchors
-  GROUP BY 1, 2
-),
+/* Load the all time trusted AUID risk classifications created in stage 2B. */
 
-auid_anchor_summary AS (
-  SELECT
-    auid,
-    COUNT(*) AS total_anchor_event_count,
-    COUNT(DISTINCT event_date) AS anchor_date_count,
-    COUNT(DISTINCT iuid) AS distinct_iuid_count_ever,
-    ARRAY_AGG(DISTINCT iuid IGNORE NULLS ORDER BY iuid) AS iuids_ever,
-    MIN(iuid) AS single_known_iuid
-  FROM anchors
-  GROUP BY auid
-),
+  classified_auids AS (
+    SELECT *
+    FROM ${ctx.ref(auidStateName)}
+  ),
 
-auid_summary AS (
-  SELECT
-    e.auid,
+/* Attach trusted anchor evidence and AUID risk classifications to each request, 
+then create the initial identity resolution state. Trusted anchor events receive 
+their known authenticated IUID. 
 
-    COUNT(DISTINCT e.event_date) AS active_date_count,
-    SUM(e.event_count) AS total_event_count,
+Non-anchor events on low risk exclusive AUIDs are assigned directly because: 
+  - the AUID has only ever been linked to one known IUID
+  - every active date for the AUID contains trusted anchor evidence
 
-    IFNULL(MAX(s.total_anchor_event_count), 0) AS total_anchor_event_count,
+Other events remain unresolved so later stages can apply conservative navigation
+chain and activity window rules. 
 
-    SUM(e.event_count) - IFNULL(MAX(s.total_anchor_event_count), 0)
-      AS total_non_anchor_event_count,
-
-    IFNULL(MAX(s.anchor_date_count), 0) AS anchor_date_count,
-    IFNULL(MAX(s.distinct_iuid_count_ever), 0) AS distinct_iuid_count_ever,
-    IFNULL(ANY_VALUE(s.iuids_ever), []) AS iuids_ever,
-    ANY_VALUE(s.single_known_iuid) AS single_known_iuid,
-
-    COUNTIF(a.auid IS NULL) AS active_dates_without_sign_in_anchor,
-
-    COUNTIF(
-      a.auid IS NOT NULL
-      AND a.distinct_iuid_count_on_date = 1
-    ) AS active_dates_with_single_iuid_anchor,
-
-    COUNTIF(
-      a.auid IS NOT NULL
-      AND a.distinct_iuid_count_on_date > 1
-    ) AS active_dates_with_multiple_iuid_anchors
-
-  FROM auid_events_by_date e
-  LEFT JOIN auid_anchors_by_date a
-    ON e.auid = a.auid
-   AND e.event_date = a.event_date
-  LEFT JOIN auid_anchor_summary s
-    ON e.auid = s.auid
-  GROUP BY e.auid
-),
-
-classified_auids AS (
-  SELECT
-    *,
-
-    CASE
-      WHEN distinct_iuid_count_ever = 0
-        THEN 'NO_KNOWN_IUID_ANONYMOUS_ONLY'
-
-      WHEN distinct_iuid_count_ever = 1
-        AND active_dates_without_sign_in_anchor = 0
-        THEN 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
-
-      WHEN distinct_iuid_count_ever = 1
-        AND active_dates_without_sign_in_anchor > 0
-        THEN 'UNCERTAIN_SINGLE_IUID_UNANCHORED_ACTIVITY'
-
-      WHEN distinct_iuid_count_ever > 1
-        THEN 'HIGH_RISK_MULTI_IUID_AUID'
-
-      ELSE 'UNKNOWN'
-    END AS auid_risk_classification,
-
-    CASE
-      WHEN distinct_iuid_count_ever = 0
-        THEN FALSE
-
-      WHEN distinct_iuid_count_ever = 1
-        AND active_dates_without_sign_in_anchor = 0
-        THEN FALSE
-
-      ELSE TRUE
-    END AS requires_walk
-
-  FROM auid_summary
-),
+Grain: One row per valid web request event. */
 
 events_with_current_identity_state AS (
   SELECT
@@ -370,10 +937,13 @@ events_with_current_identity_state AS (
     e.namespace,
     e.device_category,
 
-    IF(a.request_uuid IS NOT NULL, TRUE, FALSE) AS is_sign_in_anchor,
+    /* Identify requests that contain trusted authenticated identity evidence. */
+    IF(a.request_uuid IS NOT NULL, TRUE, FALSE) AS is_trusted_identity_anchor,
 
+    /* Known authenticated identity extracted from the trusted anchor source. */
     a.iuid AS known_anchor_iuid,
 
+    /* AUID risk state and supporting audit metrics. */
     c.auid_risk_classification,
     c.requires_walk,
 
@@ -381,12 +951,16 @@ events_with_current_identity_state AS (
     c.iuids_ever,
     c.active_date_count,
     c.anchor_date_count,
-    c.active_dates_without_sign_in_anchor,
+    c.active_dates_without_trusted_anchor,
     c.active_dates_with_single_iuid_anchor,
     c.active_dates_with_multiple_iuid_anchors,
     c.total_event_count AS auid_total_event_count,
     c.total_anchor_event_count AS auid_total_anchor_event_count,
-    c.total_non_anchor_event_count AS auid_total_non_anchor_event_count,
+
+    /* Assign identities inferred through the safe no walk rule. 
+    
+    Known anchor identities are excluded because they are observed 
+    facts rather than inferred values. */
 
     CASE
       WHEN c.auid_risk_classification = 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
@@ -396,16 +970,20 @@ events_with_current_identity_state AS (
       ELSE NULL
     END AS initial_inferred_iuid,
 
+  /* Explain whether an initial inferred identity was applied and, 
+  if not, why the event remains outside the direct assignment path. 
+  This is primarily used for audit purposes */
+
     CASE
       WHEN c.auid_risk_classification = 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
         AND a.iuid IS NULL
         THEN 'INFERRED_FROM_EXCLUSIVE_SINGLE_IUID_AUID_ACTIVITY_ONLY_ON_ANCHORED_DATES'
 
       WHEN a.iuid IS NOT NULL
-        THEN 'NOT_INFERRED_KNOWN_SIGN_IN_ANCHOR_EVENT'
+        THEN 'NOT_INFERRED_KNOWN_TRUSTED_ANCHOR_EVENT'
 
       WHEN c.auid_risk_classification = 'NO_KNOWN_IUID_ANONYMOUS_ONLY'
-        THEN 'NOT_INFERRED_NO_SIGN_IN_ANCHOR_AVAILABLE'
+        THEN 'NOT_INFERRED_NO_TRUSTED_ANCHOR_AVAILABLE'
 
       WHEN c.auid_risk_classification = 'UNCERTAIN_SINGLE_IUID_UNANCHORED_ACTIVITY'
         THEN 'NOT_INFERRED_REQUIRES_WALK_SINGLE_IUID_WITH_UNANCHORED_ACTIVITY'
@@ -415,6 +993,11 @@ events_with_current_identity_state AS (
 
       ELSE 'NOT_INFERRED_UNKNOWN_RISK_CLASSIFICATION'
     END AS initial_inferred_iuid_method,
+
+    /* Store the best currently available identity. Priority at this stage: 
+    1. known trusted anchor IUID
+    2. safe direct assignment for a low-risk exclusive AUID
+    3. unresolved */
 
     CASE
       WHEN a.iuid IS NOT NULL
@@ -426,9 +1009,10 @@ events_with_current_identity_state AS (
       ELSE NULL
     END AS current_iuid,
 
+    /* Explain the method used to produce the current identity state. */
     CASE
       WHEN a.iuid IS NOT NULL
-        THEN 'KNOWN_SIGN_IN_ANCHOR_EVENT'
+        THEN 'KNOWN_TRUSTED_IDENTITY_ANCHOR_EVENT'
 
       WHEN c.auid_risk_classification = 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
         THEN 'NO_WALK_INFERRED_FROM_EXCLUSIVE_SINGLE_IUID_AUID'
@@ -445,9 +1029,10 @@ events_with_current_identity_state AS (
       ELSE 'UNRESOLVED_UNKNOWN_RISK_CLASSIFICATION'
     END AS current_iuid_method,
 
+    /* Record the stage that most recently determined the current identity. */
     CASE
       WHEN a.iuid IS NOT NULL
-        THEN 'PART_1_KNOWN_ANCHOR'
+        THEN 'PART_1_KNOWN_TRUSTED_ANCHOR'
 
       WHEN c.auid_risk_classification = 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
         THEN 'PART_1_NO_WALK_ASSIGNMENT'
@@ -455,14 +1040,20 @@ events_with_current_identity_state AS (
       ELSE 'PART_1_UNRESOLVED'
     END AS current_resolution_stage,
 
+    /* The direct assignment stage is the first identity resolution iteration. */
     1 AS current_iteration,
 
+    /* The direct assignment stage is the first identity resolution iteration. */
     CASE
       WHEN a.iuid IS NOT NULL
         OR c.auid_risk_classification = 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
         THEN TRUE
       ELSE FALSE
     END AS is_currently_resolved,
+
+    /* Express the relative strength of the current identity assignment. 
+    Known anchor evidence receives the highest priority. Safe no walk assignments 
+    remain strong but are distinguished from observed facts. */
 
     CASE
       WHEN a.iuid IS NOT NULL
@@ -474,6 +1065,8 @@ events_with_current_identity_state AS (
       ELSE 0
     END AS identity_resolution_priority,
 
+  /* Lock trusted anchor identities so later inference stages cannot overwrite 
+  authenticated facts. */
     CASE
       WHEN a.iuid IS NOT NULL
         THEN TRUE
@@ -493,16 +1086,49 @@ FROM events_with_current_identity_state
 `);
 
 /* --------------------------------------------------------------------------
-   7. Component 2: conservative recursive walk
+   7A. Component 2 input: conservative walk input scope
+
+   Incremental model. This is the only place that decides full refresh vs
+   incremental rebuild scope for the conservative walk.
 -------------------------------------------------------------------------- */
 
-publish(conservativeWalkName, stagingConfig("Run conservative recursive identity walk")).query(ctx => `
+publish(
+  conservativeWalkInputName,
+  incrementalEventConfig("Input scope for conservative recursive identity walk")
+)
+.preOps(ctx => recursiveWalkInputScopePreOps(ctx))
+.query(ctx => `
+
+SELECT *
+FROM ${ctx.ref(classifyEventsName)}
+WHERE occurred_at >= identity_rebuild_checkpoint
+
+`);
+
+/* --------------------------------------------------------------------------
+   7. Component 2A: conservative recursive walk run
+
+   Standard table. This is allowed to use WITH RECURSIVE because it is not
+   compiled as an incremental MERGE.
+-------------------------------------------------------------------------- */
+
+publish(
+  conservativeWalkRunName,
+  stagingConfig("Run conservative recursive identity walk for current rebuild scope", {
+    type: "table",
+    bigquery: {
+      partitionBy: "event_date",
+      clusterBy: ["auid", "current_iuid"]
+    }
+  })
+)
+.query(ctx => `
 
 WITH RECURSIVE
 
 events_with_part_1_identity AS (
   SELECT *
-  FROM ${ctx.ref(classifyEventsName)}
+  FROM ${ctx.ref(conservativeWalkInputName)}
 ),
 
 anchors_all AS (
@@ -513,7 +1139,7 @@ anchors_all AS (
     TRUE AS is_anchor,
     'SIGN_IN_ANCHOR' AS walk_anchor_type
   FROM events_with_part_1_identity
-  WHERE is_sign_in_anchor = TRUE
+  WHERE is_trusted_identity_anchor = TRUE
     AND known_anchor_iuid IS NOT NULL
     AND auid IS NOT NULL
 ),
@@ -625,7 +1251,7 @@ events_base AS (
       WHEN e.current_iuid IS NOT NULL
         AND (
           e.request_method = 'GET'
-          OR e.is_sign_in_anchor = TRUE
+          OR e.is_trusted_identity_anchor = TRUE
         )
         AND EXISTS (
           SELECT 1
@@ -647,7 +1273,7 @@ events_base AS (
        e.current_iuid IS NOT NULL
        AND (
          e.request_method = 'GET'
-         OR e.is_sign_in_anchor = TRUE
+         OR e.is_trusted_identity_anchor = TRUE
        )
        /* Bring in pre-assigned events that could be chained to */
        AND EXISTS (
@@ -1339,18 +1965,42 @@ FROM final
 
 `);
 
+/* --------------------------------------------------------------------------
+   7. Component 2B: conservative recursive walk state
+
+   Incremental table. No recursive SQL. This persists the run output into the
+   durable state table that downstream models should read.
+-------------------------------------------------------------------------- */
+
+publish(
+  conservativeWalkName,
+  incrementalEventConfig("Persist conservative recursive identity walk state")
+)
+.preOps(ctx => identityEventCheckpointPreOps(ctx))
+.query(ctx => `
+
+SELECT *
+FROM ${ctx.ref(conservativeWalkRunName)}
+
+`);
 
 /* --------------------------------------------------------------------------
    8. Component 3: build and apply activity windows
 -------------------------------------------------------------------------- */
 
-publish(activityWindowsName, stagingConfig("Build and apply activity-window identity fallback")).query(ctx => `
+publish(
+  activityWindowsName,
+  incrementalEventConfig("Build and apply activity-window identity fallback")
+)
+.preOps(ctx => identityEventCheckpointPreOps(ctx))
+.query(ctx => `
 
 WITH
 
 current_identity_resolution_state AS (
   SELECT *
   FROM ${ctx.ref(conservativeWalkName)}
+  WHERE occurred_at >= identity_rebuild_checkpoint
 ),
 
 events_base AS (
@@ -1423,7 +2073,7 @@ resolved_activity_points AS (
   WHERE auid IS NOT NULL
     AND current_iuid IS NOT NULL
     AND (
-      is_sign_in_anchor = TRUE
+      is_trusted_identity_anchor = TRUE
       OR is_navigable_activity_event = TRUE
       OR identity_resolution_priority >= 70
     )
@@ -1561,7 +2211,11 @@ anchor_boundaries AS (
         AND e.occurred_at >= TIMESTAMP_SUB(a.window_start, INTERVAL 10 MINUTE)
         AND e.is_navigable_activity_event = TRUE
         AND ${sqlNotStartsWithAny("e.request_path", authPrefixes)}
-        AND ${sqlNotInList("e.request_path", excludedPathsForActivity)}
+        /*
+          Ignore public and authentication-transition pages when testing for prior
+          unattributable activity, as these are not treated as ordinary journey activity.
+        */
+        AND ${sqlNotInList("e.request_path", publicAndAuthPagePaths)}
     ) AS preexisting_unattributable_activity_10m,
 
     TIMESTAMP_ADD(a.window_start, INTERVAL 24 HOUR) AS max_cap_at
@@ -2310,848 +2964,48 @@ FROM current_state_after_window_assignments
 `);
 
 /* --------------------------------------------------------------------------
-9. Component 4: second recursive walk / post-window repair attribution
+   9A. Component 4 input: second walk input scope
 
+   Incremental model. This is the only place that decides full refresh vs
+   incremental rebuild scope for the post-window repair walk.
+-------------------------------------------------------------------------- */
 
 publish(
-  secondWalkName,
-  stagingConfig(
-    "Run post-window repair walk from unresolved events to resolved neighbours"
-  )
-).query(ctx => `
-
-WITH RECURSIVE
-
-current_state AS (
-  SELECT *
-  FROM ${ctx.ref(activityWindowsName)}
-),
-
-events_base AS (
-  SELECT
-    e.*,
-
-    (
-      e.event_type = 'web_request'
-      AND e.request_method = 'GET'
-      AND COALESCE(SAFE_CAST(e.response_status AS STRING), 'X')
-        NOT IN ('301','302','303','307','308')
-    ) AS is_navigable_parent,
-
-    e.current_iuid IS NOT NULL AS has_current_identity,
-
-    (
-      e.current_iuid IS NULL
-      AND e.requires_walk = TRUE
-      AND e.identity_resolution_locked = FALSE
-      AND e.auid_risk_classification IN (
-        'UNCERTAIN_SINGLE_IUID_UNANCHORED_ACTIVITY',
-        'HIGH_RISK_MULTI_IUID_AUID'
-      )
-    ) AS is_repair_walk_candidate,
-
-    (
-      COALESCE(e.matched_overlapping_windows, 0) > 0
-      OR COALESCE(e.matched_post_conflict_windows, 0) > 0
-    ) AS has_negative_window_context,
-
-    (
-      COALESCE(e.matched_unknown_preexisting_activity_windows, 0) > 0
-      OR COALESCE(
-        e.eligible_window_has_unknown_preexisting_activity,
-        FALSE
-      ) = TRUE
-    ) AS has_unknown_preexisting_activity_risk,
-
-    TIMESTAMP_TRUNC(e.occurred_at, HOUR) AS hour_bucket
-
-  FROM current_state e
-  WHERE e.occurred_at >= TIMESTAMP(${sqlString(startDate)})
-    AND e.auid IS NOT NULL
-),
-
-candidate_auids AS (
-  SELECT DISTINCT auid
-  FROM events_base
-  WHERE is_repair_walk_candidate = TRUE
-),
-
-events_scope AS (
-  /*
-    Starts are unresolved repair candidates.
-
-    Support/intermediate events are deliberately broader than the starts so
-    unresolved chains can traverse through intermediate requests and terminate
-    at already-resolved events.
- 
-
-  SELECT e.*
-  FROM events_base e
-  JOIN candidate_auids c
-    ON e.auid = c.auid
-  WHERE
-    e.is_repair_walk_candidate = TRUE
-    OR e.is_navigable_parent = TRUE
-    OR e.has_current_identity = TRUE
-    OR (
-      e.event_type = 'web_request'
-      AND e.request_referer_path_and_query IS NOT NULL
-    )
-),
-
-base_seq AS (
-  SELECT
-    e.*,
-
-    ROW_NUMBER() OVER (
-      PARTITION BY e.auid
-      ORDER BY e.occurred_at, e.request_uuid
-    ) AS seq
-
-  FROM events_scope e
-),
-
-base_seq_with_prev AS (
-  SELECT
-    b.*,
-
-    MAX(
-      IF(
-        b.is_navigable_parent OR b.has_current_identity,
-        b.seq,
-        NULL
-      )
-    ) OVER (
-      PARTITION BY b.auid
-      ORDER BY b.occurred_at, b.request_uuid
-      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-    ) AS prev_parent_seq_auid
-
-  FROM base_seq b
-),
-
-prev_by_auid AS (
-  SELECT
-    c.*,
-
-    p.request_uuid AS prev_parent_request_uuid_auid,
-    p.occurred_at AS prev_parent_occurred_at_auid,
-    p.request_path AS prev_parent_request_path_auid,
-    p.current_iuid AS prev_parent_current_iuid,
-    p.has_current_identity AS prev_parent_has_current_identity
-
-  FROM base_seq_with_prev c
-
-  LEFT JOIN base_seq p
-    ON p.auid = c.auid
-    AND p.seq = c.prev_parent_seq_auid
-),
-
-parent_lookup AS (
-  SELECT
-    request_uuid,
-    occurred_at,
-    request_path,
-    request_path_and_query,
-    auid,
-    current_iuid,
-    has_current_identity,
-    is_navigable_parent,
-    hour_bucket
-
-  FROM events_scope
-
-  WHERE
-    is_navigable_parent = TRUE
-    OR has_current_identity = TRUE
-),
-
-children_to_repair AS (
-  SELECT *
-  FROM events_scope
-  WHERE is_repair_walk_candidate = TRUE
-),
-
-/* --------------------------------------------------------------------------
-Rule 1: explicit referrer to resolved or unresolved same-AUID parent
--------------------------------------------------------------------------- 
-
-referrer_children AS (
-  SELECT child.*
-  FROM children_to_repair child
-  WHERE
-    child.request_referer_path_and_query IS NOT NULL
-    AND NOT (
-      ${sqlInList(
-        "child.request_referer_path_and_query",
-        preAuthPagePaths
-      )}
-      AND ${sqlNotInList("child.request_path", signInPagePaths)}
-    )
-),
-
-referrer_child_buckets AS (
-  SELECT
-    child.*,
-    parent_hour_bucket
-
-  FROM referrer_children child
-
-  CROSS JOIN UNNEST([
-    child.hour_bucket,
-    TIMESTAMP_SUB(child.hour_bucket, INTERVAL 1 HOUR),
-    TIMESTAMP_SUB(child.hour_bucket, INTERVAL 2 HOUR)
-  ]) AS parent_hour_bucket
-),
-
-repair_referrer_candidates AS (
-  SELECT
-    child.request_uuid AS child_request_uuid,
-    parent.request_uuid AS parent_request_uuid,
-    child.occurred_at AS child_at,
-    parent.occurred_at AS parent_at,
-
-    CASE
-      WHEN parent.has_current_identity = TRUE THEN 'HIGH'
-      ELSE 'MEDIUM'
-    END AS match_confidence,
-
-    CASE
-      WHEN parent.has_current_identity = TRUE
-        THEN 'PART_4_REFERRER_TO_RESOLVED_PARENT_SAME_AUID'
-      ELSE 'PART_4_REFERRER_TO_UNRESOLVED_PARENT_SAME_AUID'
-    END AS match_source,
-
-    FALSE AS is_weak_previous_parent_rule
-
-  FROM referrer_child_buckets child
-
-  JOIN parent_lookup parent
-    ON parent.auid = child.auid
-    AND parent.request_path_and_query =
-      child.request_referer_path_and_query
-    AND parent.hour_bucket = child.parent_hour_bucket
-    AND parent.occurred_at < child.occurred_at
-    AND parent.occurred_at >= TIMESTAMP_SUB(
-      child.occurred_at,
-      INTERVAL 120 MINUTE
-    )
-),
-
-/* --------------------------------------------------------------------------
-Rule 2: short-gap previous parent for null/home referrer
--------------------------------------------------------------------------- 
-
-repair_home_or_null_prev_parent AS (
-  SELECT
-    child.request_uuid AS child_request_uuid,
-    child.prev_parent_request_uuid_auid AS parent_request_uuid,
-    child.occurred_at AS child_at,
-    child.prev_parent_occurred_at_auid AS parent_at,
-
-    CASE
-      WHEN child.prev_parent_current_iuid IS NOT NULL THEN 'MEDIUM'
-      ELSE 'LOW'
-    END AS match_confidence,
-
-    CASE
-      WHEN child.request_referer_path_and_query IS NULL
-        AND child.prev_parent_current_iuid IS NOT NULL
-        THEN 'PART_4_NULL_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
-
-      WHEN child.request_referer_path_and_query IS NULL
-        THEN 'PART_4_NULL_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M'
-
-      WHEN child.prev_parent_current_iuid IS NOT NULL
-        THEN 'PART_4_HOME_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
-
-      ELSE 'PART_4_HOME_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M'
-    END AS match_source,
-
-    TRUE AS is_weak_previous_parent_rule
-
-  FROM prev_by_auid child
-
-  WHERE
-    child.is_repair_walk_candidate = TRUE
-    AND (
-      child.request_referer_path_and_query IS NULL
-      OR ${sqlInList(
-        "child.request_referer_path_and_query",
-        preAuthPagePaths
-      )}
-    )
-    AND ${sqlNotInList("child.request_path", signInPagePaths)}
-    AND child.prev_parent_request_uuid_auid IS NOT NULL
-    AND child.prev_parent_occurred_at_auid >= TIMESTAMP_SUB(
-      child.occurred_at,
-      INTERVAL 30 MINUTE
-    )
-    AND ${sqlNotInList(
-      "child.prev_parent_request_path_auid",
-      preAuthPagePaths
-    )}
-),
-
-/* --------------------------------------------------------------------------
-Rule 3: near-window-start previous resolved parent
-
-This is restored because it was likely recovering valid post-window-start
-activity not captured by the main clean-window fallback.
--------------------------------------------------------------------------- 
-
-repair_near_window_start_resolved_parent AS (
-  SELECT
-    child.request_uuid AS child_request_uuid,
-    parent.request_uuid AS parent_request_uuid,
-    child.occurred_at AS child_at,
-    parent.occurred_at AS parent_at,
-
-    'MEDIUM' AS match_confidence,
-
-    'PART_4_NEAR_WINDOW_START_PREVIOUS_RESOLVED_PARENT_SAME_AUID'
-      AS match_source,
-
-    FALSE AS is_weak_previous_parent_rule
-
-  FROM children_to_repair child
-
-  JOIN parent_lookup parent
-    ON parent.auid = child.auid
-    AND parent.has_current_identity = TRUE
-    AND parent.occurred_at < child.occurred_at
-    AND parent.occurred_at >= TIMESTAMP_SUB(
-      child.occurred_at,
-      INTERVAL 30 MINUTE
-    )
-
-  WHERE
-    child.eligible_window_start IS NOT NULL
-    AND child.occurred_at >= child.eligible_window_start
-    AND child.occurred_at <= TIMESTAMP_ADD(
-      child.eligible_window_start,
-      INTERVAL 30 MINUTE
-    )
-    AND ${sqlNotInList("child.request_path", preAuthPagePaths)}
-    AND ${sqlNotInList("child.request_path", signInPagePaths)}
-
-  QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY child.request_uuid
-    ORDER BY parent.occurred_at DESC, parent.request_uuid
-  ) = 1
-),
-
-parent_candidates AS (
-  SELECT * FROM repair_referrer_candidates
-
-  UNION ALL
-
-  SELECT * FROM repair_home_or_null_prev_parent
-
-  UNION ALL
-
-  SELECT * FROM repair_near_window_start_resolved_parent
-),
-
-best_parent AS (
-  SELECT
-    child_request_uuid,
-
-    best.parent_request_uuid,
-    best.match_confidence,
-    best.match_source,
-    best.is_weak_previous_parent_rule
-
-  FROM (
-    SELECT
-      child_request_uuid,
-
-      ARRAY_AGG(
-        STRUCT(
-          parent_request_uuid,
-          match_confidence,
-          match_source,
-          parent_at,
-          is_weak_previous_parent_rule
-        )
-        ORDER BY
-          CASE match_confidence
-            WHEN 'HIGH' THEN 3
-            WHEN 'MEDIUM' THEN 2
-            WHEN 'LOW' THEN 1
-            ELSE 0
-          END DESC,
-          parent_at DESC,
-          parent_request_uuid
-        LIMIT 1
-      )[OFFSET(0)] AS best
-
-    FROM parent_candidates
-    GROUP BY child_request_uuid
-  )
-),
-
-events_with_parent AS (
-  SELECT
-    e.*,
-
-    CASE
-      WHEN e.has_current_identity = TRUE THEN NULL
-      ELSE bp.parent_request_uuid
-    END AS parent_request_uuid_repair,
-
-    bp.match_confidence AS parent_match_confidence_repair,
-    bp.match_source AS parent_match_source_repair,
-    bp.is_weak_previous_parent_rule
-      AS parent_is_weak_previous_parent_rule_repair
-
-  FROM events_scope e
-
-  LEFT JOIN best_parent bp
-    ON e.request_uuid = bp.child_request_uuid
-),
-
-repair_walk AS (
-  SELECT
-    e.request_uuid AS start_request_uuid,
-    e.request_uuid AS current_request_uuid,
-    e.occurred_at AS current_occurred_at,
-    e.parent_request_uuid_repair AS parent_request_uuid,
-    e.has_current_identity,
-    e.current_iuid,
-    0 AS depth,
-
-    IF(
-      e.has_current_identity,
-      e.current_iuid,
-      NULL
-    ) AS nearest_current_iuid
-
-  FROM events_with_parent e
-
-  WHERE e.is_repair_walk_candidate = TRUE
-
-  UNION ALL
-
-  SELECT
-    w.start_request_uuid,
-    p.request_uuid AS current_request_uuid,
-    p.occurred_at AS current_occurred_at,
-    p.parent_request_uuid_repair AS parent_request_uuid,
-    p.has_current_identity,
-    p.current_iuid,
-    w.depth + 1 AS depth,
-
-    COALESCE(
-      w.nearest_current_iuid,
-      IF(p.has_current_identity, p.current_iuid, NULL)
-    ) AS nearest_current_iuid
-
-  FROM repair_walk w
-
-  JOIN events_with_parent p
-    ON w.parent_request_uuid = p.request_uuid
-
-  WHERE
-    w.parent_request_uuid IS NOT NULL
-    AND w.nearest_current_iuid IS NULL
-    AND w.depth < 25
-),
-
-collapsed_repair_walk AS (
-  SELECT
-    start_request_uuid AS request_uuid,
-
-    ARRAY_AGG(
-      STRUCT(
-        current_request_uuid,
-        current_occurred_at,
-        depth,
-        nearest_current_iuid
-      )
-      ORDER BY
-        IF(nearest_current_iuid IS NOT NULL, 0, 1),
-        depth ASC
-      LIMIT 1
-    )[OFFSET(0)] AS best_repair
-
-  FROM repair_walk
-  GROUP BY start_request_uuid
-),
-
-repair_assignments AS (
-  SELECT
-    c.request_uuid,
-
-    c.best_repair.current_request_uuid
-      AS repair_source_request_uuid,
-
-    c.best_repair.current_occurred_at
-      AS repair_source_occurred_at,
-
-    c.best_repair.depth AS repair_depth,
-
-    c.best_repair.nearest_current_iuid
-      AS repaired_iuid
-
-  FROM collapsed_repair_walk c
-
-  WHERE c.best_repair.nearest_current_iuid IS NOT NULL
-),
-
-repair_walk_proposals AS (
-  SELECT
-    e.request_uuid,
-
-    r.repaired_iuid AS proposed_iuid,
-
-    CASE
-      WHEN r.repaired_iuid IS NOT NULL
-        AND p.parent_match_source_repair =
-          'PART_4_REFERRER_TO_RESOLVED_PARENT_SAME_AUID'
-        THEN 'PART_4_REFERRER_TO_RESOLVED_PARENT_SAME_AUID'
-
-      WHEN r.repaired_iuid IS NOT NULL
-        AND p.parent_match_source_repair =
-          'PART_4_REFERRER_TO_UNRESOLVED_PARENT_SAME_AUID'
-        THEN 'PART_4_REFERRER_CHAIN_TO_RESOLVED_SAME_AUID'
-
-      WHEN r.repaired_iuid IS NOT NULL
-        AND p.parent_match_source_repair IN (
-          'PART_4_NULL_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M',
-          'PART_4_HOME_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
-        )
-        THEN 'PART_4_PREVIOUS_RESOLVED_PARENT_SAME_AUID_SHORT_GAP'
-
-      WHEN r.repaired_iuid IS NOT NULL
-        AND p.parent_match_source_repair IN (
-          'PART_4_NULL_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M',
-          'PART_4_HOME_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M'
-        )
-        THEN 'PART_4_PREVIOUS_PARENT_CHAIN_TO_RESOLVED_SAME_AUID_SHORT_GAP'
-
-      WHEN r.repaired_iuid IS NOT NULL
-        AND p.parent_match_source_repair =
-          'PART_4_NEAR_WINDOW_START_PREVIOUS_RESOLVED_PARENT_SAME_AUID'
-        THEN 'PART_4_NEAR_WINDOW_START_PREVIOUS_RESOLVED_PARENT_SAME_AUID'
-
-      WHEN r.repaired_iuid IS NOT NULL
-        THEN 'PART_4_REPAIR_WALK_TO_NEAREST_CURRENT_IDENTITY'
-
-      ELSE 'UNRESOLVED_AFTER_PART_4_REPAIR_WALK'
-    END AS proposed_iuid_method,
-
-    CASE
-      WHEN r.repaired_iuid IS NOT NULL
-        THEN 'PART_4_SECOND_RECURSIVE_WALK'
-      ELSE NULL
-    END AS proposed_resolution_stage,
-
-    CASE
-      WHEN r.repaired_iuid IS NOT NULL
-        AND p.parent_match_confidence_repair = 'HIGH'
-        THEN 55
-
-      WHEN r.repaired_iuid IS NOT NULL
-        AND p.parent_match_confidence_repair = 'MEDIUM'
-        THEN 50
-
-      WHEN r.repaired_iuid IS NOT NULL
-        THEN 45
-
-      ELSE 0
-    END AS proposed_identity_resolution_priority,
-
-    r.repair_source_request_uuid,
-    r.repair_source_occurred_at,
-    r.repair_depth,
-
-    p.parent_request_uuid_repair,
-    p.parent_match_confidence_repair,
-    p.parent_match_source_repair,
-    p.parent_is_weak_previous_parent_rule_repair,
-
-    (
-      r.repaired_iuid IS NOT NULL
-
-      /*
-        If Part 3 produced an eligible clean-window identity for the event,
-        Part 4 must not contradict it.
-      
-      AND (
-        e.eligible_window_iuid IS NULL
-        OR e.eligible_window_iuid = r.repaired_iuid
-      )
-
-      /*
-        For high-risk shared AUIDs, do not apply weak previous-parent repairs
-        where there is explicit unknown-preexisting-activity risk.
-        Strong referrer-based repairs are still allowed because they are direct
-        deterministic navigation evidence.
-    
-      AND (
-        e.auid_risk_classification != 'HIGH_RISK_MULTI_IUID_AUID'
-        OR (
-          COALESCE(
-            p.parent_is_weak_previous_parent_rule_repair,
-            FALSE
-          ) = FALSE
-          OR e.has_unknown_preexisting_activity_risk = FALSE
-        )
-      )
-
-      AND NOT EXISTS (
-        SELECT 1
-        FROM events_base s
-        WHERE s.auid = e.auid
-          AND ${sqlInList("s.request_path", signOutPaths)}
-          AND s.current_iuid = r.repaired_iuid
-          AND s.occurred_at > LEAST(
-            e.occurred_at,
-            r.repair_source_occurred_at
-          )
-          AND s.occurred_at < GREATEST(
-            e.occurred_at,
-            r.repair_source_occurred_at
-          )
-      )
-    ) AS should_apply_proposed_iuid,
-
-    CASE
-      WHEN r.repaired_iuid IS NULL
-        THEN 'NO_REPAIRED_IUID_FOUND'
-
-      WHEN e.eligible_window_iuid IS NOT NULL
-        AND e.eligible_window_iuid != r.repaired_iuid
-        THEN 'BLOCKED_PROPOSED_IUID_CONFLICTS_WITH_ELIGIBLE_WINDOW_IUID'
-
-      WHEN e.auid_risk_classification = 'HIGH_RISK_MULTI_IUID_AUID'
-        AND COALESCE(
-          p.parent_is_weak_previous_parent_rule_repair,
-          FALSE
-        ) = TRUE
-        AND e.has_unknown_preexisting_activity_risk = TRUE
-        THEN 'BLOCKED_HIGH_RISK_WEAK_PARENT_WITH_UNKNOWN_PREEXISTING_ACTIVITY'
-
-      WHEN EXISTS (
-        SELECT 1
-        FROM events_base s
-        WHERE s.auid = e.auid
-          AND ${sqlInList("s.request_path", signOutPaths)}
-          AND s.current_iuid = r.repaired_iuid
-          AND s.occurred_at > LEAST(
-            e.occurred_at,
-            r.repair_source_occurred_at
-          )
-          AND s.occurred_at < GREATEST(
-            e.occurred_at,
-            r.repair_source_occurred_at
-          )
-      )
-        THEN 'BLOCKED_SIGNOUT_BETWEEN_EVENT_AND_REPAIR_SOURCE'
-
-      ELSE 'ELIGIBLE_REPAIR_WALK_ASSIGNMENT'
-    END AS repair_walk_gate_reason,
-
-    CURRENT_TIMESTAMP() AS proposed_assignment_created_at
-
-  FROM events_scope e
-
-  LEFT JOIN events_with_parent p
-    ON e.request_uuid = p.request_uuid
-
-  LEFT JOIN repair_assignments r
-    ON e.request_uuid = r.request_uuid
-
-  WHERE e.is_repair_walk_candidate = TRUE
-),
-
-deduplicated_repair_walk_proposals AS (
-  SELECT
-    request_uuid,
-
-    ARRAY_AGG(
-      STRUCT(
-        proposed_iuid,
-        proposed_iuid_method,
-        proposed_resolution_stage,
-        proposed_identity_resolution_priority,
-        repair_source_request_uuid,
-        repair_source_occurred_at,
-        repair_depth,
-        parent_request_uuid_repair,
-        parent_match_confidence_repair,
-        parent_match_source_repair,
-        parent_is_weak_previous_parent_rule_repair,
-        repair_walk_gate_reason,
-        proposed_assignment_created_at
-      )
-      ORDER BY
-        proposed_identity_resolution_priority DESC,
-        repair_depth ASC,
-        proposed_assignment_created_at ASC,
-        proposed_iuid
-      LIMIT 1
-    )[OFFSET(0)] AS best_proposal
-
-  FROM repair_walk_proposals
-
-  WHERE
-    should_apply_proposed_iuid = TRUE
-    AND proposed_iuid IS NOT NULL
-
-  GROUP BY request_uuid
-),
-
-updated_current_state AS (
-  SELECT
-    c.* EXCEPT (
-      current_iuid,
-      current_iuid_method,
-      current_resolution_stage,
-      current_iteration,
-      is_currently_resolved,
-      identity_resolution_priority
-    ),
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.proposed_iuid
-      ELSE c.current_iuid
-    END AS current_iuid,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.proposed_iuid_method
-      ELSE c.current_iuid_method
-    END AS current_iuid_method,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.proposed_resolution_stage
-      ELSE c.current_resolution_stage
-    END AS current_resolution_stage,
-
-    4 AS current_iteration,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN TRUE
-      ELSE c.is_currently_resolved
-    END AS is_currently_resolved,
-
-    CASE
-      WHEN c.identity_resolution_locked = TRUE
-        THEN 100
-
-      WHEN c.current_iuid IS NOT NULL
-        THEN c.identity_resolution_priority
-
-      WHEN p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.proposed_identity_resolution_priority
-
-      ELSE c.identity_resolution_priority
-    END AS identity_resolution_priority,
-
-    p.best_proposal.proposed_assignment_created_at
-      AS repair_walk_assignment_created_at,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN TRUE
-      ELSE FALSE
-    END AS repair_walk_assignment_applied,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.repair_source_request_uuid
-      ELSE NULL
-    END AS repair_walk_source_request_uuid,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.repair_source_occurred_at
-      ELSE NULL
-    END AS repair_walk_source_occurred_at,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.repair_depth
-      ELSE NULL
-    END AS repair_walk_depth,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.parent_request_uuid_repair
-      ELSE NULL
-    END AS repair_walk_parent_request_uuid,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.parent_match_confidence_repair
-      ELSE NULL
-    END AS repair_walk_parent_match_confidence,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.parent_match_source_repair
-      ELSE NULL
-    END AS repair_walk_parent_match_source,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.parent_is_weak_previous_parent_rule_repair
-      ELSE NULL
-    END AS repair_walk_parent_is_weak_previous_parent_rule,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.repair_walk_gate_reason
-      ELSE NULL
-    END AS repair_walk_gate_reason,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN CURRENT_TIMESTAMP()
-      ELSE NULL
-    END AS repair_walk_assignment_applied_at
-
-  FROM current_state c
-
-  LEFT JOIN deduplicated_repair_walk_proposals p
-    ON c.request_uuid = p.request_uuid
+  secondWalkInputName,
+  incrementalEventConfig("Input scope for post-window repair walk")
 )
+.preOps(ctx => recursiveWalkInputScopePreOps(ctx))
+.query(ctx => `
 
 SELECT *
-FROM updated_current_state
+FROM ${ctx.ref(activityWindowsName)}
+WHERE occurred_at >= identity_rebuild_checkpoint
 
 `);
--------------------------------------------------------------------------- */
+
 /* --------------------------------------------------------------------------
-   9. Component 4: second recursive walk / post-window repair attribution
+   9A. Component 4A: second recursive walk run
+
+   Standard table. This keeps WITH RECURSIVE out of the incremental MERGE.
 -------------------------------------------------------------------------- */
 
-publish(secondWalkName, stagingConfig("Run post-window repair walk from unresolved events to resolved neighbours")).query(ctx => `
+publish(
+  secondWalkRunName,
+  stagingConfig("Run post-window repair walk for current rebuild scope", {
+    type: "table",
+    bigquery: {
+      partitionBy: "event_date",
+      clusterBy: ["auid", "current_iuid"]
+    }
+  })
+)
+.query(ctx => `
 
 WITH RECURSIVE
 
 current_state AS (
   SELECT *
-  FROM ${ctx.ref(activityWindowsName)}
+  FROM ${ctx.ref(secondWalkInputName)}
 ),
 
 events_base AS (
@@ -4052,17 +3906,41 @@ FROM updated_current_state
 
 `);
 
+/* --------------------------------------------------------------------------
+   9B. Component 4B: second recursive walk state
+
+   Incremental table. No recursive SQL. This persists the second walk run.
+-------------------------------------------------------------------------- */
+
+publish(
+  secondWalkName,
+  incrementalEventConfig("Persist post-window repair walk state")
+)
+.preOps(ctx => identityEventCheckpointPreOps(ctx))
+.query(ctx => `
+
+SELECT *
+FROM ${ctx.ref(secondWalkRunName)}
+
+`);
+
   /* --------------------------------------------------------------------------
      10. Component 5: resolve admin identities
   -------------------------------------------------------------------------- */
 
-publish(resolvedAdminName, stagingConfig("Flag and normalise admin identities for final identity-solved events")).query(ctx => `
+publish(
+  resolvedAdminName,
+  incrementalEventConfig("Solved events with inferred identity")
+)
+.preOps(ctx => identityEventCheckpointPreOps(ctx))
+.query(ctx => `
 
 WITH
 
 current_state AS (
   SELECT *
   FROM ${ctx.ref(secondWalkName)}
+  WHERE occurred_at >= identity_rebuild_checkpoint
 ),
 
 admin_page_events AS (
@@ -4088,9 +3966,12 @@ admin_iuids AS (
 
 admin_group AS (
   SELECT
-    CONCAT(
-      'ADMIN_GROUP:',
-      TO_HEX(SHA256(STRING_AGG(iuid, '|' ORDER BY iuid)))
+    COALESCE(
+      CONCAT(
+        'ADMIN_GROUP:',
+        TO_HEX(SHA256(STRING_AGG(iuid, '|' ORDER BY iuid)))
+      ),
+      'ADMIN_GROUP:NO_ADMIN_IDENTITIES'
     ) AS admin_group_id
   FROM admin_iuids
 ),
@@ -4115,6 +3996,7 @@ final AS (
 
 SELECT *
 FROM final
+WHERE occurred_at >= identity_rebuild_checkpoint
 
 `);
 };
