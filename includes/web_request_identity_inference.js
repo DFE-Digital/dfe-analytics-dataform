@@ -57,7 +57,7 @@ Each service can define its own:
 
   if (!webAnalytics) {
     throw new Error(
-      `Web-request identity resolution is enabled for event source ` +
+      `web request identity resolution is enabled for event source ` +
       `'${params.eventSourceName}', but no matching service configuration was found. ` +
       `Add an entry at identityConfig['${params.eventSourceName}'].`
     );
@@ -67,7 +67,7 @@ Each service can define its own:
 
   if (!identity) {
     throw new Error(
-      `Web-request identity resolution configuration for event source ` +
+      `web request identity resolution configuration for event source ` +
       `'${params.eventSourceName}' is missing the required 'identity' object. ` +
       `Add identity rules at identityConfig['${params.eventSourceName}'].identity.`
     );
@@ -77,7 +77,7 @@ Each service can define its own:
 
   if (!paths) {
     throw new Error(
-      `Web-request identity resolution configuration for event source ` +
+      `web request identity resolution configuration for event source ` +
       `'${params.eventSourceName}' is missing the required 'paths' object. ` +
       `Add path rules at identityConfig['${params.eventSourceName}'].paths.`
     );
@@ -132,8 +132,8 @@ Each service can define its own:
 
   if (!Array.isArray(anchorSources) || anchorSources.length === 0) {
     throw new Error(
-      `Web-request identity resolution configuration for event source ` +
-      `'${params.eventSourceName}' must include at least one trusted identity-anchor source. ` +
+      `web request identity resolution configuration for event source ` +
+      `'${params.eventSourceName}' must include at least one trusted identity anchor source. ` +
       `Add one or more entries to ` +
       `identityConfig['${params.eventSourceName}'].identity.anchorSources.`
     );
@@ -262,7 +262,7 @@ Each service can define its own:
   ].forEach(([pathGroupName, configuredPaths]) => {
     if (!Array.isArray(configuredPaths)) {
       throw new Error(
-        `Web-request identity resolution configuration for event source ` +
+        `web request identity resolution configuration for event source ` +
         `'${params.eventSourceName}' must define paths.${pathGroupName} as an array.`
       );
     }
@@ -610,13 +610,33 @@ function sqlAnchorSourceQueries(sources) {
 
   publish(
     anchorsAllName,
-    stagingConfig("All-time trusted identity anchors for identity resolution", {
+    {
+      ...params.defaultConfig,
+      schema: "web_analytics_staging_tables",
       type: "table",
+      tags: [
+        params.eventSourceName.toLowerCase(),
+        "identity-staging"
+      ],
+      description: `All-time trusted identity anchors used by the web request identity-resolution pipeline.
+
+        Each row represents an identity-bearing request that provides a trusted link between
+        an anonymous user identifier (AUID) and an authenticated inferred user identifier (IUID).
+
+        Grain: one row per identity-bearing request UUID.`,
+      dependencies: params.dependencies,
+      columns: {
+        request_uuid: `Unique identifier for the identity bearing request. This is the grain of the table.`,
+        auid: `Anonymous user identifier observed on the identity-bearing request. Derived from anonymised_user_agent_and_ip.`,
+        event_date: `Calendar date on which the identity bearing request occurred. Derived from occurred_at and used to partition the table.`,
+        occurred_at: `Timestamp at which the identity bearing request occurred.`,
+        iuid: `Known inferred user identifier extracted from the configured trusted identity anchor source. Used as trusted identity evidence in downstream propagation.`
+      },
       bigquery: {
         partitionBy: "event_date",
         clusterBy: ["auid", "iuid"]
       }
-    })
+    }
   ).query(ctx => `
 
   WITH
@@ -653,7 +673,7 @@ function sqlAnchorSourceQueries(sources) {
     2B. Prepare identity evidence: classify all-time AUID identity state 
     
     Create an all-time identity-risk profile for each anonymous user identifier 
-    (AUID) observed in valid web-request activity. This model determines whether 
+    (AUID) observed in valid web request activity. This model determines whether 
     activity associated with an AUID can: 
       - be assigned directly to a known inferred user identifier (IUID)
       - remain anonymous because no trusted identity evidence exists
@@ -671,12 +691,35 @@ function sqlAnchorSourceQueries(sources) {
 
     publish(
       auidStateName,
-      stagingConfig("All-time AUID identity state for identity resolution", {
+      {
+        ...params.defaultConfig,
+        schema: "web_analytics_staging_tables",
         type: "table",
+        tags: [
+          params.eventSourceName.toLowerCase(),
+          "identity-staging"
+        ],
+        description: `
+          All time AUID identity risk classification used by the web request identity resolution pipeline.
+
+          Each row summarises the trusted identity history associated with one anonymous user identifier
+          (AUID) and determines whether its events can be assigned directly, left anonymous, or passed
+          into the recursive identity-propagation stages.
+
+          Grain: one row per AUID observed with web request activity.
+        `,
+        dependencies: params.dependencies,
+        columns: {
+          auid: `Anonymous user identifier observed in web request activity. Derived from anonymised_user_agent_and_ip and used as the grain of the table.`,
+          distinct_iuid_count_ever: `Number of distinct trusted inferred user identifiers historically linked to the AUID.`,
+          single_known_iuid: `Trusted inferred user identifier linked to the AUID where the AUID has exactly one known identity. Used for direct assignment of low risk exclusive AUIDs.`,
+          auid_risk_classification: `All time identity risk classification for the AUID. Determines whether its events can be assigned directly, left anonymous, or passed into recursive identity propagation.`,
+          requires_walk: `Boolean indicating whether events associated with the AUID require deeper recursive identity inference.`
+        },
         bigquery: {
           clusterBy: ["auid", "auid_risk_classification"]
         }
-      })
+      }
     ).query(ctx => `
 
     WITH
@@ -701,172 +744,172 @@ function sqlAnchorSourceQueries(sources) {
       WHERE event_type = 'web_request'
     ),
 
-/* Retain every AUID observed in web-request activity, including public-only
-   visitors, so every request can receive an AUID risk classification.
+    /* Retain every AUID observed in web request activity, including public-only
+      visitors, so every request can receive an AUID risk classification.
 
-   Grain:
-     One row per AUID observed in web-request activity. */
-all_web_request_auids AS (
-  SELECT DISTINCT
-    anonymised_user_agent_and_ip AS auid
-  FROM web_events_base
-),
+      Grain:
+        One row per AUID observed in web request activity. */
+    all_web_request_auids AS (
+      SELECT DISTINCT
+        anonymised_user_agent_and_ip AS auid
+      FROM web_events_base
+    ),
 
-/* Load the trusted all-time AUID-to-IUID anchor evidence created in the
-   preceding model. */
-anchors AS (
-  SELECT *
-  FROM ${ctx.ref(anchorsAllName)}
-),
+    /* Load the trusted all-time AUID-to-IUID anchor evidence created in the
+      preceding model. */
+    anchors AS (
+      SELECT *
+      FROM ${ctx.ref(anchorsAllName)}
+    ),
 
-/* Identify dates containing meaningful service activity.
+    /* Identify dates containing meaningful service activity.
 
-   Public landing pages and authentication-transition pages are excluded when
-   testing for unanchored activity. Visiting these pages without generating a
-   trusted anchor is not strong evidence that an anchored AUID was used by a
-   different person.
+      Public landing pages and authentication-transition pages are excluded when
+      testing for unanchored activity. Visiting these pages without generating a
+      trusted anchor is not strong evidence that an anchored AUID was used by a
+      different person.
 
-   Grain:
-     One row per AUID and meaningful active date. */
-auid_meaningful_active_dates AS (
-  SELECT DISTINCT
-    anonymised_user_agent_and_ip AS auid,
-    DATE(occurred_at) AS event_date
-  FROM web_events_base
-  WHERE ${sqlNotInList("request_path", publicAndAuthPagePaths)}
-),
+      Grain:
+        One row per AUID and meaningful active date. */
+    auid_meaningful_active_dates AS (
+      SELECT DISTINCT
+        anonymised_user_agent_and_ip AS auid,
+        DATE(occurred_at) AS event_date
+      FROM web_events_base
+      WHERE ${sqlNotInList("request_path", publicAndAuthPagePaths)}
+    ),
 
-/* Identify each calendar date on which an AUID has trusted anchor evidence.
+    /* Identify each calendar date on which an AUID has trusted anchor evidence.
 
-   Grain:
-     One row per anchored AUID and date. */
-auid_anchor_dates AS (
-  SELECT DISTINCT
-    auid,
-    event_date
-  FROM anchors
-),
+      Grain:
+        One row per anchored AUID and date. */
+    auid_anchor_dates AS (
+      SELECT DISTINCT
+        auid,
+        event_date
+      FROM anchors
+    ),
 
-/* Summarise the complete trusted anchor history for each AUID.
+    /* Summarise the complete trusted anchor history for each AUID.
 
-   single_known_iuid is used downstream only where the AUID has exactly one
-   distinct known IUID. The risk classification below enforces that condition.
+      single_known_iuid is used downstream only where the AUID has exactly one
+      distinct known IUID. The risk classification below enforces that condition.
 
-   Grain:
-     One row per anchored AUID. */
-auid_anchor_summary AS (
-  SELECT
-    auid,
-    COUNT(DISTINCT iuid) AS distinct_iuid_count_ever,
-    MIN(iuid) AS single_known_iuid
-  FROM anchors
-  GROUP BY auid
-),
+      Grain:
+        One row per anchored AUID. */
+    auid_anchor_summary AS (
+      SELECT
+        auid,
+        COUNT(DISTINCT iuid) AS distinct_iuid_count_ever,
+        MIN(iuid) AS single_known_iuid
+      FROM anchors
+      GROUP BY auid
+    ),
 
-/* Combine all observed AUIDs with meaningful activity dates and trusted anchor
-   evidence.
+    /* Combine all observed AUIDs with meaningful activity dates and trusted anchor
+      evidence.
 
-   Public-only AUIDs remain in the output, but public and authentication-page
-   visits do not count as evidence of unanchored service activity.
+      Public-only AUIDs remain in the output, but public and authentication-page
+      visits do not count as evidence of unanchored service activity.
 
-   meaningful_active_dates_without_trusted_anchor is used only to calculate the
-   risk classification and is not persisted.
+      meaningful_active_dates_without_trusted_anchor is used only to calculate the
+      risk classification and is not persisted.
 
-   Grain:
-     One row per AUID observed in web-request activity. */
-auid_classification_inputs AS (
-  SELECT
-    base.auid,
+      Grain:
+        One row per AUID observed in web request activity. */
+    auid_classification_inputs AS (
+      SELECT
+        base.auid,
 
-    IFNULL(MAX(s.distinct_iuid_count_ever), 0)
-      AS distinct_iuid_count_ever,
+        IFNULL(MAX(s.distinct_iuid_count_ever), 0)
+          AS distinct_iuid_count_ever,
 
-    ANY_VALUE(s.single_known_iuid)
-      AS single_known_iuid,
+        ANY_VALUE(s.single_known_iuid)
+          AS single_known_iuid,
 
-    COUNTIF(
-      meaningful.event_date IS NOT NULL
-      AND anchor_date.auid IS NULL
-    ) AS meaningful_active_dates_without_trusted_anchor
+        COUNTIF(
+          meaningful.event_date IS NOT NULL
+          AND anchor_date.auid IS NULL
+        ) AS meaningful_active_dates_without_trusted_anchor
 
-  FROM all_web_request_auids base
+      FROM all_web_request_auids base
 
-  LEFT JOIN auid_meaningful_active_dates meaningful
-    ON base.auid = meaningful.auid
+      LEFT JOIN auid_meaningful_active_dates meaningful
+        ON base.auid = meaningful.auid
 
-  LEFT JOIN auid_anchor_dates anchor_date
-    ON meaningful.auid = anchor_date.auid
-   AND meaningful.event_date = anchor_date.event_date
+      LEFT JOIN auid_anchor_dates anchor_date
+        ON meaningful.auid = anchor_date.auid
+      AND meaningful.event_date = anchor_date.event_date
 
-  LEFT JOIN auid_anchor_summary s
-    ON base.auid = s.auid
+      LEFT JOIN auid_anchor_summary s
+        ON base.auid = s.auid
 
-  GROUP BY base.auid
-),
+      GROUP BY base.auid
+    ),
 
-/* Assign each AUID to a risk class and determine whether its events require
-   deeper recursive identity inference.
+    /* Assign each AUID to a risk class and determine whether its events require
+      deeper recursive identity inference.
 
-   LOW_RISK_EXCLUSIVE_ANCHORED_AUID means:
-     - the AUID has only ever been linked to one IUID; and
-     - every meaningful service-activity date contains trusted anchor evidence.
+      LOW_RISK_EXCLUSIVE_ANCHORED_AUID means:
+        - the AUID has only ever been linked to one IUID; and
+        - every meaningful service-activity date contains trusted anchor evidence.
 
-   Public landing-page and authentication-transition activity does not count as
-   evidence of unanchored service use.
+      Public landing-page and authentication-transition activity does not count as
+      evidence of unanchored service use.
 
-   Anonymous-only AUIDs remain unresolved because no trusted identity evidence
-   is available to propagate.
+      Anonymous-only AUIDs remain unresolved because no trusted identity evidence
+      is available to propagate.
 
-   Grain:
-     One row per AUID observed in web-request activity. */
-classified_auids AS (
-  SELECT
-    auid,
-    distinct_iuid_count_ever,
-    single_known_iuid,
+      Grain:
+        One row per AUID observed in web request activity. */
+    classified_auids AS (
+      SELECT
+        auid,
+        distinct_iuid_count_ever,
+        single_known_iuid,
 
-    CASE
-      WHEN distinct_iuid_count_ever = 0
-        THEN 'NO_KNOWN_IUID_ANONYMOUS_ONLY'
+        CASE
+          WHEN distinct_iuid_count_ever = 0
+            THEN 'NO_KNOWN_IUID_ANONYMOUS_ONLY'
 
-      WHEN distinct_iuid_count_ever = 1
-        AND meaningful_active_dates_without_trusted_anchor = 0
-        THEN 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
+          WHEN distinct_iuid_count_ever = 1
+            AND meaningful_active_dates_without_trusted_anchor = 0
+            THEN 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
 
-      WHEN distinct_iuid_count_ever = 1
-        AND meaningful_active_dates_without_trusted_anchor > 0
-        THEN 'UNCERTAIN_SINGLE_IUID_UNANCHORED_ACTIVITY'
+          WHEN distinct_iuid_count_ever = 1
+            AND meaningful_active_dates_without_trusted_anchor > 0
+            THEN 'UNCERTAIN_SINGLE_IUID_UNANCHORED_ACTIVITY'
 
-      WHEN distinct_iuid_count_ever > 1
-        THEN 'HIGH_RISK_MULTI_IUID_AUID'
+          WHEN distinct_iuid_count_ever > 1
+            THEN 'HIGH_RISK_MULTI_IUID_AUID'
 
-      ELSE 'UNKNOWN'
-    END AS auid_risk_classification,
+          ELSE 'UNKNOWN'
+        END AS auid_risk_classification,
 
-    CASE
-      WHEN distinct_iuid_count_ever = 0
-        THEN FALSE
+        CASE
+          WHEN distinct_iuid_count_ever = 0
+            THEN FALSE
 
-      WHEN distinct_iuid_count_ever = 1
-        AND meaningful_active_dates_without_trusted_anchor = 0
-        THEN FALSE
+          WHEN distinct_iuid_count_ever = 1
+            AND meaningful_active_dates_without_trusted_anchor = 0
+            THEN FALSE
 
-      ELSE TRUE
-    END AS requires_walk
+          ELSE TRUE
+        END AS requires_walk
 
-  FROM auid_classification_inputs
-)
+      FROM auid_classification_inputs
+    )
 
-SELECT *
-FROM classified_auids
+    SELECT *
+    FROM classified_auids
 
-`);
+    `);
 
 /* -------------------------------------------------------------------------- 
   3. Classify events and apply direct identity assignments 
   
-  Create the initial event-level identity-resolution state. For each valid web-request event: 
-  - attach the all-time identity-risk profile for its AUID 
+  Create the initial event level identity-resolution state. For each valid web request event: 
+  - attach the identity risk profile for its AUID 
   - identify whether the request is a trusted identity anchor
   - assign a known IUID to trusted anchor events 
   - directly assign activity on low-risk exclusive AUIDs 
@@ -876,17 +919,69 @@ FROM classified_auids
   chains, activity windows, and downstream sessions crossing the incremental boundary can be 
   reconstructed consistently. 
   
-  Grain: One row per valid web-request event. 
+  Grain: One row per valid web request event. 
   
   Output: identity_classify_events_[event source] 
 ------------------------------------------------------------------------------ */
 
 publish(
   classifyEventsName,
-  incrementalEventConfig("Classify events for identity resolution")
+  {
+    ...params.defaultConfig,
+    schema: "web_analytics_staging_tables",
+    type: "incremental",
+    protected: false,
+    uniqueKey: ["request_uuid"],
+    tags: [
+      params.eventSourceName.toLowerCase(),
+      "identity-staging"
+    ],
+    description: `Initial event level identity resolution state for valid web request events.
+
+      Each row combines the original request attributes with trusted anchor evidence and the
+      AUID identity risk classification. Trusted anchor requests receive their known
+      identity, while events on low risk exclusive AUIDs receive a direct inferred assignment.
+
+      Grain: one row per valid web request event.`,
+    dependencies: params.dependencies,
+    columns: {
+      request_uuid: `Unique identifier for the web request event. This is the grain of the table.`,
+      occurred_at: `Timestamp at which the web request event occurred.`,
+      event_date: `Calendar date on which the web request event occurred. Derived from occurred_at and used to partition the table.`,
+      event_type: `Type of source event. This model retains web request events only.`,
+      auid: `Anonymous user identifier observed on the web request event. Derived from anonymised_user_agent_and_ip.`,
+      request_user_id: `User identifier recorded directly on the incoming web request where available.`,
+      request_path: `Path component of the requested URL.`,
+      request_query: `Query string component of the requested URL.`,
+      request_path_and_query: `Combined request path and query string.`,
+      request_referer_path_and_query: `Path and query string of the referring request where available.`,
+      request_referer_domain: `Domain of the referring request where available.`,
+      request_method: `HTTP method used for the web request.`,
+      response_status: `HTTP response status cast to a string for consistent downstream handling.`,
+      response_content_type: `Content type returned by the web request.`,
+      entity_table_name: `Source entity table associated with the event where available.`,
+      namespace: `Namespace associated with the source event where available.`,
+      device_category: `Category of device associated with the web request.`,
+      is_trusted_identity_anchor: `Boolean indicating whether the request contains trusted authenticated identity evidence.`,
+      known_anchor_iuid: `Known inferred user identifier extracted from the trusted identity anchor source where available.`,
+      auid_risk_classification: `All time identity-risk classification assigned to the event's AUID.`,
+      requires_walk: `Boolean indicating whether the event's AUID requires deeper recursive identity inference.`,
+      distinct_iuid_count_ever: `Number of distinct trusted inferred user identifiers historically linked to the event's AUID.`,
+      current_iuid: `Best currently available inferred user identifier after applying trusted anchor and low risk direct assignment rules.`,
+      current_resolution_stage: `Pipeline stage that assigned the current inferred user identifier.`,
+      current_iuid_method: `Specific rule used to assign the current inferred user identifier.`,
+      identity_resolution_priority: `Numeric confidence priority assigned to the current identity resolution.`,
+      identity_resolution_locked: `Boolean indicating whether the current identity is trusted anchor evidence and must not be overwritten downstream.`
+    },
+    bigquery: {
+      partitionBy: "event_date",
+      clusterBy: ["auid", "current_iuid"]
+    }
+  }
 )
 .preOps(ctx => identityEventCheckpointPreOps(ctx))
 .query(ctx => `
+
 
 WITH
 
@@ -1054,7 +1149,7 @@ FROM events_with_current_identity_state
 `);
 
 /* --------------------------------------------------------------------------
-   4A. Conservative recursive propagation: define recursive-walk input scope
+   4A. Conservative recursive propagation: define recursive walk input scope
 
    Create the event subset that will be passed into the conservative recursive
    identity propagation model.
@@ -1074,11 +1169,11 @@ FROM events_with_current_identity_state
      2. all valid Stage 3 events from that date onwards are included.
 
    On an incremental run:
-     1. `recursiveWalkInputScopePreOps()` calculates an overlapping rebuild
+     1. recursiveWalkInputScopePreOps() calculates an overlapping rebuild
        checkpoint from the latest date already stored in this input table
      2. the checkpoint is moved backwards by one day and the configured additional
        rebuild hours
-     3. the existing contents of this temporary input table are cleared;
+     3. the existing contents of this temporary input table are cleared
      4. only Stage 3 events occurring on or after the checkpoint are reloaded.
 
    The overlapping rebuild period is intentional. It ensures that identity
@@ -1098,7 +1193,59 @@ FROM events_with_current_identity_state
 
 publish(
   conservativeWalkInputName,
-  incrementalEventConfig("Input scope for conservative recursive identity walk")
+  {
+    ...params.defaultConfig,
+    schema: "web_analytics_staging_tables",
+    type: "incremental",
+    protected: false,
+    uniqueKey: ["request_uuid"],
+    tags: [
+      params.eventSourceName.toLowerCase(),
+      "identity-staging"
+    ],
+    description: `Scoped input table for the conservative recursive identity walk.
+
+      Each run reloads the overlapping rebuild period from the initial event-level
+      identity resolution state. This allows the downstream recursive walk to run
+      as a standard table while still limiting processing to the required rebuild scope.
+
+      Grain: one row per valid web request event within the current recursive walk scope.
+    `,
+    dependencies: params.dependencies,
+    columns: {
+      request_uuid: `Unique identifier for the web request event. This is the grain of the table.`,
+      occurred_at: `Timestamp at which the web request event occurred.`,
+      event_date: `Calendar date on which the web request event occurred. Derived from occurred_at and used to partition the table.`,
+      event_type: `Type of source event. This model retains web request events only.`,
+      auid: `Anonymous user identifier observed on the web request event. Derived from anonymised_user_agent_and_ip.`,
+      request_user_id: `User identifier recorded directly on the incoming web request where available.`,
+      request_path: `Path component of the requested URL.`,
+      request_query: `Query-string component of the requested URL.`,
+      request_path_and_query: `Combined request path and query string.`,
+      request_referer_path_and_query: `Path and query string of the referring request where available.`,
+      request_referer_domain: `Domain of the referring request where available.`,
+      request_method: `HTTP method used for the web request.`,
+      response_status: `HTTP response status cast to a string for consistent downstream handling.`,
+      response_content_type: `Content type returned by the web request.`,
+      entity_table_name: `Source entity table associated with the event where available.`,
+      namespace: `Namespace associated with the source event where available.`,
+      device_category: `Category of device associated with the web request.`,
+      is_trusted_identity_anchor: `Boolean indicating whether the request contains trusted authenticated identity evidence.`,
+      known_anchor_iuid: `Known inferred user identifier extracted from the trusted identity anchor source where available.`,
+      auid_risk_classification: `All-time identity risk classification assigned to the event's AUID.`,
+      requires_walk: `Boolean indicating whether the event's AUID requires deeper recursive identity inference.`,
+      distinct_iuid_count_ever: `Number of distinct trusted inferred user identifiers historically linked to the event's AUID.`,
+      current_iuid: `Best currently available inferred user identifier after applying trusted-anchor and low risk direct assignment rules.`,
+      current_resolution_stage: `Pipeline stage that assigned the current inferred user identifier.`,
+      current_iuid_method: `Specific rule used to assign the current inferred user identifier.`,
+      identity_resolution_priority: `Numeric confidence priority assigned to the current identity resolution.`,
+      identity_resolution_locked: `Boolean indicating whether the current identity is trusted anchor evidence and must not be overwritten downstream.`
+    },
+    bigquery: {
+      partitionBy: "event_date",
+      clusterBy: ["auid", "current_iuid"]
+    }
+  }
 )
 .preOps(ctx => recursiveWalkInputScopePreOps(ctx))
 .query(ctx => `
@@ -1159,15 +1306,63 @@ WHERE occurred_at >= identity_rebuild_checkpoint
 
 publish(
   conservativeWalkRunName,
-  stagingConfig("Run conservative recursive identity walk for current rebuild scope", {
+  {
+    ...params.defaultConfig,
+    schema: "web_analytics_staging_tables",
     type: "table",
+    tags: [
+      params.eventSourceName.toLowerCase(),
+      "identity-staging"
+    ],
+    description: `Scoped output from the conservative recursive identity walk.
+
+      Each row retains the event-level identity state and records the result of tracing
+      conservative navigation chains back to trusted anchors or safely pre-assigned identities.
+      Previously unresolved events receive an inferred identity only where their complete chain
+      resolves safely to exactly one anchor IUID.
+
+      Grain: one row per valid web request event within the current recursive walk scope.`,
+    dependencies: params.dependencies,
+    columns: {
+      request_uuid: `Unique identifier for the web request event. This is the grain of the table.`,
+      occurred_at: `Timestamp at which the web request event occurred.`,
+      event_date: `Calendar date on which the web request event occurred. Derived from occurred_at and used to partition the table.`,
+      event_type: `Type of source event. This model retains web request events only.`,
+      auid: `Anonymous user identifier observed on the web request event. Derived from anonymised_user_agent_and_ip.`,
+      request_user_id: `User identifier recorded directly on the incoming web request where available.`,
+      request_path: `Path component of the requested URL.`,
+      request_query: `Query-string component of the requested URL.`,
+      request_path_and_query: `Combined request path and query string.`,
+      request_referer_path_and_query: `Path and query string of the referring request where available.`,
+      request_referer_domain: `Domain of the referring request where available.`,
+      request_method: `HTTP method used for the web request.`,
+      response_status: `HTTP response status cast to a string for consistent downstream handling.`,
+      response_content_type: `Content type returned by the web request.`,
+      entity_table_name: `Source entity table associated with the event where available.`,
+      namespace: `Namespace associated with the source event where available.`,
+      device_category: `Category of device associated with the web request.`,
+      is_trusted_identity_anchor: `Boolean indicating whether the request contains trusted authenticated identity evidence.`,
+      known_anchor_iuid: `Known inferred user identifier extracted from the trusted identity anchor source where available.`,
+      auid_risk_classification: `All-time identity-risk classification assigned to the event's AUID.`,
+      requires_walk: `Boolean indicating whether the event's AUID requires deeper recursive identity inference.`,
+      distinct_iuid_count_ever: `Number of distinct trusted inferred user identifiers historically linked to the event's AUID.`,
+      identity_resolution_locked: `Boolean indicating whether the current identity is trusted anchor evidence and must not be overwritten downstream.`,
+      parent_request_uuid_pass1: `Unique identifier of the selected parent request used by the conservative recursive walk where a valid parent relationship is available.`,
+      parent_match_confidence_pass1: `Confidence level assigned to the selected conservative parent relationship.`,
+      likely_shunt_arrival: `Boolean indicating whether the event is a likely cross-AUID shunt arrival. Used as a conservative activity-window boundary downstream.`,
+      current_iuid: `Best currently available inferred user identifier after applying trusted-anchor, low-risk direct-assignment, and conservative recursive-propagation rules.`,
+      current_resolution_stage: `Pipeline stage that assigned the current inferred user identifier.`,
+      current_iuid_method: `Specific rule used to assign the current inferred user identifier, including whether recursive propagation depended on a shared-context proxy.`,
+      identity_resolution_priority: `Numeric confidence priority assigned to the current identity resolution.`
+    },
     bigquery: {
       partitionBy: "event_date",
       clusterBy: ["auid", "current_iuid"]
     }
-  })
+  }
 )
 .query(ctx => `
+
 
 WITH RECURSIVE
 
@@ -2075,7 +2270,7 @@ fields required by Stage 5. Discard temporary graph diagnostics.
    incremental behaviour required for production runs.
 
    Grain:
-     One row per valid web-request event.
+     One row per valid web request event.
 
    Input:
      identity_conservative_recursive_walk_run_[event source]
@@ -2086,7 +2281,62 @@ fields required by Stage 5. Discard temporary graph diagnostics.
 
 publish(
   conservativeWalkName,
-  incrementalEventConfig("Persist conservative recursive identity propagation state")
+  {
+    ...params.defaultConfig,
+    schema: "web_analytics_staging_tables",
+    type: "incremental",
+    protected: false,
+    uniqueKey: ["request_uuid"],
+    tags: [
+      params.eventSourceName.toLowerCase(),
+      "identity-staging"
+    ],
+    description: `Durable event-level identity state after conservative recursive propagation.
+
+      Each incremental run replaces the overlapping rebuild period with the latest scoped
+      conservative-walk output while retaining historical rows outside that period.
+      Previously unresolved events receive an inferred identity only where their complete
+      navigation chain resolves safely to exactly one anchor IUID.
+
+      Grain: one row per valid web-request event.`,
+    dependencies: params.dependencies,
+    columns: {
+      request_uuid: `Unique identifier for the web-request event. This is the grain of the table.`,
+      occurred_at: `Timestamp at which the web-request event occurred.`,
+      event_date: `Calendar date on which the web-request event occurred. Derived from occurred_at and used to partition the table.`,
+      event_type: `Type of source event. This model retains web-request events only.`,
+      auid: `Anonymous user identifier observed on the web-request event. Derived from anonymised_user_agent_and_ip.`,
+      request_user_id: `User identifier recorded directly on the incoming web request where available.`,
+      request_path: `Path component of the requested URL.`,
+      request_query: `Query-string component of the requested URL.`,
+      request_path_and_query: `Combined request path and query string.`,
+      request_referer_path_and_query: `Path and query string of the referring request where available.`,
+      request_referer_domain: `Domain of the referring request where available.`,
+      request_method: `HTTP method used for the web request.`,
+      response_status: `HTTP response status cast to a string for consistent downstream handling.`,
+      response_content_type: `Content type returned by the web request.`,
+      entity_table_name: `Source entity table associated with the event where available.`,
+      namespace: `Namespace associated with the source event where available.`,
+      device_category: `Category of device associated with the web request.`,
+      is_trusted_identity_anchor: `Boolean indicating whether the request contains trusted authenticated identity evidence.`,
+      known_anchor_iuid: `Known inferred user identifier extracted from the trusted identity-anchor source where available.`,
+      auid_risk_classification: `All-time identity-risk classification assigned to the event's AUID.`,
+      requires_walk: `Boolean indicating whether the event's AUID requires deeper recursive identity inference.`,
+      distinct_iuid_count_ever: `Number of distinct trusted inferred user identifiers historically linked to the event's AUID.`,
+      identity_resolution_locked: `Boolean indicating whether the current identity is trusted anchor evidence and must not be overwritten downstream.`,
+      parent_request_uuid_pass1: `Unique identifier of the selected parent request used by the conservative recursive walk where a valid parent relationship is available.`,
+      parent_match_confidence_pass1: `Confidence level assigned to the selected conservative parent relationship.`,
+      likely_shunt_arrival: `Boolean indicating whether the event is a likely cross-AUID shunt arrival. Used as a conservative activity-window boundary downstream.`,
+      current_iuid: `Best currently available inferred user identifier after applying trusted-anchor, low-risk direct-assignment, and conservative recursive-propagation rules.`,
+      current_resolution_stage: `Pipeline stage that assigned the current inferred user identifier.`,
+      current_iuid_method: `Specific rule used to assign the current inferred user identifier, including whether recursive propagation depended on a shared-context proxy.`,
+      identity_resolution_priority: `Numeric confidence priority assigned to the current identity resolution.`
+    },
+    bigquery: {
+      partitionBy: "event_date",
+      clusterBy: ["auid", "current_iuid"]
+    }
+  }
 )
 .preOps(ctx => identityEventCheckpointPreOps(ctx))
 .query(ctx => `
@@ -2121,7 +2371,7 @@ FROM ${ctx.ref(conservativeWalkRunName)}
    windows crossing the incremental boundary can be reconstructed consistently.
 
    Grain:
-     One row per valid web-request event.
+     One row per valid web request event.
 
    Input:
      identity_conservative_recursive_walk_[event source]
@@ -2130,12 +2380,76 @@ FROM ${ctx.ref(conservativeWalkRunName)}
      identity_activity_windows_[event source]
 ------------------------------------------------------------------------------ */
 
-publish(
-  activityWindowsName,
-  incrementalEventConfig("Build and apply activity-window identity fallback")
-)
-.preOps(ctx => identityEventCheckpointPreOps(ctx))
-.query(ctx => `
+  publish(
+    activityWindowsName,
+    {
+      ...params.defaultConfig,
+      schema: "web_analytics_staging_tables",
+      type: "incremental",
+      protected: false,
+      uniqueKey: ["request_uuid"],
+      tags: [
+        params.eventSourceName.toLowerCase(),
+        "identity-staging"
+      ],
+      description: `Durable event-level identity state after applying activity-window fallback.
+
+        Each incremental run rebuilds an overlapping recent period, constructs time-bounded
+        identity windows from high-confidence activity, and assigns an identity to previously
+        unresolved events only where the matching window evidence is clean and unambiguous.
+
+        The model also retains a narrow set of activity-window context fields required by the
+        targeted post-window repair walk.
+
+        Grain: one row per valid web-request event.`,
+      dependencies: params.dependencies,
+      columns: {
+        request_uuid: `Unique identifier for the web-request event. This is the grain of the table.`,
+        occurred_at: `Timestamp at which the web-request event occurred.`,
+        event_date: `Calendar date on which the web-request event occurred. Derived from occurred_at and used to partition the table.`,
+        event_type: `Type of source event. This model retains web-request events only.`,
+        auid: `Anonymous user identifier observed on the web-request event. Derived from anonymised_user_agent_and_ip.`,
+        request_user_id: `User identifier recorded directly on the incoming web request where available.`,
+        request_path: `Path component of the requested URL.`,
+        request_query: `Query-string component of the requested URL.`,
+        request_path_and_query: `Combined request path and query string.`,
+        request_referer_path_and_query: `Path and query string of the referring request where available.`,
+        request_referer_domain: `Domain of the referring request where available.`,
+        request_method: `HTTP method used for the web request.`,
+        response_status: `HTTP response status cast to a string for consistent downstream handling.`,
+        response_content_type: `Content type returned by the web request.`,
+        entity_table_name: `Source entity table associated with the event where available.`,
+        namespace: `Namespace associated with the source event where available.`,
+        device_category: `Category of device associated with the web request.`,
+        is_trusted_identity_anchor: `Boolean indicating whether the request contains trusted authenticated identity evidence.`,
+        known_anchor_iuid: `Known inferred user identifier extracted from the trusted identity-anchor source where available.`,
+        auid_risk_classification: `All-time identity-risk classification assigned to the event's AUID.`,
+        requires_walk: `Boolean indicating whether the event's AUID requires deeper recursive identity inference.`,
+        identity_resolution_locked: `Boolean indicating whether the current identity is trusted anchor evidence and must not be overwritten downstream.`,
+        parent_request_uuid_pass1: `Unique identifier of the selected parent request used by the conservative recursive walk where a valid parent relationship is available.`,
+        parent_match_confidence_pass1: `Confidence level assigned to the selected conservative parent relationship.`,
+        likely_shunt_arrival: `Boolean indicating whether the event is a likely cross-AUID shunt arrival. Used as a conservative activity-window boundary.`,
+        auid_distinct_iuid_count: `Number of distinct trusted inferred user identifiers historically linked to the event's AUID. Renamed at this stage to make the AUID-level meaning explicit.`,
+        current_iuid: `Best currently available inferred user identifier after applying trusted-anchor, low-risk direct-assignment, conservative recursive-propagation, and activity-window fallback rules.`,
+        current_iuid_method: `Specific rule used to assign the current inferred user identifier.`,
+        current_resolution_stage: `Pipeline stage that assigned the current inferred user identifier.`,
+        identity_resolution_priority: `Numeric confidence priority assigned to the current identity resolution.`,
+        matched_overlapping_windows: `Number of overlapping activity-window segments matched by the event. Used downstream to prevent unsafe repair assignments.`,
+        matched_post_conflict_windows: `Number of post-identity-conflict activity-window segments matched by the event. Used downstream to prevent unsafe repair assignments.`,
+        matched_unknown_preexisting_activity_windows: `Number of matched activity-window segments with unattributable pre-existing activity. Used downstream to prevent unsafe repair assignments.`,
+        eligible_window_iuid: `Inferred user identifier associated with the event's eligible clean activity window where one is available.`,
+        eligible_window_start: `Start timestamp of the event's eligible clean activity window where one is available.`,
+        eligible_window_has_unknown_preexisting_activity: `Boolean indicating whether the eligible activity window contains unattributable pre-existing activity.`
+      },
+      bigquery: {
+        partitionBy: "event_date",
+        clusterBy: ["auid", "current_iuid"]
+      }
+    }
+  )
+  .preOps(ctx => identityEventCheckpointPreOps(ctx))
+  .query(ctx => `
+
 
 WITH
 
@@ -3255,7 +3569,7 @@ FROM current_state_after_window_assignments
 `);
 
 /* --------------------------------------------------------------------------
-   6A. Targeted post-window repair propagation: define recursive-walk input scope
+   6A. Targeted post-window repair propagation: define recursive walk input scope
 
    Create the event subset that will be passed into the targeted post-window
    repair model.
@@ -3293,7 +3607,7 @@ FROM current_state_after_window_assignments
    subset.
 
    Grain:
-     One row per valid web-request event within the current repair-walk scope.
+     One row per valid web request event within the current repair-walk scope.
 
    Input:
      identity_activity_windows_[event source]
@@ -3302,12 +3616,74 @@ FROM current_state_after_window_assignments
      identity_second_recursive_walk_input_[event source]
 ------------------------------------------------------------------------------ */
 
-publish(
-  secondWalkInputName,
-  incrementalEventConfig("Input scope for targeted post-window repair propagation")
-)
-.preOps(ctx => recursiveWalkInputScopePreOps(ctx))
-.query(ctx => `
+  publish(
+    secondWalkInputName,
+    {
+      ...params.defaultConfig,
+      schema: "web_analytics_staging_tables",
+      type: "incremental",
+      protected: false,
+      uniqueKey: ["request_uuid"],
+      tags: [
+        params.eventSourceName.toLowerCase(),
+        "identity-staging"
+      ],
+      description: `
+        Scoped input table for targeted post-window repair propagation.
+
+        Each run reloads the overlapping rebuild period from the activity-window identity state.
+        This allows the downstream recursive repair walk to run as a standard table while limiting
+        processing to the required rebuild scope.
+
+        Grain: one row per valid web-request event within the current repair-walk scope.
+      `,
+      dependencies: params.dependencies,
+      columns: {
+        request_uuid: `Unique identifier for the web-request event. This is the grain of the table.`,
+        occurred_at: `Timestamp at which the web-request event occurred.`,
+        event_date: `Calendar date on which the web-request event occurred. Derived from occurred_at and used to partition the table.`,
+        event_type: `Type of source event. This model retains web-request events only.`,
+        auid: `Anonymous user identifier observed on the web-request event. Derived from anonymised_user_agent_and_ip.`,
+        request_user_id: `User identifier recorded directly on the incoming web request where available.`,
+        request_path: `Path component of the requested URL.`,
+        request_query: `Query-string component of the requested URL.`,
+        request_path_and_query: `Combined request path and query string.`,
+        request_referer_path_and_query: `Path and query string of the referring request where available.`,
+        request_referer_domain: `Domain of the referring request where available.`,
+        request_method: `HTTP method used for the web request.`,
+        response_status: `HTTP response status cast to a string for consistent downstream handling.`,
+        response_content_type: `Content type returned by the web request.`,
+        entity_table_name: `Source entity table associated with the event where available.`,
+        namespace: `Namespace associated with the source event where available.`,
+        device_category: `Category of device associated with the web request.`,
+        is_trusted_identity_anchor: `Boolean indicating whether the request contains trusted authenticated identity evidence.`,
+        known_anchor_iuid: `Known inferred user identifier extracted from the trusted identity-anchor source where available.`,
+        auid_risk_classification: `All-time identity-risk classification assigned to the event's AUID.`,
+        requires_walk: `Boolean indicating whether the event's AUID requires deeper recursive identity inference.`,
+        identity_resolution_locked: `Boolean indicating whether the current identity is trusted anchor evidence and must not be overwritten downstream.`,
+        parent_request_uuid_pass1: `Unique identifier of the selected parent request used by the conservative recursive walk where a valid parent relationship is available.`,
+        parent_match_confidence_pass1: `Confidence level assigned to the selected conservative parent relationship.`,
+        likely_shunt_arrival: `Boolean indicating whether the event is a likely cross-AUID shunt arrival. Used as a conservative activity-window boundary.`,
+        auid_distinct_iuid_count: `Number of distinct trusted inferred user identifiers historically linked to the event's AUID.`,
+        current_iuid: `Best currently available inferred user identifier after applying trusted-anchor, low-risk direct-assignment, conservative recursive-propagation, and activity-window fallback rules.`,
+        current_iuid_method: `Specific rule used to assign the current inferred user identifier.`,
+        current_resolution_stage: `Pipeline stage that assigned the current inferred user identifier.`,
+        identity_resolution_priority: `Numeric confidence priority assigned to the current identity resolution.`,
+        matched_overlapping_windows: `Number of overlapping activity-window segments matched by the event. Used to prevent unsafe repair assignments.`,
+        matched_post_conflict_windows: `Number of post-identity-conflict activity-window segments matched by the event. Used to prevent unsafe repair assignments.`,
+        matched_unknown_preexisting_activity_windows: `Number of matched activity-window segments with unattributable pre-existing activity. Used to prevent unsafe repair assignments.`,
+        eligible_window_iuid: `Inferred user identifier associated with the event's eligible clean activity window where one is available.`,
+        eligible_window_start: `Start timestamp of the event's eligible clean activity window where one is available.`,
+        eligible_window_has_unknown_preexisting_activity: `Boolean indicating whether the eligible activity window contains unattributable pre-existing activity.`
+      },
+      bigquery: {
+        partitionBy: "event_date",
+        clusterBy: ["auid", "current_iuid"]
+      }
+    }
+  )
+  .preOps(ctx => recursiveWalkInputScopePreOps(ctx))
+  .query(ctx => `
 
 SELECT *
 FROM ${ctx.ref(activityWindowsName)}
@@ -3357,13 +3733,66 @@ WHERE occurred_at >= identity_rebuild_checkpoint
 
 publish(
   secondWalkRunName,
-  stagingConfig( "Run targeted post-window repair propagation for current rebuild scope", {
+  {
+    ...params.defaultConfig,
+    schema: "web_analytics_staging_tables",
     type: "table",
+    tags: [
+      params.eventSourceName.toLowerCase(),
+      "identity-staging"
+    ],
+    description: `Scoped output from the targeted post-window repair walk.
+
+      Each row preserves the Stage 5 identity state and applies the strongest eligible local
+      repair proposal to previously unresolved events. Existing identity assignments remain
+      unchanged. Repair assignments are applied only where the proposed identity passes the
+      configured safety gates.
+
+      Grain: one row per valid web-request event within the current repair-walk scope.`,
+    dependencies: params.dependencies,
+    columns: {
+      request_uuid: `Unique identifier for the web-request event. This is the grain of the table.`,
+      occurred_at: `Timestamp at which the web-request event occurred.`,
+      event_date: `Calendar date on which the web-request event occurred. Derived from occurred_at and used to partition the table.`,
+      event_type: `Type of source event. This model retains web-request events only.`,
+      auid: `Anonymous user identifier observed on the web-request event. Derived from anonymised_user_agent_and_ip.`,
+      request_user_id: `User identifier recorded directly on the incoming web request where available.`,
+      request_path: `Path component of the requested URL.`,
+      request_query: `Query-string component of the requested URL.`,
+      request_path_and_query: `Combined request path and query string.`,
+      request_referer_path_and_query: `Path and query string of the referring request where available.`,
+      request_referer_domain: `Domain of the referring request where available.`,
+      request_method: `HTTP method used for the web request.`,
+      response_status: `HTTP response status cast to a string for consistent downstream handling.`,
+      response_content_type: `Content type returned by the web request.`,
+      entity_table_name: `Source entity table associated with the event where available.`,
+      namespace: `Namespace associated with the source event where available.`,
+      device_category: `Category of device associated with the web request.`,
+      is_trusted_identity_anchor: `Boolean indicating whether the request contains trusted authenticated identity evidence.`,
+      known_anchor_iuid: `Known inferred user identifier extracted from the trusted identity-anchor source where available.`,
+      auid_risk_classification: `All-time identity-risk classification assigned to the event's AUID.`,
+      requires_walk: `Boolean indicating whether the event's AUID requires deeper recursive identity inference.`,
+      identity_resolution_locked: `Boolean indicating whether the current identity is trusted anchor evidence and must not be overwritten downstream.`,
+      parent_request_uuid_pass1: `Unique identifier of the selected parent request used by the conservative recursive walk where a valid parent relationship is available.`,
+      parent_match_confidence_pass1: `Confidence level assigned to the selected conservative parent relationship.`,
+      likely_shunt_arrival: `Boolean indicating whether the event is a likely cross-AUID shunt arrival. Used as a conservative activity-window boundary.`,
+      auid_distinct_iuid_count: `Number of distinct trusted inferred user identifiers historically linked to the event's AUID.`,
+      current_iuid: `Best currently available inferred user identifier after applying all identity-resolution rules up to and including targeted post-window repair propagation.`,
+      current_iuid_method: `Specific rule used to assign the current inferred user identifier, including the local repair-walk rule where Stage 6 assigns the identity.`,
+      current_resolution_stage: `Pipeline stage that assigned the current inferred user identifier.`,
+      identity_resolution_priority: `Numeric confidence priority assigned to the current identity resolution.`,
+      matched_overlapping_windows: `Number of overlapping activity-window segments matched by the event. Used to prevent unsafe repair assignments.`,
+      matched_post_conflict_windows: `Number of post-identity-conflict activity-window segments matched by the event. Used to prevent unsafe repair assignments.`,
+      matched_unknown_preexisting_activity_windows: `Number of matched activity-window segments with unattributable pre-existing activity. Used to prevent unsafe repair assignments.`,
+      eligible_window_iuid: `Inferred user identifier associated with the event's eligible clean activity window where one is available.`,
+      eligible_window_start: `Start timestamp of the event's eligible clean activity window where one is available.`,
+      eligible_window_has_unknown_preexisting_activity: `Boolean indicating whether the eligible activity window contains unattributable pre-existing activity.`
+    },
     bigquery: {
       partitionBy: "event_date",
       clusterBy: ["auid", "current_iuid"]
     }
-  })
+  }
 )
 .query(ctx => `
 
@@ -4390,7 +4819,7 @@ This separation allows recursive SQL to be used without sacrificing the
 incremental behaviour required for production runs.
 
 Grain:
-One row per valid web-request event.
+One row per valid web request event.
 
 Input:
 identity_second_recursive_walk_run_[event source]
@@ -4401,7 +4830,71 @@ identity_second_recursive_walk_[event source]
 
 publish(
   secondWalkName,
-  incrementalEventConfig("Persist post-window repair walk state")
+  {
+    ...params.defaultConfig,
+    schema: "web_analytics_staging_tables",
+    type: "incremental",
+    protected: false,
+    uniqueKey: ["request_uuid"],
+    tags: [
+      params.eventSourceName.toLowerCase(),
+      "identity-staging"
+    ],
+    description: `
+      Durable event-level identity state after targeted post-window repair propagation.
+
+      Each incremental run replaces the overlapping rebuild period with the latest scoped
+      repair-walk output while retaining historical rows outside that period. Existing
+      identity assignments remain unchanged, and previously unresolved events receive an
+      inferred identity only where the strongest eligible repair proposal passes the
+      configured safety gates.
+
+      Grain: one row per valid web-request event.
+    `,
+    dependencies: params.dependencies,
+    columns: {
+      request_uuid: `Unique identifier for the web-request event. This is the grain of the table.`,
+      occurred_at: `Timestamp at which the web-request event occurred.`,
+      event_date: `Calendar date on which the web-request event occurred. Derived from occurred_at and used to partition the table.`,
+      event_type: `Type of source event. This model retains web-request events only.`,
+      auid: `Anonymous user identifier observed on the web-request event. Derived from anonymised_user_agent_and_ip.`,
+      request_user_id: `User identifier recorded directly on the incoming web request where available.`,
+      request_path: `Path component of the requested URL.`,
+      request_query: `Query-string component of the requested URL.`,
+      request_path_and_query: `Combined request path and query string.`,
+      request_referer_path_and_query: `Path and query string of the referring request where available.`,
+      request_referer_domain: `Domain of the referring request where available.`,
+      request_method: `HTTP method used for the web request.`,
+      response_status: `HTTP response status cast to a string for consistent downstream handling.`,
+      response_content_type: `Content type returned by the web request.`,
+      entity_table_name: `Source entity table associated with the event where available.`,
+      namespace: `Namespace associated with the source event where available.`,
+      device_category: `Category of device associated with the web request.`,
+      is_trusted_identity_anchor: `Boolean indicating whether the request contains trusted authenticated identity evidence.`,
+      known_anchor_iuid: `Known inferred user identifier extracted from the trusted identity-anchor source where available.`,
+      auid_risk_classification: `All-time identity-risk classification assigned to the event's AUID.`,
+      requires_walk: `Boolean indicating whether the event's AUID requires deeper recursive identity inference.`,
+      identity_resolution_locked: `Boolean indicating whether the current identity is trusted anchor evidence and must not be overwritten downstream.`,
+      parent_request_uuid_pass1: `Unique identifier of the selected parent request used by the conservative recursive walk where a valid parent relationship is available.`,
+      parent_match_confidence_pass1: `Confidence level assigned to the selected conservative parent relationship.`,
+      likely_shunt_arrival: `Boolean indicating whether the event is a likely cross-AUID shunt arrival. Used as a conservative activity-window boundary.`,
+      auid_distinct_iuid_count: `Number of distinct trusted inferred user identifiers historically linked to the event's AUID.`,
+      current_iuid: `Best currently available inferred user identifier after applying all identity-resolution rules up to and including targeted post-window repair propagation.`,
+      current_iuid_method: `Specific rule used to assign the current inferred user identifier.`,
+      current_resolution_stage: `Pipeline stage that assigned the current inferred user identifier.`,
+      identity_resolution_priority: `Numeric confidence priority assigned to the current identity resolution.`,
+      matched_overlapping_windows: `Number of overlapping activity-window segments matched by the event. Used to prevent unsafe repair assignments.`,
+      matched_post_conflict_windows: `Number of post-identity-conflict activity-window segments matched by the event. Used to prevent unsafe repair assignments.`,
+      matched_unknown_preexisting_activity_windows: `Number of matched activity-window segments with unattributable pre-existing activity. Used to prevent unsafe repair assignments.`,
+      eligible_window_iuid: `Inferred user identifier associated with the event's eligible clean activity window where one is available.`,
+      eligible_window_start: `Start timestamp of the event's eligible clean activity window where one is available.`,
+      eligible_window_has_unknown_preexisting_activity: `Boolean indicating whether the eligible activity window contains unattributable pre-existing activity.`
+    },
+    bigquery: {
+      partitionBy: "event_date",
+      clusterBy: ["auid", "current_iuid"]
+    }
+  }
 )
 .preOps(ctx => identityEventCheckpointPreOps(ctx))
 .query(ctx => `
@@ -4417,7 +4910,7 @@ FROM ${ctx.ref(secondWalkRunName)}
    Create the final identity resolution output consumed by downstream web
    analytics models.
 
-   Stages 3 to 6 infer the best available IUID for each web-request event.
+   Stages 3 to 6 infer the best available IUID for each web request event.
    This final stage preserves that inferred identity and its audit fields, then
    applies a separate downstream safeguard for admin activity.
 
@@ -4445,7 +4938,7 @@ FROM ${ctx.ref(secondWalkRunName)}
    the complete final table ensures that older rows are updated consistently.
 
    Grain:
-     One row per valid web-request event.
+     One row per valid web request event.
 
    Input:
      identity_second_recursive_walk_[event source]
@@ -4456,16 +4949,57 @@ FROM ${ctx.ref(secondWalkRunName)}
 
 publish(
   resolvedAdminName,
-  stagingConfig(
-    "Final solved web-request events with inferred identity and admin-AUID normalisation",
-    {
-      type: "table",
-      bigquery: {
-        partitionBy: "event_date",
-        clusterBy: ["auid", "current_iuid"]
-      }
+  {
+    ...params.defaultConfig,
+    schema: "web_analytics_staging_tables",
+    type: "table",
+    tags: [
+      params.eventSourceName.toLowerCase(),
+      "identity-staging"
+    ],
+    description: `
+      Final solved web-request events with inferred identity and admin-AUID normalisation.
+
+      Each row retains the auditable identity inferred by the propagation pipeline and adds an
+      analytics-safe normalised identity. Events associated with an AUID that has ever produced
+      qualifying admin-page activity receive a stable synthetic admin identity derived from the
+      service name and AUID.
+
+      Grain: one row per valid web-request event.
+    `,
+    dependencies: params.dependencies,
+    columns: {
+      request_uuid: `Unique identifier for the web-request event. This is the grain of the table.`,
+      occurred_at: `Timestamp at which the web-request event occurred.`,
+      event_date: `Calendar date on which the web-request event occurred. Derived from occurred_at and used to partition the table.`,
+      event_type: `Type of source event. This model retains web-request events only.`,
+      auid: `Anonymous user identifier observed on the web-request event. Derived from anonymised_user_agent_and_ip.`,
+      request_user_id: `User identifier recorded directly on the incoming web request where available.`,
+      request_path: `Path component of the requested URL.`,
+      request_query: `Query-string component of the requested URL.`,
+      request_path_and_query: `Combined request path and query string.`,
+      request_referer_path_and_query: `Path and query string of the referring request where available.`,
+      request_referer_domain: `Domain of the referring request where available.`,
+      request_method: `HTTP method used for the web request.`,
+      response_status: `HTTP response status cast to a string for consistent downstream handling.`,
+      response_content_type: `Content type returned by the web request.`,
+      entity_table_name: `Source entity table associated with the event where available.`,
+      namespace: `Namespace associated with the source event where available.`,
+      device_category: `Category of device associated with the web request.`,
+      current_iuid: `Best inferred user identifier assigned by the identity-resolution pipeline. Preserved unchanged for audit and QA.`,
+      auid_risk_classification: `All-time identity-risk classification assigned to the event's AUID.`,
+      current_iuid_method: `Specific rule used to assign the current inferred user identifier.`,
+      current_resolution_stage: `Pipeline stage that assigned the current inferred user identifier.`,
+      identity_resolution_priority: `Numeric confidence priority assigned to the current inferred user identifier.`,
+      auid_distinct_iuid_count: `Number of distinct trusted inferred user identifiers historically linked to the event's AUID.`,
+      current_auid_is_admin_exposed: `Boolean indicating whether the event's AUID has ever produced qualifying admin-page activity.`,
+      admin_normalised_iuid: `Analytics-safe inferred user identifier. Equals current_iuid for ordinary activity and a stable service-specific synthetic identity for activity associated with a historically admin-exposed AUID.`
+    },
+    bigquery: {
+      partitionBy: "event_date",
+      clusterBy: ["auid", "current_iuid"]
     }
-  )
+  }
 )
 .query(ctx => `
 

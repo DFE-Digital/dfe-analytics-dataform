@@ -154,7 +154,6 @@ These helpers:
     "sessionisation"
   ];
 
-
 /* --------------------------------------------------------------------------
    6. Publish the durable incremental session details table
 
@@ -900,7 +899,7 @@ remaining_anonymous_events AS (
 ),
 `}
 
-* --------------------------------------------------------------------------
+/* --------------------------------------------------------------------------
    5.1. Order anonymous events and identify device-session boundaries
 
    Sequence anonymous activity chronologically within each AUID.
