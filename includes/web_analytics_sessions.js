@@ -6,23 +6,33 @@ module.exports = params => {
     return true;
   }
 
-    /* --------------------------------------------------------------------------
-     1. Mode flags
-  -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- 
+1. Select the session-construction mode 
+
+Generate the session-details table only where it has been enabled for the current service. 
+Where web-request identity resolution is enabled, build: 
+ - resolved user sessions using the analytics safe identity produced by the identity resolution pipeline
+ - anonymous device sessions from unresolved activity
+ - journey links between eligible device and user sessions. 
+ 
+Where identity resolution is disabled, build device sessions only. 
+------------------------------------------------------------------------------ */
 
   const enableIdentityResolution =
     params.enableWebRequestIdentityResolution === true;
 
-  const sessionBuildMode = enableIdentityResolution
-    ? "identity_aware"
-    : "device_only";
+/* -------------------------------------------------------------------------- 
+2. Load optional service specific configuration 
 
-  /* --------------------------------------------------------------------------
-     2. Optional service-specific config
+Session construction can operate without service specific identity rules. 
+The identity resolution pipeline is responsible for validating its own mandatory configuration. 
+Where service configuration is available, use: 
+- the configured valid source-data start date
+- configured public, sign-in, and sign-out paths. 
 
-     Session generation should not require identity config.
-     Identity config is only mandatory in the identity-resolution script itself.
-  -------------------------------------------------------------------------- */
+These paths help distinguish expected anonymous activity from unresolved identity 
+evidence and support narrow pre-auth page stitching. 
+------------------------------------------------------------------------------ */
 
   const webAnalytics = identityConfig[params.eventSourceName] || {};
 
@@ -32,28 +42,43 @@ module.exports = params => {
     webAnalytics.startDate ||
     "2025-06-01";
 
-  /* --------------------------------------------------------------------------
-     3. Dynamic table names
-  -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- 
+3. Define service-specific input and output table names 
+Read from: 
+- identity_solved_events_[event source] where identity resolution is on
+- events_[event source] where identity resolution is off.
 
-  const finalName =
-    params.sessionDetailsTableName ||
+Publish one session_details_[event source] table.
+------------------------------------------------------------------------------ */
+
+  const finalName = 
     `session_details_${params.eventSourceName}`;
 
   const rawEventsName =
     `events_${params.eventSourceName}`;
 
   const identityEventsName =
-    params.identityEventsTableName ||
     `identity_solved_events_${params.eventSourceName}`;
 
   const sessionInputEventsName = enableIdentityResolution
     ? identityEventsName
     : rawEventsName;
 
-  /* --------------------------------------------------------------------------
-     4. Path config
-  -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- 
+4. Configure paths and incremental overlap periods 
+The session table is incremental. Each run: 
+- replaces sessions with recent activity
+- reads a wider event overlap so sessions crossing the replacement boundary 
+can be reconstructed consistently. 
+
+anonymousSafePagePaths identifies pages where anonymous activity is expected: 
+- public pre-auth pages
+- sign-in pages 
+- sign-out pages 
+
+These paths are used only for anonymous session classification and narrowly 
+constrained pre auth stitching. 
+------------------------------------------------------------------------------ */
 
   const unique = values => [...new Set(values)];
 
@@ -74,10 +99,15 @@ module.exports = params => {
     ...signOutPaths
   ]);
 
-  /* --------------------------------------------------------------------------
-     5. SQL helper functions
-  -------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- 
+5. Define SQL-generation helpers 
 
+These helpers: 
+- safely interpolate configured paths into generated SQL
+- create valid IN UNNEST conditions for dynamic path lists
+- use shared parameter helpers for attribution fields and channel mapping where available
+- fall back to a minimal UTM and referral implementation otherwise
+------------------------------------------------------------------------------ */
   function sqlString(value) {
     return `'${String(value).replace(/'/g, "\\'")}'`;
   }
@@ -124,9 +154,27 @@ module.exports = params => {
     "sessionisation"
   ];
 
+
+/* --------------------------------------------------------------------------
+   6. Publish the durable incremental session details table
+
+   Persist one row per constructed session.
+
+   The table is partitioned by session start date and incrementally merged using
+   session_id as the stable key. A recent overlap is rebuilt on each run so
+   sessions receiving new page activity near the processing boundary can be
+   replaced consistently.
+
+   The SQL generated below branches according to whether identity resolution is
+   enabled:
+     - identity aware mode creates resolved user and anonymous device sessions
+     - device only mode creates anonymous device sessions only.
+------------------------------------------------------------------------------ */
+
   return publish(finalName, {
     ...params.defaultConfig,
     type: "incremental",
+    uniqueKey: ["session_id"],
     protected: false,
     bigquery: {
       partitionBy: "DATE(session_start_timestamp)",
@@ -142,54 +190,75 @@ module.exports = params => {
     },
     tags,
      description: enableIdentityResolution
-      ? "This table contains data on sessions and accompanying metrics. This service is configured to also use the identity resolution script which infers the identity of the user of each web request event using a server-side methodology. Each row is a single session. This table uses the Google Analytics definition of a session: A session is a group of user interactions with the website that that occur continuously without a break of more than 30 minutes of inactivity or until the user navigates away from the site. This does not include sessions or page visits from bots."
-      : "This table contains data on sessions and accompanying metrics. This service is NOT configured to infer the identities of users, which means that the sessions are constructed using only device level identifiers. Each row is a single session. This table uses the Google Analytics definition of a session: A session is a group of user interactions with the website that that occur continuously without a break of more than 30 minutes of inactivity or until the user navigates away from the site. This does not include sessions or page visits from bots.",
+      ? "This table contains session-level web analytics metrics. This service is configured to use server-side identity resolution. Each row represents one session. Sessions continue while successive observable page requests occur within 30 minutes. A request may also continue the preceding session after a longer gap of up to 3 hours where its referrer exactly matches the preceding page, providing a bounded allowance for unobserved page-reading time. Admin-exposed AUIDs use stable synthetic per-AUID identities for session construction. Bot traffic is excluded."
+      : "This table contains session-level web analytics metrics. This service is not configured to infer user identities, so sessions are constructed from anonymous device identifiers only. Each row represents one session. Sessions continue while successive observable page requests occur within 30 minutes. A request may also continue the preceding session after a longer gap of up to 3 hours where its referrer exactly matches the preceding page, providing a bounded allowance for page activity time. Bot traffic is excluded.",
     dependencies: [...(params.dependencies || []), sessionInputEventsName],
     columns: {
-      session_id: "Stable hashed session identifier.",
-      user_id: "Resolved user identity for user sessions. Null for anonymous device sessions.",
-      user_signed_in: "True when the session contains resolved user identity.",
-      session_type: "Either user_session or device_session.",
-      known_multi_user_device: "True when the AUID has historically been associated with more than one IUID.",
-      multiple_auid_session: "True when a session contains more than one AUID.",
-      device_id: "Single AUID for single-AUID sessions, or synthetic multi-AUID session device id.",
-      session_namespace: "Namespace of the first page in the session.",
-      session_referer_domain: "Referer domain of the first page in the session.",
-      start_page: "First page path in the session.",
-      exit_page: "Last page path in the session.",
-      session_start_timestamp: "Timestamp of the first page in the session.",
-      final_session_page_timestamp: "Timestamp of the final page in the session.",
-      session_time_in_seconds: "Time from first to final page in the session.",
-      count_pages_visited: "Number of pages in the session.",
-      pages_visited_details: "Ordered page-level details for the session.",
-      journey_id: "Identifier joining adjacent device and user sessions where applicable."
+    session_id: "Stable hashed session identifier.",
+    user_id: "Analytics-safe sessionisation identity. Contains the inferred IUID for ordinary resolved-user sessions, a stable synthetic per-AUID identity for admin-exposed sessions, and NULL for anonymous device sessions.",
+    user_signed_in: "True where the session was constructed from a non-null resolved or synthetic sessionisation identity. This is not direct evidence that every page request contains an observed sign-in event.",
+    session_type: "Session category: user_session, admin_auid_session, or device_session.",
+    admin_exposed_session: "True where the session contains activity on an AUID historically observed on a configured admin page.",
+    includes_low_confidence_identity_propagation: "True where the session contains at least one lower-priority inferred identity assignment.",
+    includes_stitched_pre_auth_pages: "True where eligible anonymous pre-auth pages were attached to the following resolved-user session.",
+    known_multi_user_device: "True where an AUID associated with the session has historically been linked to more than one IUID.",
+    multiple_auid_session: "True where a resolved-user session contains more than one AUID.",
+    device_id: "Single AUID for a single-AUID session, or a synthetic device identifier for a session spanning multiple AUIDs.",
+    journey_id: "Identifier linking an eligible anonymous device session to the immediately following resolved-user session. Defaults to session_id where no journey link is applied."
     }
   }).query(ctx => `
 
 WITH
 
 /* --------------------------------------------------------------------------
-   1. Base page-view style web events from final identity output
+   1. Load page view events
 
-   Identity has already done the heavy attribution work. This layer consumes
-   current_iuid and accompanying resolution metadata.
--------------------------------------------------------------------------- */
+   Select successful HTML web requests from the current incremental read scope.
+
+   Exclude:
+     - bot traffic;
+     - redirects;
+     - client-error responses;
+     - non-HTML responses.
+
+   The input depends on the configured mode.
+
+   Identity-aware mode:
+     - read the final solved-event identity table;
+     - use admin_normalised_iuid as the downstream sessionisation identity;
+     - retain AUID risk and identity-resolution audit fields for QA.
+
+   admin_normalised_iuid is deliberately used instead of current_iuid.
+   For ordinary users it contains the resolved IUID. For historically
+   admin exposed AUIDs it contains a stable synthetic per AUID identity. This is necessary
+   beacuse admin users can impersonate, edit, or act through privileged flows that do not 
+   follow the same observable web request patterns as ordinary users. As a result, their 
+   activity can appear to jump between user IDs or contaminate journeys in ways that the 
+   propagation model was never designed to interpret. 
+
+   Device only mode:
+     - read raw events
+     - set user_id to NULL;
+     - construct sessions solely from the anonymous device identifier.
+------------------------------------------------------------------------------ */
 
 /* This JS function will create the base events table from either the identity resolved events (if enableWebRequestIdentityResolution = true) or the raw events table (if enableWebRequestIdentityResolution = false) */
 
 ${enableIdentityResolution ? `
+
 /* --------------------------------------------------------------------------
    1. Base page-view style web events from final identity output
 
    Identity has already done the heavy attribution work. This layer consumes
-   current_iuid and accompanying resolution metadata.
+   admin_normalised_current_iuid and accompanying resolution metadata.
 -------------------------------------------------------------------------- */
 
 events AS (
   SELECT
     request_uuid,
     auid AS anonymised_user_agent_and_ip,
-    CAST(current_iuid AS STRING) AS user_id,
+    CAST(admin_normalised_iuid AS STRING) AS user_id,
+    current_auid_is_admin_exposed,
 
     occurred_at,
     namespace,
@@ -229,7 +298,7 @@ events AS (
    1. Base page-view style web events from raw events output
 
    Identity resolution is disabled. This layer only exposes the fields needed
-   for device-session construction.
+   for device session construction.
 -------------------------------------------------------------------------- */
 
 events AS (
@@ -285,12 +354,20 @@ anonymous_events AS (
 /* This JS function will prevent the script running the user session construction if enableWebRequestIdentityResolution = false. */
 
 ${enableIdentityResolution ? `
-/* --------------------------------------------------------------------------
-   2. Signed-in / resolved user sessions
 
-   Sessions are partitioned by resolved user identity, intentionally allowing
-   continuity across AUID/IP changes when the identity model resolved them.
--------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   2. Construct resolved user sessions
+
+   Run this branch only where identity resolution is enabled.
+
+   Partition resolved events by user_id. In this context user_id is the
+   analytics safe sessionisation identity:
+     - inferred IUID for ordinary resolved users
+     - synthetic per-AUID admin identity for admin-exposed activity
+
+   This permits ordinary resolved sessions to continue across AUID changes while
+   preventing unrelated admin devices from being collapsed into one session.
+------------------------------------------------------------------------------ */
 
 signed_in_events AS (
   SELECT *
@@ -310,10 +387,31 @@ signed_in_events_ordered AS (
   )
 ),
 
+/* --------------------------------------------------------------------------
+   2.1. Order resolved events and identify session boundaries
+
+   Sequence requests chronologically within each resolved session identity.
+
+   Start a new session where:
+     - the event is the first observed event for the identity; or
+     - the gap since the preceding event exceeds 30 minutes and there is no
+       exact referrer continuation.
+
+   Permit a bounded exception where:
+     - the current request refers exactly to the preceding page; and
+     - the gap is no more than 180 minutes.
+
+   The exact referrer rule is a conservative server side approximation for cases
+   where a user may have remained on a page without generating observable web
+   requests. It is deliberately capped at three hours.
+
+   Persist human readable continuity_type_to_current_page values and supporting
+   booleans so the contribution of this exception can be audited.
+------------------------------------------------------------------------------ */
+
 signed_in_events_with_session_boundaries AS (
   SELECT
     *,
-
     CASE
       WHEN prev_occurred_at IS NULL THEN TRUE
 
@@ -321,7 +419,7 @@ signed_in_events_with_session_boundaries AS (
         THEN FALSE
 
       WHEN referer_path_and_query = prev_page_path_and_query
-       AND TIMESTAMP_DIFF(occurred_at, prev_occurred_at, MINUTE) <= 360
+       AND TIMESTAMP_DIFF(occurred_at, prev_occurred_at, MINUTE) <= 180
         THEN FALSE
 
       ELSE TRUE
@@ -339,7 +437,7 @@ signed_in_events_with_session_boundaries AS (
         THEN "Continued from previous user page: within 30 minutes"
 
       WHEN referer_path_and_query = prev_page_path_and_query
-       AND TIMESTAMP_DIFF(occurred_at, prev_occurred_at, MINUTE) <= 360
+       AND TIMESTAMP_DIFF(occurred_at, prev_occurred_at, MINUTE) <= 180
         THEN "Continued from previous user page: exact referrer match within 6 hours"
 
       ELSE "Started a new user session after a gap"
@@ -362,6 +460,24 @@ signed_in_events_with_session_boundaries AS (
 
   FROM signed_in_events_ordered
 ),
+
+/* --------------------------------------------------------------------------
+   2.2. Assign stable resolveduser session identifiers
+
+   Number sessions cumulatively within each resolved identity after applying the
+   boundary rules.
+
+   Identify the first request and first timestamp within each numbered session.
+
+   Create a deterministic session_id from:
+     - the session type
+     - the resolved sessionisation identity
+     - the first event timestamp
+     - the first request UUID
+
+   The stable identifier supports incremental MERGE updates where a recent
+   session receives additional page activity.
+------------------------------------------------------------------------------ */
 
 signed_in_events_with_session_number AS (
   SELECT
@@ -393,6 +509,7 @@ signed_in_events_with_session_root AS (
   FROM signed_in_events_with_session_number
 ),
 
+
 signed_in_events_with_session_id AS (
   SELECT
     *,
@@ -412,6 +529,7 @@ signed_in_session_start_events AS (
   SELECT
     session_id,
     user_id,
+    current_auid_is_admin_exposed,
     anonymised_user_agent_and_ip,
     occurred_at AS first_signed_in_event_at,
     page_path_and_query AS first_signed_in_page_path_and_query
@@ -422,13 +540,24 @@ signed_in_session_start_events AS (
   ) = 1
 ),
 
-/* --------------------------------------------------------------------------
-   3. Pre-auth stitching
 
-   Identity does not intentionally infer pre-anchor events. We attach eligible
-   anonymous pre-auth pages to the first resolved user session when there is
-   close same-AUID temporal continuity and the page is allow-listed.
--------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   3. Attach eligible anonymous pre-auth pages to resolved-user sessions
+
+   The identity-resolution pipeline intentionally avoids assigning an IUID to
+   some pre-auth public activity. Attach a narrow set of those pages to the
+   following resolved session where:
+     - the page is an allow-listed pre-auth path
+     - the anonymous event uses the same AUID as the first resolved page
+     - the event occurred within the preceding 30 minutes
+
+   Apply additional protection for AUIDs historically associated with multiple
+   IUIDs: do not attach an anonymous page where a closer resolved session start
+   exists on the same AUID.
+
+   This is session enrichment, not identity propagation. The original anonymous
+   event remains identifiable through stitched_pre_auth_page.
+------------------------------------------------------------------------------ */
 
 pre_auth_pages AS (
   SELECT request_path
@@ -439,6 +568,7 @@ stitched_pre_auth_pages AS (
   SELECT DISTINCT
     s.session_id,
     s.user_id,
+    s.current_auid_is_admin_exposed,
     e.request_uuid,
     e.anonymised_user_agent_and_ip,
     e.occurred_at,
@@ -471,6 +601,7 @@ user_session_events AS (
   SELECT
     session_id,
     user_id,
+    current_auid_is_admin_exposed,
     request_uuid,
     anonymised_user_agent_and_ip,
     occurred_at,
@@ -504,6 +635,7 @@ user_session_events AS (
   SELECT
     s.session_id,
     s.user_id,
+    s.current_auid_is_admin_exposed,
     e.request_uuid,
     e.anonymised_user_agent_and_ip,
     e.occurred_at,
@@ -539,13 +671,34 @@ user_session_events AS (
 ),
 
 /* --------------------------------------------------------------------------
-   4. Page timings for user sessions
--------------------------------------------------------------------------- */
+   4. Calculate page timings and aggregate resolved-user sessions
+
+   Combine resolved events with eligible stitched pre-auth pages.
+
+   For each session:
+     - order page visits chronologically
+     - calculate page exit time using the following request
+     - calculate observable page duration
+     - retain ordered page-level journey details
+     - retain first-page acquisition attributes
+     - calculate session start, final activity timestamp, and page count
+
+   Also retain session level quality indicators:
+     - whether the session uses an admin-exposed AUID
+     - whether any assigned identity has lower confidence
+     - whether anonymous pre-auth pages were stitched into the session
+     - whether the session spans multiple AUIDs
+
+   Label admin exposed sessions separately as admin_auid_session. This keeps
+   their behaviour available for reporting while preventing them from being
+   interpreted as standard resolved user sessions.
+------------------------------------------------------------------------------ */
 
 user_session_page_times AS (
   SELECT
     session_id,
     user_id,
+    current_auid_is_admin_exposed,
     request_uuid,
     anonymised_user_agent_and_ip,
     namespace,
@@ -601,15 +754,14 @@ user_session_metrics AS (
     session_id,
     user_id,
 
+    LOGICAL_OR(current_auid_is_admin_exposed) AS admin_exposed_session,
+
     MAX(COALESCE(auid_distinct_iuid_count, 0)) AS auid_distinct_iuid_count,
 
     LOGICAL_OR(
       user_id IS NOT NULL
       AND COALESCE(identity_resolution_priority, 0) < 70
     ) AS includes_low_confidence_identity_propagation,
-
-    LOGICAL_OR(current_resolution_stage LIKE "PART_4%")
-      AS includes_repair_walk_identity_assignment,
 
     LOGICAL_OR(stitched_pre_auth_page)
       AS includes_stitched_pre_auth_pages,
@@ -663,12 +815,24 @@ user_sessions_final AS (
   SELECT
     session_id,
     user_id,
+    admin_exposed_session,
+    includes_low_confidence_identity_propagation,
+    includes_stitched_pre_auth_pages,
     TRUE AS user_signed_in,
-    "user_session" AS session_type,
-    "known_user" AS behavioural_user_type,
+
+    CASE
+    WHEN admin_exposed_session
+        THEN "admin_auid_session"
+    ELSE "user_session"
+    END AS session_type,
+
+    CASE
+    WHEN admin_exposed_session
+        THEN "admin_exposed_auid"
+    ELSE "known_user"
+    END AS behavioural_user_type,
 
     auid_distinct_iuid_count,
-
     multiple_auid_session,
 
     CASE
@@ -706,13 +870,15 @@ user_sessions_final AS (
 ),` : ``}
 
 /* --------------------------------------------------------------------------
-   5. Anonymous device sessions from remaining anonymous events
--------------------------------------------------------------------------- */
+   5. Construct anonymous device sessions
 
-/* This JS conditional selects either:
-   - unresolved anonymous events after user-session stitching, when identity resolution is on
-   - all anonymous/device events, when identity resolution is off
-*/
+   Select anonymous events that were not attached to a resolved-user session.
+
+   In identity aware mode these are unresolved events remaining after pre-auth
+   stitching. In devic only mode these are all eligible page-view-style events.
+
+   Partition events by AUID because no resolved identity is available.
+------------------------------------------------------------------------------ */
 
 ${enableIdentityResolution ? `
 remaining_anonymous_events AS (
@@ -733,6 +899,23 @@ remaining_anonymous_events AS (
   FROM anonymous_events
 ),
 `}
+
+* --------------------------------------------------------------------------
+   5.1. Order anonymous events and identify device-session boundaries
+
+   Sequence anonymous activity chronologically within each AUID.
+
+   Start a new device session where:
+     - the event is the first observed event for the AUID; or
+     - the gap since the preceding event exceeds 30 minutes and there is no
+       exact referrer continuation.
+
+   As with resolved user sessions, permit a bounded three-hour continuation
+   where the current request refers exactly to the preceding page.
+
+   This exception helps represent long page-reading periods without allowing
+   repeated path patterns to join activity indefinitely.
+------------------------------------------------------------------------------ */
 
 remaining_anonymous_events_ordered AS (
   SELECT
@@ -757,6 +940,7 @@ remaining_anonymous_events_with_boundaries AS (
         THEN FALSE
 
       WHEN referer_path_and_query = prev_page_path_and_query
+        AND TIMESTAMP_DIFF(occurred_at, prev_occurred_at, MINUTE) <= 180
         THEN FALSE
 
       ELSE TRUE
@@ -774,13 +958,30 @@ remaining_anonymous_events_with_boundaries AS (
         THEN "Continued from previous device page: within 30 minutes"
 
       WHEN referer_path_and_query = prev_page_path_and_query
-        THEN "Continued from previous device page: exact referrer match after more than 30 minutes"
+        AND TIMESTAMP_DIFF(occurred_at, prev_occurred_at, MINUTE) <= 180
+        THEN "Continued from previous device page: exact referrer match within 3 hours"
 
       ELSE "Started a new device session after a gap"
     END AS continuity_type_to_current_page
 
   FROM remaining_anonymous_events_ordered
 ),
+
+/* --------------------------------------------------------------------------
+   5.2. Assign stable device-session identifiers and calculate page timings
+
+   Number sessions cumulatively within each AUID after applying the boundary
+   rules.
+
+   Create a deterministic device-session identifier from:
+     - the session type;
+     - the AUID;
+     - the first event timestamp;
+     - the first request UUID.
+
+   Calculate ordered page timings and retain first-page acquisition attributes
+   using the same approach as resolved-user sessions.
+------------------------------------------------------------------------------ */
 
 remaining_anonymous_events_with_session_number AS (
   SELECT
@@ -875,6 +1076,27 @@ device_session_page_times AS (
   FROM remaining_anonymous_events_with_session_id
 ),
 
+/* --------------------------------------------------------------------------
+   5.3. Classify anonymous device sessions
+
+   Where identity resolution is enabled, use AUID risk evidence to distinguish:
+     - anonymous_only:
+         no indication that the session should resolve to a known user;
+
+     - expected_anonymous_pre_auth_only:
+         unresolved activity exists but is restricted to expected public or
+         authentication-transition pages;
+
+     - unknown_user:
+         unresolved evidence exists on meaningful service pages;
+
+     - identity_resolution_anomaly:
+         the unresolved session has an unexpected upstream identity state.
+
+   These categories support quality inference (and QA) and downstream interpretation 
+   without forcing an identity assignment where the evidence is insufficient.
+------------------------------------------------------------------------------ */
+
 device_session_metrics AS (
   SELECT
     session_id,
@@ -962,6 +1184,9 @@ device_sessions_final AS (
   SELECT
     session_id,
     CAST(NULL AS STRING) AS user_id,
+    FALSE AS admin_exposed_session,
+    FALSE AS includes_low_confidence_identity_propagation,
+    FALSE AS includes_stitched_pre_auth_pages,
     FALSE AS user_signed_in,
     "device_session" AS session_type,
 
@@ -1021,8 +1246,18 @@ device_sessions_final AS (
 
 ${enableIdentityResolution ? `
 /* --------------------------------------------------------------------------
-   6. Combine user and device sessions
--------------------------------------------------------------------------- */
+   6. Combine resolved-user and anonymous-device sessions
+
+   Union the two session types into one common output schema.
+
+   Retain:
+     - sessionisation identity where available;
+     - session category;
+     - admin-exposure indicator;
+     - identity-resolution QA fields;
+     - session-level dimensions and metrics;
+     - ordered page-level details.
+------------------------------------------------------------------------------ */
 
 all_sessions AS (
   SELECT * FROM user_sessions_final
@@ -1031,16 +1266,33 @@ all_sessions AS (
 ),
 
 /* --------------------------------------------------------------------------
-   7. Journey stitching
+   7. Link eligible device and user sessions into journeys
 
-   This is not identity propagation. It links an immediately preceding anonymous
-   device session to a later user session where continuity is plausible.
--------------------------------------------------------------------------- */
+   Journey stitching is separate from identity inference.
+
+   Link an immediately preceding anonymous device session to a following
+   resolved-user session only where:
+     - both sessions meet on the AUID used by the first resolved page;
+     - the anonymous session ended no more than 30 minutes earlier;
+     - the resolved session is not admin-exposed.
+
+   For AUIDs associated with at most one IUID, allow the short temporal link.
+
+   For AUIDs historically associated with multiple IUIDs, require stricter
+   evidence:
+     - a gap of no more than five minutes; and
+     - an exact referrer match.
+
+   Where one anonymous device session could link to multiple following user
+   sessions, retain only the earliest eligible following user session. This
+   prevents a single device session from being duplicated across journeys.
+------------------------------------------------------------------------------ */
 
 user_session_first_pages AS (
   SELECT
     session_id AS user_session_id,
     user_id,
+    current_auid_is_admin_exposed,
     anonymised_user_agent_and_ip AS first_page_auid,
     occurred_at AS first_page_at,
     referer_path_and_query AS first_page_referer_path_and_query,
@@ -1093,6 +1345,7 @@ immediately_preceding_session_on_user_first_page_auid AS (
   SELECT
     u.user_session_id,
     u.user_id,
+    u.current_auid_is_admin_exposed,
     u.first_page_auid,
     u.first_page_at,
     u.first_page_referer_path_and_query,
@@ -1124,10 +1377,11 @@ immediately_preceding_session_on_user_first_page_auid AS (
   ) = 1
 ),
 
-approved_device_to_user_journeys AS (
+approved_device_to_user_journey_candidates AS (
   SELECT
     user_session_id,
     previous_session_id AS device_session_id,
+    first_page_at,
 
     TO_HEX(SHA256(CONCAT(
       previous_session_id,
@@ -1137,6 +1391,7 @@ approved_device_to_user_journeys AS (
 
   FROM immediately_preceding_session_on_user_first_page_auid
   WHERE previous_session_type = "device_session"
+    AND current_auid_is_admin_exposed = FALSE
     AND (
       GREATEST(
         COALESCE(user_session_auid_distinct_iuid_count, 0),
@@ -1154,6 +1409,15 @@ approved_device_to_user_journeys AS (
     )
 ),
 
+approved_device_to_user_journeys AS (
+  SELECT * EXCEPT (first_page_at)
+  FROM approved_device_to_user_journey_candidates
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY device_session_id
+    ORDER BY first_page_at, user_session_id
+  ) = 1
+),
+
 journey_session_map AS (
   SELECT
     device_session_id AS session_id,
@@ -1167,6 +1431,22 @@ journey_session_map AS (
     journey_id
   FROM approved_device_to_user_journeys
 ),
+
+/* --------------------------------------------------------------------------
+   8. Add journey identifiers and select the incremental replacement scope
+
+   Assign:
+     - a shared journey_id to approved device-to-user session pairs
+     - the original session_id as journey_id where no journey link exists.
+
+   Flag known_multi_user_device where the session contains activity from an
+   AUID historically associated with more than one IUID.
+
+   On incremental runs, emit sessions with recent final page activity rather
+   than filtering only by session start. This ensures sessions that began before
+   the replacement checkpoint but received newer activity are reconstructed and
+   merged correctly.
+------------------------------------------------------------------------------ */
 
 all_sessions_with_journey_id AS (
   SELECT
@@ -1188,16 +1468,11 @@ final AS (
   SELECT *
   FROM all_sessions_with_journey_id
   ${ctx.incremental()
-    ? `WHERE session_start_timestamp >= session_replace_checkpoint`
+    ? `WHERE final_session_page_timestamp >= session_replace_checkpoint`
     : ``}
 )
 ` : `
-/* --------------------------------------------------------------------------
-   6. Final device-only sessions
 
-   Identity resolution is disabled, so there are no user sessions and no
-   device-to-user journey stitching.
--------------------------------------------------------------------------- */
 
 final AS (
   SELECT
@@ -1206,7 +1481,7 @@ final AS (
     session_id AS journey_id
   FROM device_sessions_final
   ${ctx.incremental()
-    ? `WHERE session_start_timestamp >= session_replace_checkpoint`
+    ? `WHERE final_session_page_timestamp >= session_replace_checkpoint`
     : ``}
 )
 `}
@@ -1235,7 +1510,7 @@ DECLARE event_read_checkpoint TIMESTAMP DEFAULT (
 
 ${ctx.incremental()
   ? `DELETE FROM ${ctx.self()}
-     WHERE session_start_timestamp >= session_replace_checkpoint;`
+     WHERE final_session_page_timestamp >= session_replace_checkpoint;`
   : ``}
 `);
 };

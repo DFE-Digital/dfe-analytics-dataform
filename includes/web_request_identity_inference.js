@@ -4431,7 +4431,7 @@ FROM ${ctx.ref(secondWalkRunName)}
      - flag every event associated with that historically admin-exposed AUID;
      - assign a stable synthetic analytics identity derived from the AUID.
 
-   A separate synthetic identity is created for each admin-exposed AUID rather
+   A separate synthetic identity is created for each admin exposed AUID rather
    than assigning one service-wide admin identity. This avoids stitching
    activity from unrelated admin devices into artificial long-running sessions.
 
@@ -4554,12 +4554,13 @@ final_solved_events AS (
 
     /* Auditable identity resolution output. */
     e.current_iuid,
+    e.auid_risk_classification,
     e.current_iuid_method,
     e.current_resolution_stage,
 
     /* Additional fields required by downstream processing. */
     e.identity_resolution_priority,
-    e.auid_distinct_iuid_count AS distinct_auid_iuid_count,
+    e.auid_distinct_iuid_count,
 
     /* Flag all activity associated with a historically admin-exposed AUID. */
     (admin.auid IS NOT NULL) AS current_auid_is_admin_exposed,
