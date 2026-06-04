@@ -83,6 +83,11 @@ Each service can define its own:
     );
   }
 
+  /* Using ?? false means services must opt in explicitly. Missing features 
+  or a missing flag will safely disable normalisation without breaking compilation. */
+  const enableAdminNormalisation =
+  webAnalytics.features?.enableAdminNormalisation ?? false;
+
 /*
   The start date will be set to either the startDate defined in the service specific
   config file or '2025-01-01'. This date is chosen because prior to this date, and
@@ -476,33 +481,6 @@ function sqlAnchorSourceQueries(sources) {
     `)
     .join("\nUNION ALL\n");
 }
-
-  /* Replace these with actual ones once working */ 
-
-  function stagingConfig(description, extra = {}) {
-    return {
-      ...params.defaultConfig,
-      schema: stagingSchema,
-      type: "table",
-      tags: [params.eventSourceName.toLowerCase(), "identity-staging"],
-      description,
-      dependencies: params.dependencies,
-      ...extra
-    };
-  }
-
-  function incrementalEventConfig(description, extra = {}) {
-    return stagingConfig(description, {
-      type: "incremental",
-      protected: false,
-      uniqueKey: ["request_uuid"],
-      bigquery: {
-        partitionBy: "event_date",
-        clusterBy: ["auid", "current_iuid"]
-      },
-      ...extra
-    });
-  }
 
   /* Generate pre-operations for durable incremental event-state tables. On a full refresh, rebuild from the configured start date. 
   
@@ -930,7 +908,7 @@ publish(
     ...params.defaultConfig,
     schema: "web_analytics_staging_tables",
     type: "incremental",
-    protected: false,
+    protected: true,
     uniqueKey: ["request_uuid"],
     tags: [
       params.eventSourceName.toLowerCase(),
@@ -2285,7 +2263,7 @@ publish(
     ...params.defaultConfig,
     schema: "web_analytics_staging_tables",
     type: "incremental",
-    protected: false,
+    protected: true,
     uniqueKey: ["request_uuid"],
     tags: [
       params.eventSourceName.toLowerCase(),
@@ -2386,7 +2364,7 @@ FROM ${ctx.ref(conservativeWalkRunName)}
       ...params.defaultConfig,
       schema: "web_analytics_staging_tables",
       type: "incremental",
-      protected: false,
+      protected: true,
       uniqueKey: ["request_uuid"],
       tags: [
         params.eventSourceName.toLowerCase(),
@@ -4834,7 +4812,7 @@ publish(
     ...params.defaultConfig,
     schema: "web_analytics_staging_tables",
     type: "incremental",
-    protected: false,
+    protected: true,
     uniqueKey: ["request_uuid"],
     tags: [
       params.eventSourceName.toLowerCase(),
@@ -4957,16 +4935,16 @@ publish(
       params.eventSourceName.toLowerCase(),
       "identity-staging"
     ],
-    description: `
-      Final solved web-request events with inferred identity and admin-AUID normalisation.
+    description: `Final solved web-request events with an analytics-ready inferred identity.
 
-      Each row retains the auditable identity inferred by the propagation pipeline and adds an
-      analytics-safe normalised identity. Events associated with an AUID that has ever produced
-      qualifying admin-page activity receive a stable synthetic admin identity derived from the
-      service name and AUID.
+      Each row retains the auditable identity inferred by the propagation pipeline, flags activity
+      associated with historically admin-exposed AUIDs, and provides the identity recommended for
+      downstream analytics.
 
-      Grain: one row per valid web-request event.
-    `,
+      Where admin normalisation is enabled, analytics_iuid uses a stable synthetic identity for
+      historically admin-exposed AUIDs. Otherwise, analytics_iuid equals current_iuid.
+
+      Grain: one row per valid web-request event.`,
     dependencies: params.dependencies,
     columns: {
       request_uuid: `Unique identifier for the web-request event. This is the grain of the table.`,
@@ -4993,7 +4971,7 @@ publish(
       identity_resolution_priority: `Numeric confidence priority assigned to the current inferred user identifier.`,
       auid_distinct_iuid_count: `Number of distinct trusted inferred user identifiers historically linked to the event's AUID.`,
       current_auid_is_admin_exposed: `Boolean indicating whether the event's AUID has ever produced qualifying admin-page activity.`,
-      admin_normalised_iuid: `Analytics-safe inferred user identifier. Equals current_iuid for ordinary activity and a stable service-specific synthetic identity for activity associated with a historically admin-exposed AUID.`
+      analytics_iuid: `Recommended inferred user identifier for downstream analytics. Where admin normalisation is enabled, historically admin exposed AUIDs receive a stable service specific synthetic identity. Otherwise, this equals current_iuid.`
     },
     bigquery: {
       partitionBy: "event_date",
@@ -5099,10 +5077,20 @@ final_solved_events AS (
     /* Flag all activity associated with a historically admin-exposed AUID. */
     (admin.auid IS NOT NULL) AS current_auid_is_admin_exposed,
 
-    /* Use a stable per-AUID synthetic identity for admin-exposed activity.
-       Preserve the inferred IUID unchanged in current_iuid for audit and QA. */
+    /* Provide the recommended identity for downstream analytics.
+
+      Preserve current_iuid (above) unchanged for audit and QA.
+
+      Where admin normalisation is enabled, replace the inferred identity for
+      historically admin exposed AUIDs with a stable service specific synthetic
+      identity derived from the AUID.
+
+      Where admin normalisation is disabled, analytics_iuid remains equal to
+      current_iuid even when the AUID is flagged as admin exposed. */
+
     CASE
-      WHEN admin.auid IS NOT NULL
+      WHEN ${enableAdminNormalisation}
+        AND admin.auid IS NOT NULL
         THEN CONCAT(
           'ADMIN_AUID:',
           TO_HEX(
@@ -5117,7 +5105,7 @@ final_solved_events AS (
         )
 
       ELSE e.current_iuid
-    END AS admin_normalised_iuid
+    END AS analytics_iuid
 
   FROM identity_resolution_state e
   LEFT JOIN admin_exposed_auids admin

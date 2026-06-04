@@ -99,6 +99,17 @@ constrained pre auth stitching.
     ...signOutPaths
   ]);
 
+  const preAuthStitchablePagePaths = unique([
+  ...preAuthPagePaths,
+  ...signInPagePaths
+  ]);
+
+  const enablePreAuthPageStitching =
+  webAnalytics.features?.enablePreAuthPageStitching ?? true;
+
+  const enableJourneyStitching =
+    webAnalytics.features?.enableJourneyStitching ?? false;
+
 /* -------------------------------------------------------------------------- 
 5. Define SQL-generation helpers 
 
@@ -224,10 +235,10 @@ WITH
 
    Identity-aware mode:
      - read the final solved-event identity table;
-     - use admin_normalised_iuid as the downstream sessionisation identity;
+     - use analytics_iuid as the downstream sessionisation identity;
      - retain AUID risk and identity-resolution audit fields for QA.
 
-   admin_normalised_iuid is deliberately used instead of current_iuid.
+   analytics_iuid is deliberately used instead of current_iuid.
    For ordinary users it contains the resolved IUID. For historically
    admin exposed AUIDs it contains a stable synthetic per AUID identity. This is necessary
    beacuse admin users can impersonate, edit, or act through privileged flows that do not 
@@ -256,7 +267,7 @@ events AS (
   SELECT
     request_uuid,
     auid AS anonymised_user_agent_and_ip,
-    CAST(admin_normalised_iuid AS STRING) AS user_id,
+    CAST(analytics_iuid AS STRING) AS user_id,
     current_auid_is_admin_exposed,
 
     occurred_at,
@@ -560,7 +571,7 @@ signed_in_session_start_events AS (
 
 pre_auth_pages AS (
   SELECT request_path
-  FROM UNNEST(${sqlStringArray(preAuthPagePaths)}) AS request_path
+  FROM UNNEST(${sqlStringArray(preAuthStitchablePagePaths)}) AS request_path
 ),
 
 stitched_pre_auth_pages AS (
