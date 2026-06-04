@@ -65,6 +65,15 @@ module.exports = params => {
   const incrementalReplaceLookbackHours =
     params.sessionIncrementalReplaceLookbackHours || 6;
 
+  const signInPagePaths = paths.signIn || ["/sign-in"];
+  const signOutPaths = paths.signOut || ["/sign-out"];
+
+  const anonymousSafePagePaths = unique([
+    ...preAuthPagePaths,
+    ...signInPagePaths,
+    ...signOutPaths
+  ]);
+
   /* --------------------------------------------------------------------------
      5. SQL helper functions
   -------------------------------------------------------------------------- */
@@ -199,32 +208,11 @@ events AS (
     SAFE_CAST(response_status AS STRING) AS response_status,
     response_content_type,
     device_category,
-
     auid_distinct_iuid_count,
     auid_risk_classification,
-
     current_iuid_method,
     current_resolution_stage,
-    current_iteration,
-    is_currently_resolved,
     identity_resolution_priority,
-    identity_resolution_locked,
-
-    assigned_by_activity_window_fallback,
-    window_assignment_reason,
-    window_assignment_supporting_evidence,
-    matched_windows_total,
-    matched_clean_windows,
-    matched_non_clean_windows,
-    matched_overlapping_windows,
-    matched_post_conflict_windows,
-    matched_unknown_preexisting_activity_windows,
-
-    parent_request_uuid_pass1,
-    parent_match_confidence_pass1,
-    parent_match_source_pass1,
-    chain_id_pass1,
-    likely_shunt_arrival,
 
     ${attributionParamFields()}
 
@@ -500,24 +488,7 @@ user_session_events AS (
     auid_risk_classification,
     current_iuid_method,
     current_resolution_stage,
-    current_iteration,
-    is_currently_resolved,
     identity_resolution_priority,
-    identity_resolution_locked,
-    assigned_by_activity_window_fallback,
-    window_assignment_reason,
-    window_assignment_supporting_evidence,
-    matched_windows_total,
-    matched_clean_windows,
-    matched_non_clean_windows,
-    matched_overlapping_windows,
-    matched_post_conflict_windows,
-    matched_unknown_preexisting_activity_windows,
-    parent_request_uuid_pass1,
-    parent_match_confidence_pass1,
-    parent_match_source_pass1,
-    chain_id_pass1,
-    likely_shunt_arrival,
     utm_source,
     utm_medium,
     utm_campaign,
@@ -550,24 +521,7 @@ user_session_events AS (
     e.auid_risk_classification,
     e.current_iuid_method,
     e.current_resolution_stage,
-    e.current_iteration,
-    e.is_currently_resolved,
     e.identity_resolution_priority,
-    e.identity_resolution_locked,
-    e.assigned_by_activity_window_fallback,
-    e.window_assignment_reason,
-    e.window_assignment_supporting_evidence,
-    e.matched_windows_total,
-    e.matched_clean_windows,
-    e.matched_non_clean_windows,
-    e.matched_overlapping_windows,
-    e.matched_post_conflict_windows,
-    e.matched_unknown_preexisting_activity_windows,
-    e.parent_request_uuid_pass1,
-    e.parent_match_confidence_pass1,
-    e.parent_match_source_pass1,
-    e.chain_id_pass1,
-    e.likely_shunt_arrival,
     e.utm_source,
     e.utm_medium,
     e.utm_campaign,
@@ -632,26 +586,7 @@ user_session_page_times AS (
 
     current_iuid_method,
     current_resolution_stage,
-    current_iteration,
-    is_currently_resolved,
     identity_resolution_priority,
-    identity_resolution_locked,
-
-    assigned_by_activity_window_fallback,
-    window_assignment_reason,
-    window_assignment_supporting_evidence,
-    matched_windows_total,
-    matched_clean_windows,
-    matched_non_clean_windows,
-    matched_overlapping_windows,
-    matched_post_conflict_windows,
-    matched_unknown_preexisting_activity_windows,
-
-    parent_request_uuid_pass1,
-    parent_match_confidence_pass1,
-    parent_match_source_pass1,
-    chain_id_pass1,
-    likely_shunt_arrival,
 
     stitched_pre_auth_page,
     continuity_type_to_current_page,
@@ -673,23 +608,8 @@ user_session_metrics AS (
       AND COALESCE(identity_resolution_priority, 0) < 70
     ) AS includes_low_confidence_identity_propagation,
 
-    LOGICAL_OR(assigned_by_activity_window_fallback = TRUE)
-      AS includes_activity_window_identity_assignment,
-
     LOGICAL_OR(current_resolution_stage LIKE "PART_4%")
       AS includes_repair_walk_identity_assignment,
-
-    LOGICAL_OR(matched_overlapping_windows > 0)
-      AS includes_overlapping_identity_window_context,
-
-    LOGICAL_OR(matched_post_conflict_windows > 0)
-      AS includes_post_conflict_identity_window_context,
-
-    LOGICAL_OR(matched_unknown_preexisting_activity_windows > 0)
-      AS includes_unknown_preexisting_activity_window_context,
-
-    LOGICAL_OR(continued_after_30m_by_exact_referrer)
-      AS includes_6h_referrer_continuity,
 
     LOGICAL_OR(stitched_pre_auth_page)
       AS includes_stitched_pre_auth_pages,
@@ -959,7 +879,7 @@ device_session_metrics AS (
   SELECT
     session_id,
 
-    ${enableIdentityResolution ? `
+ ${enableIdentityResolution ? `
     MAX(COALESCE(auid_distinct_iuid_count, 0)) AS auid_distinct_iuid_count,
 
     LOGICAL_OR(
@@ -967,9 +887,30 @@ device_session_metrics AS (
         "UNCERTAIN_SINGLE_IUID_UNANCHORED_ACTIVITY",
         "HIGH_RISK_MULTI_IUID_AUID"
       )
-    ) AS has_unresolved_user_evidence,
+    ) AS has_any_unresolved_user_evidence,
+
+    LOGICAL_OR(
+      auid_risk_classification IN (
+        "UNCERTAIN_SINGLE_IUID_UNANCHORED_ACTIVITY",
+        "HIGH_RISK_MULTI_IUID_AUID"
+      )
+      AND NOT (${sqlInList("page_path", anonymousSafePagePaths)})
+    ) AS has_meaningful_unresolved_user_evidence,
+
+    LOGICAL_AND(
+      ${sqlInList("page_path", anonymousSafePagePaths)}
+    ) AS contains_only_anonymous_safe_pages,
+
+    LOGICAL_OR(
+      auid_risk_classification IS NULL
+      OR auid_risk_classification = "UNKNOWN"
+      OR auid_risk_classification = "LOW_RISK_EXCLUSIVE_ANCHORED_AUID"
+    ) AS has_identity_resolution_anomaly,
     ` : `
-    FALSE AS has_unresolved_user_evidence,
+    FALSE AS has_any_unresolved_user_evidence,
+    FALSE AS has_meaningful_unresolved_user_evidence,
+    FALSE AS contains_only_anonymous_safe_pages,
+    FALSE AS has_identity_resolution_anomaly,
     `}
 
     COUNT(DISTINCT anonymised_user_agent_and_ip) > 1 AS multiple_auid_session,
@@ -1025,8 +966,17 @@ device_sessions_final AS (
     "device_session" AS session_type,
 
     CASE
-      WHEN has_unresolved_user_evidence THEN "unknown_user"
-      ELSE "anonymous_only"
+        WHEN has_identity_resolution_anomaly
+            THEN "identity_resolution_anomaly"
+
+        WHEN has_meaningful_unresolved_user_evidence
+            THEN "unknown_user"
+
+        WHEN has_any_unresolved_user_evidence
+        AND contains_only_anonymous_safe_pages
+            THEN "expected_anonymous_pre_auth_only"
+
+        ELSE "anonymous_only"
     END AS behavioural_user_type,
 
     ${enableIdentityResolution ? `

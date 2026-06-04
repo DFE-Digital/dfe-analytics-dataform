@@ -701,140 +701,164 @@ function sqlAnchorSourceQueries(sources) {
       WHERE event_type = 'web_request'
     ),
 
-    /* Load the trusted all time AUID to IUID anchor evidence created in the preceding model. */
-    anchors AS (
-      SELECT *
-      FROM ${ctx.ref(anchorsAllName)}
-    ),
-
-    /* Identify each calendar date on which an AUID generated web-request activity.
+/* Retain every AUID observed in web-request activity, including public-only
+   visitors, so every request can receive an AUID risk classification.
 
    Grain:
-     One row per AUID and active date. */
-     
-    auid_active_dates AS (
-      SELECT DISTINCT
-        anonymised_user_agent_and_ip AS auid,
-        DATE(occurred_at) AS event_date
-      FROM web_events_base
-    ),
+     One row per AUID observed in web-request activity. */
+all_web_request_auids AS (
+  SELECT DISTINCT
+    anonymised_user_agent_and_ip AS auid
+  FROM web_events_base
+),
 
-    /* Identify each calendar date on which an AUID has trusted anchor evidence.
+/* Load the trusted all-time AUID-to-IUID anchor evidence created in the
+   preceding model. */
+anchors AS (
+  SELECT *
+  FROM ${ctx.ref(anchorsAllName)}
+),
 
-      Grain: One row per anchored AUID and date. */
+/* Identify dates containing meaningful service activity.
 
-    auid_anchor_dates AS (
-      SELECT DISTINCT
-        auid,
-        event_date
-      FROM anchors
-    ),
+   Public landing pages and authentication-transition pages are excluded when
+   testing for unanchored activity. Visiting these pages without generating a
+   trusted anchor is not strong evidence that an anchored AUID was used by a
+   different person.
 
-    /* Summarise the complete trusted anchor history for each AUID.
+   Grain:
+     One row per AUID and meaningful active date. */
+auid_meaningful_active_dates AS (
+  SELECT DISTINCT
+    anonymised_user_agent_and_ip AS auid,
+    DATE(occurred_at) AS event_date
+  FROM web_events_base
+  WHERE ${sqlNotInList("request_path", publicAndAuthPagePaths)}
+),
 
-      single_known_iuid is used downstream only where the AUID has exactly one
-      distinct known IUID. The risk classification below enforces that condition.
+/* Identify each calendar date on which an AUID has trusted anchor evidence.
 
-      Grain: One row per anchored AUID. */
-        
-    auid_anchor_summary AS (
-      SELECT
-        auid,
-        COUNT(DISTINCT iuid) AS distinct_iuid_count_ever,
-        MIN(iuid) AS single_known_iuid
-      FROM anchors
-      GROUP BY auid
-    ),
+   Grain:
+     One row per anchored AUID and date. */
+auid_anchor_dates AS (
+  SELECT DISTINCT
+    auid,
+    event_date
+  FROM anchors
+),
 
-    /* Combine web-request activity dates with trusted anchor evidence.
+/* Summarise the complete trusted anchor history for each AUID.
 
-      AUIDs with no trusted anchors are retained so they can be classified as
-      anonymous-only. active_dates_without_trusted_anchor is an intermediate
-      classification input and is not persisted in the final output.
+   single_known_iuid is used downstream only where the AUID has exactly one
+   distinct known IUID. The risk classification below enforces that condition.
 
-      Grain: One row per AUID observed in web-request activity. */
+   Grain:
+     One row per anchored AUID. */
+auid_anchor_summary AS (
+  SELECT
+    auid,
+    COUNT(DISTINCT iuid) AS distinct_iuid_count_ever,
+    MIN(iuid) AS single_known_iuid
+  FROM anchors
+  GROUP BY auid
+),
 
-    auid_classification_inputs AS (
-      SELECT
-        e.auid,
+/* Combine all observed AUIDs with meaningful activity dates and trusted anchor
+   evidence.
 
-        IFNULL(MAX(s.distinct_iuid_count_ever), 0)
-          AS distinct_iuid_count_ever,
+   Public-only AUIDs remain in the output, but public and authentication-page
+   visits do not count as evidence of unanchored service activity.
 
-        ANY_VALUE(s.single_known_iuid)
-          AS single_known_iuid,
+   meaningful_active_dates_without_trusted_anchor is used only to calculate the
+   risk classification and is not persisted.
 
-        COUNTIF(a.auid IS NULL)
-          AS active_dates_without_trusted_anchor
+   Grain:
+     One row per AUID observed in web-request activity. */
+auid_classification_inputs AS (
+  SELECT
+    base.auid,
 
-      FROM auid_active_dates e
-      LEFT JOIN auid_anchor_dates a
-        ON e.auid = a.auid
-      AND e.event_date = a.event_date
-      LEFT JOIN auid_anchor_summary s
-        ON e.auid = s.auid
-      GROUP BY e.auid
-    ),
+    IFNULL(MAX(s.distinct_iuid_count_ever), 0)
+      AS distinct_iuid_count_ever,
 
-    /* Assign each AUID to a risk class and determine whether its events require
-      deeper recursive identity inference.
+    ANY_VALUE(s.single_known_iuid)
+      AS single_known_iuid,
 
-      LOW_RISK_EXCLUSIVE_ANCHORED_AUID means:
-        - the AUID has only ever been linked to one IUID; and
-        - every date containing web-request activity also contains trusted anchor
-          evidence.
+    COUNTIF(
+      meaningful.event_date IS NOT NULL
+      AND anchor_date.auid IS NULL
+    ) AS meaningful_active_dates_without_trusted_anchor
 
-      These AUIDs can receive direct identity assignment without a recursive walk.
+  FROM all_web_request_auids base
 
-      AUIDs with uncertain single-IUID or multi-IUID histories are passed to later
-      stages, which attempt to infer identity using a conservative deterministic
-      ruleset.
+  LEFT JOIN auid_meaningful_active_dates meaningful
+    ON base.auid = meaningful.auid
 
-      Anonymous-only AUIDs remain unresolved because no trusted identity evidence
-      is available to propagate.
+  LEFT JOIN auid_anchor_dates anchor_date
+    ON meaningful.auid = anchor_date.auid
+   AND meaningful.event_date = anchor_date.event_date
 
-      Grain: One row per AUID observed in web-request activity. */
+  LEFT JOIN auid_anchor_summary s
+    ON base.auid = s.auid
 
-    classified_auids AS (
-      SELECT
-        auid,
-        distinct_iuid_count_ever,
-        single_known_iuid,
+  GROUP BY base.auid
+),
 
-        CASE
-          WHEN distinct_iuid_count_ever = 0
-            THEN 'NO_KNOWN_IUID_ANONYMOUS_ONLY'
+/* Assign each AUID to a risk class and determine whether its events require
+   deeper recursive identity inference.
 
-          WHEN distinct_iuid_count_ever = 1
-            AND active_dates_without_trusted_anchor = 0
-            THEN 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
+   LOW_RISK_EXCLUSIVE_ANCHORED_AUID means:
+     - the AUID has only ever been linked to one IUID; and
+     - every meaningful service-activity date contains trusted anchor evidence.
 
-          WHEN distinct_iuid_count_ever = 1
-            AND active_dates_without_trusted_anchor > 0
-            THEN 'UNCERTAIN_SINGLE_IUID_UNANCHORED_ACTIVITY'
+   Public landing-page and authentication-transition activity does not count as
+   evidence of unanchored service use.
 
-          WHEN distinct_iuid_count_ever > 1
-            THEN 'HIGH_RISK_MULTI_IUID_AUID'
+   Anonymous-only AUIDs remain unresolved because no trusted identity evidence
+   is available to propagate.
 
-          ELSE 'UNKNOWN'
-        END AS auid_risk_classification,
+   Grain:
+     One row per AUID observed in web-request activity. */
+classified_auids AS (
+  SELECT
+    auid,
+    distinct_iuid_count_ever,
+    single_known_iuid,
 
-        CASE
-          WHEN distinct_iuid_count_ever = 0
-            THEN FALSE
+    CASE
+      WHEN distinct_iuid_count_ever = 0
+        THEN 'NO_KNOWN_IUID_ANONYMOUS_ONLY'
 
-          WHEN distinct_iuid_count_ever = 1
-            AND active_dates_without_trusted_anchor = 0
-            THEN FALSE
+      WHEN distinct_iuid_count_ever = 1
+        AND meaningful_active_dates_without_trusted_anchor = 0
+        THEN 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
 
-          ELSE TRUE
-        END AS requires_walk
+      WHEN distinct_iuid_count_ever = 1
+        AND meaningful_active_dates_without_trusted_anchor > 0
+        THEN 'UNCERTAIN_SINGLE_IUID_UNANCHORED_ACTIVITY'
 
-      FROM auid_classification_inputs
-    )
+      WHEN distinct_iuid_count_ever > 1
+        THEN 'HIGH_RISK_MULTI_IUID_AUID'
 
-    SELECT *
-    FROM classified_auids
+      ELSE 'UNKNOWN'
+    END AS auid_risk_classification,
+
+    CASE
+      WHEN distinct_iuid_count_ever = 0
+        THEN FALSE
+
+      WHEN distinct_iuid_count_ever = 1
+        AND meaningful_active_dates_without_trusted_anchor = 0
+        THEN FALSE
+
+      ELSE TRUE
+    END AS requires_walk
+
+  FROM auid_classification_inputs
+)
+
+SELECT *
+FROM classified_auids
 
 `);
 
@@ -910,7 +934,7 @@ Non-anchor events on low risk exclusive AUIDs are assigned directly because:
   - the AUID has only ever been linked to one known IUID
   - every active date for the AUID contains trusted anchor evidence
 
-Other events remain unresolved so later stages can apply conservative navigation
+Other events remain unresolved so later stages can apply navigation
 chain and activity window rules. 
 
 Grain: One row per valid web request event. */
@@ -943,56 +967,15 @@ events_with_current_identity_state AS (
     /* Known authenticated identity extracted from the trusted anchor source. */
     a.iuid AS known_anchor_iuid,
 
-    /* AUID risk state and supporting audit metrics. */
+    /* AUID risk classification and supporting audit metrics. */
     c.auid_risk_classification,
     c.requires_walk,
-
     c.distinct_iuid_count_ever,
-    c.iuids_ever,
-    c.active_date_count,
-    c.anchor_date_count,
-    c.active_dates_without_trusted_anchor,
-    c.active_dates_with_single_iuid_anchor,
-    c.active_dates_with_multiple_iuid_anchors,
-    c.total_event_count AS auid_total_event_count,
-    c.total_anchor_event_count AS auid_total_anchor_event_count,
 
     /* Assign identities inferred through the safe no walk rule. 
     
     Known anchor identities are excluded because they are observed 
     facts rather than inferred values. */
-
-    CASE
-      WHEN c.auid_risk_classification = 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
-        AND a.iuid IS NULL
-        THEN c.single_known_iuid
-
-      ELSE NULL
-    END AS initial_inferred_iuid,
-
-  /* Explain whether an initial inferred identity was applied and, 
-  if not, why the event remains outside the direct assignment path. 
-  This is primarily used for audit purposes */
-
-    CASE
-      WHEN c.auid_risk_classification = 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
-        AND a.iuid IS NULL
-        THEN 'INFERRED_FROM_EXCLUSIVE_SINGLE_IUID_AUID_ACTIVITY_ONLY_ON_ANCHORED_DATES'
-
-      WHEN a.iuid IS NOT NULL
-        THEN 'NOT_INFERRED_KNOWN_TRUSTED_ANCHOR_EVENT'
-
-      WHEN c.auid_risk_classification = 'NO_KNOWN_IUID_ANONYMOUS_ONLY'
-        THEN 'NOT_INFERRED_NO_TRUSTED_ANCHOR_AVAILABLE'
-
-      WHEN c.auid_risk_classification = 'UNCERTAIN_SINGLE_IUID_UNANCHORED_ACTIVITY'
-        THEN 'NOT_INFERRED_REQUIRES_WALK_SINGLE_IUID_WITH_UNANCHORED_ACTIVITY'
-
-      WHEN c.auid_risk_classification = 'HIGH_RISK_MULTI_IUID_AUID'
-        THEN 'NOT_INFERRED_REQUIRES_WALK_MULTI_IUID_AUID'
-
-      ELSE 'NOT_INFERRED_UNKNOWN_RISK_CLASSIFICATION'
-    END AS initial_inferred_iuid_method,
 
     /* Store the best currently available identity. Priority at this stage: 
     1. known trusted anchor IUID
@@ -1009,27 +992,10 @@ events_with_current_identity_state AS (
       ELSE NULL
     END AS current_iuid,
 
-    /* Explain the method used to produce the current identity state. */
-    CASE
-      WHEN a.iuid IS NOT NULL
-        THEN 'KNOWN_TRUSTED_IDENTITY_ANCHOR_EVENT'
 
-      WHEN c.auid_risk_classification = 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
-        THEN 'NO_WALK_INFERRED_FROM_EXCLUSIVE_SINGLE_IUID_AUID'
+    /* Record the stage that assigned the current identity.
 
-      WHEN c.auid_risk_classification = 'NO_KNOWN_IUID_ANONYMOUS_ONLY'
-        THEN 'UNRESOLVED_ANONYMOUS_ONLY_AUID'
-
-      WHEN c.auid_risk_classification = 'UNCERTAIN_SINGLE_IUID_UNANCHORED_ACTIVITY'
-        THEN 'UNRESOLVED_PENDING_WALK_SINGLE_IUID_UNANCHORED_ACTIVITY'
-
-      WHEN c.auid_risk_classification = 'HIGH_RISK_MULTI_IUID_AUID'
-        THEN 'UNRESOLVED_PENDING_WALK_MULTI_IUID_AUID'
-
-      ELSE 'UNRESOLVED_UNKNOWN_RISK_CLASSIFICATION'
-    END AS current_iuid_method,
-
-    /* Record the stage that most recently determined the current identity. */
+       Leave this NULL where no identity has yet been assigned. */
     CASE
       WHEN a.iuid IS NOT NULL
         THEN 'PART_1_KNOWN_TRUSTED_ANCHOR'
@@ -1037,23 +1003,25 @@ events_with_current_identity_state AS (
       WHEN c.auid_risk_classification = 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
         THEN 'PART_1_NO_WALK_ASSIGNMENT'
 
-      ELSE 'PART_1_UNRESOLVED'
+      ELSE NULL
     END AS current_resolution_stage,
 
-    /* The direct assignment stage is the first identity resolution iteration. */
-    1 AS current_iteration,
+    /* Record the rule that assigned the current identity.
 
-    /* The direct assignment stage is the first identity resolution iteration. */
+       Leave this NULL where no identity has yet been assigned. */
     CASE
       WHEN a.iuid IS NOT NULL
-        OR c.auid_risk_classification = 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
-        THEN TRUE
-      ELSE FALSE
-    END AS is_currently_resolved,
+        THEN 'KNOWN_TRUSTED_IDENTITY_ANCHOR_EVENT'
+
+      WHEN c.auid_risk_classification = 'LOW_RISK_EXCLUSIVE_ANCHORED_AUID'
+        THEN 'NO_WALK_INFERRED_FROM_EXCLUSIVE_SINGLE_IUID_AUID'
+
+      ELSE NULL
+    END AS current_iuid_method,
 
     /* Express the relative strength of the current identity assignment. 
     Known anchor evidence receives the highest priority. Safe no walk assignments 
-    remain strong but are distinguished from observed facts. */
+    remain strong but are scored lower than anchor requests identities. */
 
     CASE
       WHEN a.iuid IS NOT NULL
@@ -1065,8 +1033,8 @@ events_with_current_identity_state AS (
       ELSE 0
     END AS identity_resolution_priority,
 
-  /* Lock trusted anchor identities so later inference stages cannot overwrite 
-  authenticated facts. */
+  /* Create a field that lock trusted anchor identities so later inference stages 
+  cannot overwrite them. */
     CASE
       WHEN a.iuid IS NOT NULL
         THEN TRUE
@@ -1086,11 +1054,47 @@ FROM events_with_current_identity_state
 `);
 
 /* --------------------------------------------------------------------------
-   7A. Component 2 input: conservative walk input scope
+   4A. Conservative recursive propagation: define recursive-walk input scope
 
-   Incremental model. This is the only place that decides full refresh vs
-   incremental rebuild scope for the conservative walk.
--------------------------------------------------------------------------- */
+   Create the event subset that will be passed into the conservative recursive
+   identity propagation model.
+
+   This model exists as a separate incremental input table because the recursive
+   walk itself must run in a standard Dataform table. A standard table cannot use
+   Dataform's incremental run context to decide whether it should process the full 
+   valid event history or only the overlapping rebuild period required for the 
+   current incremental run.
+
+   This incremental input model therefore acts as the boundary between the
+  event state created in Stage 3 and the standard recursive run table
+   created in Stage 4B.
+
+   On a full refresh:
+     1. `identity_rebuild_checkpoint` is set to the configured pipeline start date;
+     2. all valid Stage 3 events from that date onwards are included.
+
+   On an incremental run:
+     1. `recursiveWalkInputScopePreOps()` calculates an overlapping rebuild
+       checkpoint from the latest date already stored in this input table
+     2. the checkpoint is moved backwards by one day and the configured additional
+       rebuild hours
+     3. the existing contents of this temporary input table are cleared;
+     4. only Stage 3 events occurring on or after the checkpoint are reloaded.
+
+   The overlapping rebuild period is intentional. It ensures that identity
+   chains crossing an incremental run boundary can be reconstructed consistently
+   rather than being split between separate runs.
+
+   The standard recursive run table in Stage 4B reads this scoped input table and
+   performs the recursive walk only on the required event subset. The resulting
+   identities are later persisted back into the durable incremental state table.
+
+   Grain:
+     One row per valid web request event within the current recursive walk scope.
+
+   Output:
+     identity_conservative_recursive_walk_input_[event source]
+------------------------------------------------------------------------------ */
 
 publish(
   conservativeWalkInputName,
@@ -1106,11 +1110,52 @@ WHERE occurred_at >= identity_rebuild_checkpoint
 `);
 
 /* --------------------------------------------------------------------------
-   7. Component 2A: conservative recursive walk run
+   4B. Conservative recursive identity propagation: run scoped recursive walk
 
-   Standard table. This is allowed to use WITH RECURSIVE because it is not
-   compiled as an incremental MERGE.
--------------------------------------------------------------------------- */
+   Attempt to assign identities to unresolved events by constructing
+   conservative navigation chains and tracing those chains back to trusted or
+   safely pre-assigned identity anchors.
+
+   This model runs as a standard table rather than an incremental table because
+   it uses WITH RECURSIVE. Stage 4A has already detected whether the pipeline is
+   running incrementally and restricted the input to the required overlapping
+   rebuild scope.
+
+   The walk follows a conservative ruleset:
+     - explicit referrer relationships are preferred
+     - same-AUID relationships receive the highest confidence
+     - selected cross-AUID relationships are permitted only where AUIDs share a
+       lightweight shared context proxy key
+     - selected short gap fallback rules are permitted only for single-IUID
+       AUIDs
+     - trusted anchors normally form chain roots
+     - a POST trusted anchor may attach backwards to its exact same-AUID
+       referrer parent where it represents an identity bearing form submission.
+
+   The shared context proxy improves recall where organisational networks cause
+   AUID changes during a journey. It does not directly assign identity.
+
+   An unresolved event receives an IUID only where its complete chain contains
+   exactly one distinct anchor IUID. Chains with no anchor or conflicting anchor
+   IUIDs remain unresolved.
+
+   Successful assignments that depend on the shared context proxy are recorded
+   separately in current_iuid_method for QA.
+
+   This model also identifies likely shunt arrivals for use when activity window
+   boundaries are built in Stage 5. A shunt refers to an instance where a new users
+   activity chain arrives on an AUID that is not directly connected to an identity
+   anchor.
+
+   Grain:
+     One row per valid web request event within the current recursive walk scope.
+
+   Input:
+     identity_conservative_recursive_walk_input_[event source]
+
+   Output:
+     identity_conservative_recursive_walk_run_[event source]
+------------------------------------------------------------------------------ */
 
 publish(
   conservativeWalkRunName,
@@ -1126,6 +1171,15 @@ publish(
 
 WITH RECURSIVE
 
+/* -------------------------------------------------------------------------- 
+4B.1. Load scoped events and define trusted identity anchors 
+
+Load the Stage 3 event state for the current rebuild scope. 
+
+Trusted anchors contain known authenticated IUIDs and seed the recursive 
+propagation logic. 
+------------------------------------------------------------------------------ */
+
 events_with_part_1_identity AS (
   SELECT *
   FROM ${ctx.ref(conservativeWalkInputName)}
@@ -1136,72 +1190,98 @@ anchors_all AS (
     request_uuid,
     known_anchor_iuid AS inferred_user_id,
     auid,
-    TRUE AS is_anchor,
-    'SIGN_IN_ANCHOR' AS walk_anchor_type
+    TRUE AS is_anchor
   FROM events_with_part_1_identity
   WHERE is_trusted_identity_anchor = TRUE
     AND known_anchor_iuid IS NOT NULL
     AND auid IS NOT NULL
 ),
 
-auid_group_confident_map AS (
+/* -------------------------------------------------------------------------- 
+4B.2. Create the shared-context proxy 
+
+Assign each anchored AUID a lightweight proxy key using the alphabetically 
+first trusted IUID observed on that AUID. 
+
+This methodology is explained below.
+------------------------------------------------------------------------------ */
+
+/* 
+   The following CTE (auid_shared_context_proxy_map) creates a lightweight 
+   shared context proxy for each anchored AUID.
+
+   Organisational networks can cause the AUID to change during an
+   otherwise continuous journey. Different AUIDs may therefore represent the
+   same user journey in the same organisational context while having been 
+   observed in the data for overlapping but non identical sets of users.
+
+   Constructing a comprehensive organisational device graph requires more
+   complex and expensive many-to-many matching. This was attempted but greatly increased
+   the processing time and cost, whilst providing only marginal improvements. Therefore,
+   this stage uses a deliberately lightweight identifier: each AUID is assigned a stable
+   proxy key using the alphabetically first trusted IUID observed on that AUID.
+
+   Matching proxy keys do not prove that two AUIDs belong to the same device,
+   network, or organisation. The proxy is known to be incomplete and may miss
+   valid relationships where overlapping AUIDs reduce to different keys.
+
+   The proxy is used only to improve recall when generating selected
+   medium confidence navigation candidates. It does not directly assign an
+   identity. Final identity propagation still requires the resulting chain to
+   resolve safely to exactly one anchor IUID.
+
+   The proxy match source is in the QA output so its contribution and
+   accuracy can be evaluated separately. */
+
+auid_shared_context_proxy_map AS (
   SELECT
     auid,
-    MIN(inferred_user_id) AS auid_group_confident,
-    COUNT(DISTINCT inferred_user_id) AS auid_distinct_iuid_count
+    MIN(inferred_user_id) AS auid_shared_context_proxy_key
   FROM anchors_all
   GROUP BY auid
 ),
 
-walk_target_group_times AS (
+/* -------------------------------------------------------------------------- 
+4B.3. Restrict nearby supporting events using merged time-window islands 
+
+Include every event requiring a walk. 
+
+Load resolved GET and trusted-anchor events only where they occur within 
+±120 minutes of relevant walk-target activity. Merge overlapping ranges into 
+islands before matching supporting events to avoid a many to many timestamp 
+join explosion.
+
+Testing found that this optimisation allowed this code to run on ~5x 
+the number of web_requests (ITT Mentors Service Data).
+------------------------------------------------------------------------------ */
+
+walk_target_proxy_times AS (
   SELECT DISTINCT
-    c.auid_group_confident,
+    c.auid_shared_context_proxy_key,
     e.occurred_at AS target_occurred_at
   FROM events_with_part_1_identity e
-  LEFT JOIN auid_group_confident_map c
+  LEFT JOIN auid_shared_context_proxy_map c
     ON e.auid = c.auid
   WHERE e.requires_walk = TRUE
-    AND c.auid_group_confident IS NOT NULL
+    AND c.auid_shared_context_proxy_key IS NOT NULL
 ),
-
-/*
-  Performance optimisation: merged target-window islands.
-
-  Original logic:
-    Include all events requiring a walk, plus resolved GET/sign-in events
-    in the same confident AUID group that occurred within 2 hours of any
-    walk-requiring event.
-
-  Problem:
-    Checking every possible supporting event against every individual
-    walk-requiring event can create a many-to-many join explosion:
-      support events × walk-requiring events
-
-  New logic:
-    1. Turn each walk-requiring event into a ±120 minute window.
-    2. Merge overlapping windows within each confident group into islands.
-    3. Check supporting events against those islands instead of every
-       individual target timestamp.
-
-  This preserves the intended "within 2 hours of walk-requiring activity"
-  rule while reducing timestamp comparisons.
-*/
 
 target_ranges AS (
   SELECT
-    auid_group_confident,
+    auid_shared_context_proxy_key,
     TIMESTAMP_SUB(target_occurred_at, INTERVAL 120 MINUTE) AS range_start,
     TIMESTAMP_ADD(target_occurred_at, INTERVAL 120 MINUTE) AS range_end
-  FROM walk_target_group_times
+  FROM walk_target_proxy_times
 ),
 
 ordered_ranges AS (
   SELECT
     *,
-    LAG(range_end) OVER (
-      PARTITION BY auid_group_confident
+    MAX(range_end) OVER (
+      PARTITION BY auid_shared_context_proxy_key
       ORDER BY range_start, range_end
-    ) AS prev_range_end
+      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+    ) AS previous_max_range_end
   FROM target_ranges
 ),
 
@@ -1209,8 +1289,8 @@ range_breaks AS (
   SELECT
     *,
     CASE
-      WHEN prev_range_end IS NULL THEN 1
-      WHEN range_start > prev_range_end THEN 1
+      WHEN previous_max_range_end IS NULL THEN 1
+      WHEN range_start > previous_max_range_end THEN 1
       ELSE 0
     END AS new_island_flag
   FROM ordered_ranges
@@ -1220,7 +1300,7 @@ range_islands AS (
   SELECT
     *,
     SUM(new_island_flag) OVER (
-      PARTITION BY auid_group_confident
+      PARTITION BY auid_shared_context_proxy_key
       ORDER BY range_start, range_end
       ROWS UNBOUNDED PRECEDING
     ) AS island_id
@@ -1229,14 +1309,14 @@ range_islands AS (
 
 target_window_islands AS (
   SELECT
-    auid_group_confident,
+    auid_shared_context_proxy_key,
     island_id,
     MIN(range_start) AS window_start,
     MAX(range_end) AS window_end,
     COUNT(*) AS merged_target_count
   FROM range_islands
   GROUP BY
-    auid_group_confident,
+    auid_shared_context_proxy_key,
     island_id
 ),
 
@@ -1256,16 +1336,16 @@ events_base AS (
         AND EXISTS (
           SELECT 1
           FROM target_window_islands w
-          WHERE w.auid_group_confident = c.auid_group_confident
+          WHERE w.auid_shared_context_proxy_key = c.auid_shared_context_proxy_key
             AND e.occurred_at BETWEEN w.window_start AND w.window_end
         )
-        THEN 'SUPPORTING_RESOLVED_PARENT_SAME_GROUP_WITHIN_2H'
+        THEN 'SUPPORTING_RESOLVED_PARENT_SHARED_CONTEXT_PROXY_WITHIN_2H'
 
       ELSE 'EXCLUDED'
     END AS part_2_inclusion_reason
 
   FROM events_with_part_1_identity e
-  LEFT JOIN auid_group_confident_map c
+  LEFT JOIN auid_shared_context_proxy_map c
     ON e.auid = c.auid
 
   WHERE e.requires_walk = TRUE
@@ -1279,64 +1359,67 @@ events_base AS (
        AND EXISTS (
          SELECT 1
          FROM target_window_islands w
-         WHERE w.auid_group_confident = c.auid_group_confident
+         WHERE w.auid_shared_context_proxy_key = c.auid_shared_context_proxy_key
            AND e.occurred_at BETWEEN w.window_start AND w.window_end
        )
      )
 ),
 
-auid_seen_in_anchor AS (
-  SELECT DISTINCT
-    auid,
-    TRUE AS auid_has_anchor
-  FROM anchors_all
-),
+/* -------------------------------------------------------------------------- 
+4B.4. Prepare walk anchors and navigable parent events 
+
+Mark trusted anchors and nearby directly assigned events as walk anchors. Treat 
+non-redirect GET requests as navigable parents. These events may form links in 
+the reconstructed navigation chain. Create hourly buckets to reduce the search 
+space for later referrer joins. 
+------------------------------------------------------------------------------ */
 
 events_supp AS (
   SELECT
     e.*,
 
-CASE
-  WHEN a.is_anchor = TRUE
-    THEN TRUE
+    CASE
+      WHEN a.is_anchor = TRUE
+        THEN TRUE
 
-  WHEN e.part_2_inclusion_reason = 'SUPPORTING_RESOLVED_PARENT_SAME_GROUP_WITHIN_2H'
-    AND e.current_iuid IS NOT NULL
-    THEN TRUE
+      WHEN e.part_2_inclusion_reason =
+        'SUPPORTING_RESOLVED_PARENT_SHARED_CONTEXT_PROXY_WITHIN_2H'
+        AND e.current_iuid IS NOT NULL
+        THEN TRUE
 
-  ELSE FALSE
-END AS walk_is_anchor,
+      ELSE FALSE
+    END AS walk_is_anchor,
 
-CASE
-  WHEN a.is_anchor = TRUE
-    THEN a.inferred_user_id
+    CASE
+      WHEN a.is_anchor = TRUE
+        THEN a.inferred_user_id
 
-  WHEN e.part_2_inclusion_reason = 'SUPPORTING_RESOLVED_PARENT_SAME_GROUP_WITHIN_2H'
-    AND e.current_iuid IS NOT NULL
-    THEN e.current_iuid
+      WHEN e.part_2_inclusion_reason =
+        'SUPPORTING_RESOLVED_PARENT_SHARED_CONTEXT_PROXY_WITHIN_2H'
+        AND e.current_iuid IS NOT NULL
+        THEN e.current_iuid
 
-  ELSE NULL
-END AS walk_anchor_iuid,
+      ELSE NULL
+    END AS walk_anchor_iuid,
 
-CASE
-  WHEN a.is_anchor = TRUE
-    THEN 'SIGN_IN_ANCHOR'
+    CASE
+      WHEN a.is_anchor = TRUE
+        THEN 'TRUSTED_IDENTITY_ANCHOR'
 
-  WHEN e.part_2_inclusion_reason = 'SUPPORTING_RESOLVED_PARENT_SAME_GROUP_WITHIN_2H'
-    AND e.current_iuid IS NOT NULL
-    THEN 'LOCAL_PART_1_RESOLVED_ANCHOR'
+      WHEN e.part_2_inclusion_reason =
+        'SUPPORTING_RESOLVED_PARENT_SHARED_CONTEXT_PROXY_WITHIN_2H'
+        AND e.current_iuid IS NOT NULL
+        THEN 'LOCAL_DIRECT_ASSIGNMENT_ANCHOR'
 
-  ELSE NULL
-END AS walk_anchor_type,
+      ELSE NULL
+    END AS walk_anchor_type,
 
-    c.auid_group_confident,
-    c.auid_distinct_iuid_count,
-
-    IFNULL(sa.auid_has_anchor, FALSE) AS auid_has_anchor,
+    c.auid_shared_context_proxy_key,
 
     (
       e.request_method = 'GET'
-      AND SAFE_CAST(e.response_status AS STRING) NOT IN ('301', '302', '303', '307', '308')
+      AND SAFE_CAST(e.response_status AS STRING)
+        NOT IN ('301', '302', '303', '307', '308')
     ) AS is_navigable_parent,
 
     TIMESTAMP_TRUNC(e.occurred_at, HOUR) AS hour_bucket
@@ -1344,11 +1427,19 @@ END AS walk_anchor_type,
   FROM events_base e
   LEFT JOIN anchors_all a
     ON e.request_uuid = a.request_uuid
-  LEFT JOIN auid_group_confident_map c
+  LEFT JOIN auid_shared_context_proxy_map c
     ON e.auid = c.auid
-  LEFT JOIN auid_seen_in_anchor sa
-    ON e.auid = sa.auid
 ),
+
+/* -------------------------------------------------------------------------- 
+4B.5. Locate the nearest preceding same-AUID parent 
+
+Sequence events chronologically within each AUID and identify the nearest 
+earlier navigable parent or walk anchor. 
+
+This supports tightly constrained fallback rules where an explicit referrer 
+is missing or unhelpful. 
+------------------------------------------------------------------------------ */
 
 base_seq AS (
   SELECT
@@ -1392,6 +1483,19 @@ prev_by_auid AS (
    AND p.seq = c.prev_parent_seq_auid
 ),
 
+/* -------------------------------------------------------------------------- 
+4B.6. Build explicit referrer parent candidates 
+
+Match each child referrer path to an earlier parent path and query within a 
+120 minute lookback period. 
+
+Confidence: 
+- HIGH: child and parent share the same AUID 
+- MEDIUM: child and parent share a non null shared context proxy key. 
+
+Hourly buckets narrow the initial join before exact timestamp rules are applied. 
+------------------------------------------------------------------------------ */
+
 parent_lookup AS (
   SELECT
     request_uuid,
@@ -1399,7 +1503,7 @@ parent_lookup AS (
     request_path,
     request_path_and_query,
     auid,
-    auid_group_confident,
+    auid_shared_context_proxy_key,
     hour_bucket
   FROM events_supp
   WHERE is_navigable_parent
@@ -1413,7 +1517,7 @@ referrer_children AS (
     child.request_path,
     child.request_referer_path_and_query,
     child.auid,
-    child.auid_group_confident,
+    child.auid_shared_context_proxy_key,
     child.hour_bucket
   FROM events_supp child
   WHERE child.request_referer_path_and_query IS NOT NULL
@@ -1443,17 +1547,17 @@ p1_referrer_candidates AS (
     parent.occurred_at AS parent_at,
 
     CASE
-      WHEN child.auid = parent.auid THEN 'HIGH'
-      WHEN child.auid_group_confident IS NOT NULL
-        AND child.auid_group_confident = parent.auid_group_confident THEN 'MEDIUM'
-      ELSE 'LOW'
+      WHEN child.auid = parent.auid
+        THEN 'HIGH'
+
+      ELSE 'MEDIUM'
     END AS match_confidence,
 
     CASE
-      WHEN child.auid = parent.auid THEN 'P2_REFERRER_SAME_AUID'
-      WHEN child.auid_group_confident IS NOT NULL
-        AND child.auid_group_confident = parent.auid_group_confident THEN 'P2_REFERRER_SAME_CONFIDENT_AUID_GROUP'
-      ELSE 'P2_REFERRER_WEAK'
+      WHEN child.auid = parent.auid
+        THEN 'STAGE_4_REFERRER_SAME_AUID'
+
+      ELSE 'STAGE_4_REFERRER_SHARED_CONTEXT_PROXY'
     END AS match_source
 
   FROM referrer_child_buckets child
@@ -1466,13 +1570,26 @@ p1_referrer_candidates AS (
    AND (
      child.auid = parent.auid
      OR (
-       child.auid_group_confident IS NOT NULL
-       AND child.auid_group_confident = parent.auid_group_confident
+       child.auid_shared_context_proxy_key IS NOT NULL
+       AND child.auid_shared_context_proxy_key = parent.auid_shared_context_proxy_key
      )
    )
 ),
 
-p1_anchor_next_callback AS (
+/* -------------------------------------------------------------------------- 
+4B.7. Add constrained fallback parent candidates 
+
+Add limited fallback links for cases where explicit referrer matching is not 
+sufficient: 
+
+1. Anchor bootstrap: Link the first nearby navigable child after a trusted anchor. 
+2. Public landing-page referrer: For single-IUID AUIDs only, link to the nearest recent same-AUID parent. 
+3. Null referrer: For single-IUID AUIDs only, link to the nearest recent same-AUID parent. 
+
+These rules are restricted by AUID, time, and identity history to avoid joining unrelated journeys. 
+------------------------------------------------------------------------------ */
+
+anchor_next_trusted_anchor AS (
   SELECT
     request_uuid AS anchor_request_uuid,
     auid,
@@ -1481,12 +1598,11 @@ p1_anchor_next_callback AS (
     LEAD(occurred_at) OVER (
       PARTITION BY auid
       ORDER BY occurred_at, request_uuid
-    ) AS next_callback_at
+    ) AS next_trusted_anchor_at
 
   FROM events_supp
   WHERE walk_is_anchor = TRUE
-    AND walk_anchor_type = 'SIGN_IN_ANCHOR'
-    AND request_method = 'GET'
+    AND walk_anchor_type = 'TRUSTED_IDENTITY_ANCHOR'
     AND walk_anchor_iuid IS NOT NULL
     AND auid IS NOT NULL
 ),
@@ -1496,17 +1612,17 @@ p1_bootstrap_first_child_after_callback AS (
     anc.anchor_request_uuid,
     anc.auid,
     anc.anchor_at,
-    anc.next_callback_at,
+    anc.next_trusted_anchor_at,
 
     child.request_uuid AS child_request_uuid,
     child.occurred_at AS child_at
 
-  FROM p1_anchor_next_callback anc
+  FROM anchor_next_trusted_anchor anc
   JOIN events_supp child
     ON child.auid = anc.auid
    AND child.occurred_at > anc.anchor_at
    AND child.occurred_at <= TIMESTAMP_ADD(anc.anchor_at, INTERVAL 30 MINUTE)
-   AND (anc.next_callback_at IS NULL OR child.occurred_at < anc.next_callback_at)
+   AND (anc.next_trusted_anchor_at IS NULL OR child.occurred_at < anc.next_trusted_anchor_at)
    AND child.walk_is_anchor = FALSE
    AND child.is_navigable_parent = TRUE
   WHERE child.request_referer_path_and_query IS NULL
@@ -1525,7 +1641,7 @@ p1_bootstrap_candidates AS (
     child_at,
     anchor_at AS parent_at,
     'MEDIUM' AS match_confidence,
-    'P2_BOOTSTRAP_FIRST_EVENT_AFTER_CALLBACK_SAME_AUID_30M' AS match_source
+    'STAGE_4_BOOTSTRAP_FIRST_EVENT_AFTER_TRUSTED_ANCHOR_SAME_AUID_30M' AS match_source
   FROM p1_bootstrap_first_child_after_callback
 ),
 
@@ -1536,7 +1652,7 @@ p1_slash_prev_by_auid_single_user AS (
     child.occurred_at AS child_at,
     child.prev_parent_occurred_at_auid AS parent_at,
     'LOW' AS match_confidence,
-    'P2_HOME_REFERRER_PREVIOUS_PARENT_BY_AUID_10M_SINGLE_IUID_ONLY' AS match_source
+    'STAGE_4_HOME_REFERRER_PREVIOUS_PARENT_BY_AUID_10M_SINGLE_IUID_ONLY' AS match_source
 
   FROM prev_by_auid child
   WHERE ${sqlInList("child.request_referer_path_and_query", preAuthPagePaths)}
@@ -1545,7 +1661,7 @@ p1_slash_prev_by_auid_single_user AS (
     AND child.prev_parent_request_uuid_auid IS NOT NULL
     AND child.prev_parent_occurred_at_auid >= TIMESTAMP_SUB(child.occurred_at, INTERVAL 10 MINUTE)
     AND ${sqlNotInList("child.prev_parent_request_path_auid", preAuthPagePaths)}
-    AND child.auid_distinct_iuid_count = 1
+    AND child.distinct_iuid_count_ever = 1
 ),
 
 p1_null_prev_by_auid_single_user AS (
@@ -1555,16 +1671,27 @@ p1_null_prev_by_auid_single_user AS (
     child.occurred_at AS child_at,
     child.prev_parent_occurred_at_auid AS parent_at,
     'MEDIUM' AS match_confidence,
-    'P2_NULL_REFERRER_PREVIOUS_PARENT_BY_AUID_10M_SINGLE_IUID_ONLY' AS match_source
+    'STAGE_4_NULL_REFERRER_PREVIOUS_PARENT_BY_AUID_10M_SINGLE_IUID_ONLY' AS match_source
 
   FROM prev_by_auid child
   WHERE child.request_referer_path_and_query IS NULL
-    AND child.auid_distinct_iuid_count = 1
+    AND child.distinct_iuid_count_ever = 1
     AND child.prev_parent_request_uuid_auid IS NOT NULL
     AND child.prev_parent_request_uuid_auid != child.request_uuid
     AND child.prev_parent_occurred_at_auid >= TIMESTAMP_SUB(child.occurred_at, INTERVAL 10 MINUTE)
     AND ${sqlNotInList("child.prev_parent_request_path_auid", preAuthAndSignInPagePaths)}
 ),
+
+/* -------------------------------------------------------------------------- 
+
+4B.8. Select one parent per child 
+
+Combine all candidate parent rules and retain the strongest available link. 
+Prefer: 
+  1. higher confidence 
+  2. the most recent parent 
+  3. request UUID as a deterministic tiebreaker. 
+------------------------------------------------------------------------------ */
 
 p1_parent_candidates AS (
   SELECT * FROM p1_referrer_candidates
@@ -1628,7 +1755,7 @@ events_with_parent_pass1 AS (
       */
       WHEN e.walk_is_anchor
         AND e.request_method = 'POST'
-        AND bp.match_source = 'P2_REFERRER_SAME_AUID'
+        AND bp.match_source = 'STAGE_4_REFERRER_SAME_AUID'
         THEN bp.parent_request_uuid
 
       WHEN e.walk_is_anchor
@@ -1638,23 +1765,37 @@ events_with_parent_pass1 AS (
     END AS parent_request_uuid_pass1,
 
     bp.match_confidence AS parent_match_confidence_pass1,
-    bp.match_source AS parent_match_source_pass1
+    bp.match_source AS parent_match_source_pass1,
+    (bp.match_source = 'STAGE_4_REFERRER_SHARED_CONTEXT_PROXY') AS parent_match_used_shared_context_proxy_pass1
 
   FROM events_supp e
   LEFT JOIN p1_best_parent bp
     ON e.request_uuid = bp.child_request_uuid
 ),
 
+/* -------------------------------------------------------------------------- 
+4B.9. Recursively traverse navigation chains 
+
+Walk each selected parent relationship backwards until any of the following conditions is met: 
+- the chain reaches a root 
+- no further parent exists
+- the defensive maximum depth of 100 links is reached. This is a fallback to minimise the risk
+of self referring chains creating an infinite loop. There are mitigations throughout the code
+to minimise the risk of this, so this is only the final fallback.
+
+Carry forward whether any edge in the full chain used the shared context proxy so 
+proxy assisted assignments can be identified in current_iuid_method. 
+------------------------------------------------------------------------------ */
+
 walk_pass1 AS (
   SELECT
     e.request_uuid AS start_request_uuid,
     e.request_uuid AS current_request_uuid,
     e.parent_request_uuid_pass1 AS parent_request_uuid,
-    e.walk_is_anchor,
-    e.walk_anchor_iuid,
     0 AS depth,
 
-    IF(e.walk_is_anchor, e.walk_anchor_iuid, NULL) AS nearest_anchor_user_id
+    e.parent_match_used_shared_context_proxy_pass1
+      AS chain_used_shared_context_proxy
 
   FROM events_with_parent_pass1 e
 
@@ -1664,14 +1805,12 @@ walk_pass1 AS (
     w.start_request_uuid,
     p.request_uuid AS current_request_uuid,
     p.parent_request_uuid_pass1 AS parent_request_uuid,
-    p.walk_is_anchor,
-    p.walk_anchor_iuid,
     w.depth + 1 AS depth,
 
-    COALESCE(
-      w.nearest_anchor_user_id,
-      IF(p.walk_is_anchor, p.walk_anchor_iuid, NULL)
-    ) AS nearest_anchor_user_id
+    (
+      w.chain_used_shared_context_proxy
+      OR p.parent_match_used_shared_context_proxy_pass1
+    ) AS chain_used_shared_context_proxy
 
   FROM walk_pass1 w
   JOIN events_with_parent_pass1 p
@@ -1680,6 +1819,14 @@ walk_pass1 AS (
     AND w.parent_request_uuid != w.current_request_uuid
     AND w.depth < 100
 ),
+
+/* -------------------------------------------------------------------------- 
+4B.10. Collapse each chain and identify safe assignments 
+
+Reduce the recursive output to one chain identifier per event. Count the distinct 
+anchor IUIDs observed in each chain. A chain is eligible for identity propagation 
+only where it contains exactly one anchor IUID. 
+------------------------------------------------------------------------------ */
 
 collapsed_pass1 AS (
   SELECT
@@ -1690,10 +1837,8 @@ collapsed_pass1 AS (
       IF(parent_request_uuid IS NULL, 1, 0)
     ) AS chain_id_pass1,
 
-    MIN_BY(
-      nearest_anchor_user_id,
-      IF(nearest_anchor_user_id IS NOT NULL, depth, 999999)
-    ) AS propagated_user_id_pass1
+    LOGICAL_OR(chain_used_shared_context_proxy)
+      AS chain_used_shared_context_proxy
 
   FROM walk_pass1
   GROUP BY start_request_uuid
@@ -1703,14 +1848,11 @@ chain_anchor_summary_pass1 AS (
   SELECT
     c.chain_id_pass1,
 
-    COUNT(DISTINCT e.walk_anchor_iuid) AS chain_distinct_anchor_iuid_count,
+    COUNT(DISTINCT e.walk_anchor_iuid)
+      AS chain_distinct_anchor_iuid_count,
 
-    ARRAY_AGG(
-      DISTINCT e.walk_anchor_iuid IGNORE NULLS
-      ORDER BY e.walk_anchor_iuid
-    ) AS chain_anchor_iuids,
-
-    MIN(e.walk_anchor_iuid) AS chain_single_anchor_iuid
+    MIN(e.walk_anchor_iuid)
+      AS chain_single_anchor_iuid
 
   FROM collapsed_pass1 c
   JOIN events_with_parent_pass1 e
@@ -1719,6 +1861,15 @@ chain_anchor_summary_pass1 AS (
     AND e.walk_anchor_iuid IS NOT NULL
   GROUP BY c.chain_id_pass1
 ),
+
+/* -------------------------------------------------------------------------- 
+
+4B.11. Detect likely shunt arrivals for Stage 5 
+
+Identify short cross-AUID transitions where a child referrer matches exactly 
+one recent parent path. These events may indicate the start of a new device level 
+journey. Persist the resulting boolean for use as a conservative activity-window boundary.
+------------------------------------------------------------------------------ */
 
 shunt_parents AS (
   SELECT
@@ -1791,10 +1942,7 @@ likely_shunt_arrival_candidates AS (
 likely_shunt_arrivals AS (
   SELECT
     child_request_uuid,
-    TRUE AS likely_shunt_arrival,
-    shunt_parent_request_uuid,
-    shunt_parent_auid,
-    shunt_parent_at
+    TRUE AS likely_shunt_arrival
   FROM likely_shunt_arrival_candidates
   WHERE candidate_count_last_3h = 1
 ),
@@ -1805,23 +1953,15 @@ walked_events AS (
 
     e.parent_request_uuid_pass1,
     e.parent_match_confidence_pass1,
-    e.parent_match_source_pass1,
-
-    e.auid_group_confident,
-    e.auid_distinct_iuid_count,
-    e.auid_has_anchor,
-
-    c.chain_id_pass1,
-    c.propagated_user_id_pass1,
 
     cas.chain_distinct_anchor_iuid_count,
-    cas.chain_anchor_iuids,
     cas.chain_single_anchor_iuid,
 
-    IFNULL(s.likely_shunt_arrival, FALSE) AS likely_shunt_arrival,
-    s.shunt_parent_request_uuid,
-    s.shunt_parent_auid,
-    s.shunt_parent_at
+    COALESCE(c.chain_used_shared_context_proxy, FALSE)
+      AS chain_used_shared_context_proxy,
+
+    IFNULL(s.likely_shunt_arrival, FALSE)
+      AS likely_shunt_arrival
 
   FROM events_with_parent_pass1 e
   LEFT JOIN collapsed_pass1 c
@@ -1830,43 +1970,35 @@ walked_events AS (
     ON c.chain_id_pass1 = cas.chain_id_pass1
   LEFT JOIN likely_shunt_arrivals s
     ON e.request_uuid = s.child_request_uuid
-),
+)
 
-final AS (
+/* -------------------------------------------------------------------------- 
+4B.12. Update the event-level identity state 
+
+Preserve identities assigned in Stage 3. Assign a previously unresolved event 
+only where its recursive chain contains exactly one anchor IUID. Record whether 
+the successful assignment depended on a shared context proxy link. Persist only 
+fields required by Stage 5. Discard temporary graph diagnostics. 
+------------------------------------------------------------------------------ */
+
   SELECT
-    p1.* EXCEPT (
+    direct.* EXCEPT (
       current_iuid,
-      current_iuid_method,
       current_resolution_stage,
-      current_iteration,
-      is_currently_resolved,
+      current_iuid_method,
       identity_resolution_priority
     ),
 
+    /* Required by Stage 5 when constructing activity-window boundaries. */
     w.parent_request_uuid_pass1,
     w.parent_match_confidence_pass1,
-    w.parent_match_source_pass1,
-
-    w.auid_group_confident,
-    w.auid_distinct_iuid_count,
-    w.auid_has_anchor,
-
-    w.chain_id_pass1,
-    w.propagated_user_id_pass1,
-
     w.likely_shunt_arrival,
-    w.shunt_parent_request_uuid,
-    w.shunt_parent_auid,
-    w.shunt_parent_at,
-    w.chain_distinct_anchor_iuid_count,
-    w.chain_anchor_iuids,
-    w.chain_single_anchor_iuid,
 
     CASE
-      WHEN p1.current_iuid IS NOT NULL
-        THEN p1.current_iuid
+      WHEN direct.current_iuid IS NOT NULL
+        THEN direct.current_iuid
 
-      WHEN p1.requires_walk = TRUE
+      WHEN direct.requires_walk = TRUE
         AND w.chain_distinct_anchor_iuid_count = 1
         THEN w.chain_single_anchor_iuid
 
@@ -1874,107 +2006,87 @@ final AS (
     END AS current_iuid,
 
     CASE
-      WHEN p1.current_iuid IS NOT NULL
-        THEN p1.current_iuid_method
+      WHEN direct.current_iuid IS NOT NULL
+        THEN direct.current_resolution_stage
 
-      WHEN p1.requires_walk = TRUE
+      WHEN direct.requires_walk = TRUE
         AND w.chain_distinct_anchor_iuid_count = 1
-        THEN 'PART_2_STRICT_CHAIN_SINGLE_ANCHOR_IUID'
+        THEN 'STAGE_4_CONSERVATIVE_RECURSIVE_PROPAGATION'
 
-      WHEN p1.requires_walk = TRUE
-        AND w.chain_distinct_anchor_iuid_count > 1
-        THEN 'UNRESOLVED_PART_2_STRICT_CHAIN_CONFLICTING_ANCHOR_IUIDS'
+      ELSE NULL
+    END AS current_resolution_stage,
 
-      WHEN p1.requires_walk = TRUE
-        THEN 'UNRESOLVED_AFTER_PART_2_STRICT_CHAIN_NO_ANCHOR'
+    CASE
+      WHEN direct.current_iuid IS NOT NULL
+        THEN direct.current_iuid_method
 
-      WHEN p1.auid_risk_classification = 'NO_KNOWN_IUID_ANONYMOUS_ONLY'
-        THEN 'UNRESOLVED_ANONYMOUS_ONLY_AUID_NOT_WALKED'
+      WHEN direct.requires_walk = TRUE
+        AND w.chain_distinct_anchor_iuid_count = 1
+        AND w.chain_used_shared_context_proxy = TRUE
+        THEN 'STRICT_CHAIN_SINGLE_ANCHOR_IUID_WITH_SHARED_CONTEXT_PROXY'
 
-      ELSE 'UNRESOLVED_NOT_WALKED'
+      WHEN direct.requires_walk = TRUE
+        AND w.chain_distinct_anchor_iuid_count = 1
+        THEN 'STRICT_CHAIN_SINGLE_ANCHOR_IUID_WITHOUT_SHARED_CONTEXT_PROXY'
+
+      ELSE NULL
     END AS current_iuid_method,
 
     CASE
-      WHEN p1.current_iuid IS NOT NULL
-        THEN p1.current_resolution_stage
-
-      WHEN p1.requires_walk = TRUE
-        AND w.chain_distinct_anchor_iuid_count = 1
-        THEN 'PART_2_CONSERVATIVE_STRICT_CHAIN_SINGLE_ANCHOR'
-
-      WHEN p1.requires_walk = TRUE
-        AND w.chain_distinct_anchor_iuid_count > 1
-        THEN 'PART_2_CONFLICT'
-
-      ELSE 'PART_2_UNRESOLVED'
-    END AS current_resolution_stage,
-
-    2 AS current_iteration,
-
-    (
-      p1.current_iuid IS NOT NULL
-      OR (
-        p1.requires_walk = TRUE
-        AND w.chain_distinct_anchor_iuid_count = 1
-      )
-    ) AS is_currently_resolved,
-
-    CASE
-      WHEN p1.identity_resolution_locked = TRUE
+      WHEN direct.identity_resolution_locked = TRUE
         THEN 100
 
-      WHEN p1.current_iuid IS NOT NULL
-        THEN p1.identity_resolution_priority
+      WHEN direct.current_iuid IS NOT NULL
+        THEN direct.identity_resolution_priority
 
-      WHEN p1.requires_walk = TRUE
+      WHEN direct.requires_walk = TRUE
         AND w.chain_distinct_anchor_iuid_count = 1
         THEN 70
 
       ELSE 0
-    END AS identity_resolution_priority,
+    END AS identity_resolution_priority
 
-    CASE
-      WHEN p1.current_iuid IS NOT NULL
-        THEN p1.current_iuid
-
-      WHEN p1.requires_walk = TRUE
-        AND w.chain_distinct_anchor_iuid_count = 1
-        THEN w.chain_single_anchor_iuid
-
-      ELSE NULL
-    END AS final_iuid_after_part_2,
-
-    CASE
-      WHEN p1.current_iuid IS NOT NULL
-        THEN TRUE
-
-      WHEN p1.requires_walk = TRUE
-        AND w.chain_distinct_anchor_iuid_count = 1
-        THEN TRUE
-
-      ELSE FALSE
-    END AS is_resolved_after_part_2
-
-  FROM events_with_part_1_identity p1
+  FROM events_with_part_1_identity direct
   LEFT JOIN walked_events w
-    ON p1.request_uuid = w.request_uuid
-)
-
-SELECT *
-FROM final
+    ON direct.request_uuid = w.request_uuid
 
 `);
 
 /* --------------------------------------------------------------------------
-   7. Component 2B: conservative recursive walk state
+   4C. Conservative recursive identity propagation: persist durable state
 
-   Incremental table. No recursive SQL. This persists the run output into the
-   durable state table that downstream models should read.
--------------------------------------------------------------------------- */
+   Persist the scoped Stage 4B recursive walk output into the durable
+   incremental event state table read by downstream models.
+
+   Stage 4B runs as a standard table because it uses WITH RECURSIVE. That table
+   contains only the current rebuild scope produced by Stage 4A. This Stage 4C
+   model converts that scoped run output back into durable incremental state.
+
+   On a full refresh:
+     - rebuild the complete valid event history.
+
+   On an incremental run:
+     - calculate the overlapping rebuild checkpoint
+     - delete the affected period from the existing durable state table
+     - replace that period with the newly calculated Stage 4B results
+     - retain historical rows outside the rebuild scope unchanged.
+
+   This separation allows recursive SQL to be used without sacrificing the
+   incremental behaviour required for production runs.
+
+   Grain:
+     One row per valid web-request event.
+
+   Input:
+     identity_conservative_recursive_walk_run_[event source]
+
+   Output:
+     identity_conservative_recursive_walk_[event source]
+------------------------------------------------------------------------------ */
 
 publish(
   conservativeWalkName,
-  incrementalEventConfig("Persist conservative recursive identity walk state")
+  incrementalEventConfig("Persist conservative recursive identity propagation state")
 )
 .preOps(ctx => identityEventCheckpointPreOps(ctx))
 .query(ctx => `
@@ -1985,8 +2097,38 @@ FROM ${ctx.ref(conservativeWalkRunName)}
 `);
 
 /* --------------------------------------------------------------------------
-   8. Component 3: build and apply activity windows
--------------------------------------------------------------------------- */
+   5. Build activity windows and apply identity fallback
+
+   Attempt to assign identities to unresolved events using time bounded periods
+   of high confidence activity.
+
+   Stage 4 resolves events through conservative navigation chain propagation.
+   Some events remain unresolved because they cannot be linked safely through a
+   strict chain. Stage 5 applies a separate temporal fallback.
+
+   The model:
+     - builds activity windows from events that already have a trusted or
+       high confidence IUID
+     - applies shorter safety thresholds where an AUID has historically been
+       associated with multiple IUIDs
+     - detects overlapping or ambiguous periods;
+     - assigns an IUID only where an unresolved event matches one clean,
+       non overlapping window
+     - retains a narrow set of window context fields required by the later
+       repair walk.
+
+   The model is incremental. An overlapping period is rebuilt on each run so
+   windows crossing the incremental boundary can be reconstructed consistently.
+
+   Grain:
+     One row per valid web-request event.
+
+   Input:
+     identity_conservative_recursive_walk_[event source]
+
+   Output:
+     identity_activity_windows_[event source]
+------------------------------------------------------------------------------ */
 
 publish(
   activityWindowsName,
@@ -1996,6 +2138,21 @@ publish(
 .query(ctx => `
 
 WITH
+
+/* --------------------------------------------------------------------------
+   5.1. Load current identity state and identify fallback candidates
+
+   Load the Stage 4 identity state for the current overlapping rebuild
+   scope.
+
+   Identify:
+     - navigable GET activity events, excluding redirects;
+     - unresolved events eligible for activity window fallback.
+
+   Only uncertain single IUID and high risk multi IUID AUIDs enter this fallback.
+   Anonymous only AUIDs remain unresolved because no trusted identity evidence
+   exists to propagate.
+------------------------------------------------------------------------------ */
 
 current_identity_resolution_state AS (
   SELECT *
@@ -2027,11 +2184,13 @@ events_base AS (
   WHERE e.occurred_at >= TIMESTAMP(${sqlString(startDate)})
 ),
 
-/*
+/* --------------------------------------------------------------------------
+   5.2. Compress resolved activity to minute-level points
+
   Resolved activity is grouped to minute level before constructing activity
   islands and identity windows.
 
-  Grouping at minute level also reduces the amount of data that needs processing
+  Grouping at minute level reduces the amount of data that needs processing
   as part of the analytic functions, allowing this code to run on larger datasets.
 
   The downstream islanding logic only needs to identify continuous periods of
@@ -2049,7 +2208,6 @@ events_base AS (
 
   so that final window boundaries continue to reflect actual activity times
   rather than rounded minute values.
-
 */
 
 resolved_activity_points AS (
@@ -2067,7 +2225,7 @@ resolved_activity_points AS (
       LIMIT 1
     )[OFFSET(0)] AS first_request_uuid,
 
-    ANY_VALUE(distinct_iuid_count_ever) AS distinct_iuid_count_ever
+    MAX(distinct_iuid_count_ever) AS distinct_iuid_count_ever
 
   FROM events_base
   WHERE auid IS NOT NULL
@@ -2082,6 +2240,24 @@ resolved_activity_points AS (
     current_iuid,
     activity_minute
 ),
+
+/* --------------------------------------------------------------------------
+   5.3. Group resolved activity into continuous identity islands
+
+   Order resolved activity chronologically within each AUID.
+
+   Start a new island where:
+     - there is no previous resolved activity
+     - the resolved IUID changes
+     - the inactivity gap exceeds the permitted threshold.
+
+   Thresholds:
+     - 180 minutes for single-IUID AUIDs;
+     - 10 minutes for multi-IUID AUIDs.
+
+   The shorter threshold for multi-IUID AUIDs is deliberately conservative becase
+   shared identifiers create a greater risk of joining separate user journeys.
+------------------------------------------------------------------------------ */
 
 resolved_activity_events AS (
   SELECT
@@ -2134,13 +2310,27 @@ resolved_activity_events_with_island_id AS (
   FROM resolved_activity_events_with_island_flags
 ),
 
-identity_anchors AS (
+/* --------------------------------------------------------------------------
+   5.4. Create one initial window seed per resolved activity island
+
+   Collapse each island into a window seed containing:
+     - AUID
+     - IUID
+     - first high-confidence activity timestamp
+     - final high-confidence activity timestamp
+     - request UUID of the earliest activity point
+     - all time AUID identity-count context.
+
+   These are used to infer identity using event timings, they are not trusted identity anchors.
+------------------------------------------------------------------------------ */
+
+activity_window_seeds AS (
   SELECT
     auid,
     current_iuid AS iuid,
 
     MIN(first_occurred_at) AS window_start,
-    MAX(last_occurred_at) AS island_last_high_conf_activity_at,
+    MAX(last_occurred_at) AS last_high_conf_activity_at,
 
     ARRAY_AGG(
       first_request_uuid
@@ -2148,7 +2338,7 @@ identity_anchors AS (
       LIMIT 1
     )[OFFSET(0)] AS anchor_request_uuid,
 
-    ANY_VALUE(distinct_iuid_count_ever) AS auid_distinct_iuid_count
+    MAX(distinct_iuid_count_ever) AS auid_distinct_iuid_count
 
   FROM resolved_activity_events_with_island_id
   GROUP BY
@@ -2156,6 +2346,21 @@ identity_anchors AS (
     current_iuid,
     activity_island_id
 ),
+
+/* --------------------------------------------------------------------------
+   5.5. Calculate conservative window boundaries
+
+   Derive signals that may limit how far an activity window can extend:
+     - attributed sign-out
+     - inactivity after the last high-confidence activity
+     - next window associated with a different IUID
+     - likely shunt arrival
+     - pre-existing unattributable activity
+     - absolute 24 hour maximum duration (Safety fallback)
+
+   These boundaries are intentionally conservative. They limit the period in
+   which unresolved activity may inherit an IUID from nearby resolved activity.
+------------------------------------------------------------------------------ */
 
 attributed_signouts AS (
   SELECT
@@ -2169,17 +2374,27 @@ attributed_signouts AS (
     AND auid IS NOT NULL
 ),
 
-anchor_boundaries AS (
+/* Calculate the earliest relevant boundary signal for each window seed.
+
+   preexisting_unattributable_activity_10m identifies multi IUID AUIDs where
+   unresolved navigable activity already existed shortly before the seed.
+   These windows require stricter treatment because it implies that there was
+   activity on the AUID before the window began. This adds ambiguity to which user the activity
+   belongs to. This does not include pre-auth or sign-in pages. 
+   
+   */
+
+activity_window_seed_boundaries AS (
   SELECT
     a.*,
 
     (
       SELECT MIN(a2.window_start)
-      FROM identity_anchors a2
+      FROM activity_window_seeds a2
       WHERE a2.auid = a.auid
         AND a2.window_start > a.window_start
         AND a2.iuid != a.iuid
-    ) AS next_diff_signin_at,
+    ) AS next_different_iuid_window_start_at,
 
     (
       SELECT MIN(e.occurred_at)
@@ -2220,17 +2435,32 @@ anchor_boundaries AS (
 
     TIMESTAMP_ADD(a.window_start, INTERVAL 24 HOUR) AS max_cap_at
 
-  FROM identity_anchors a
+  FROM activity_window_seeds a
 ),
 
-anchor_last_activity AS (
-  SELECT
-    b.*,
+/* --------------------------------------------------------------------------
+   5.6. Derive candidate window ends
 
-    b.island_last_high_conf_activity_at AS last_high_conf_activity_at
+   For each seed, calculate:
 
-  FROM anchor_boundaries b
-),
+     inactivity_tail_end_at:
+       Last high-confidence activity plus the permitted inactivity threshold.
+
+     chain_end_base:
+       Initial activity-chain end, limited by sign-out, inactivity, and the
+       absolute 24-hour cap.
+
+     hard_end:
+       Maximum permissible end after applying sign-out and the 24 hour limit.
+
+     clean_end:
+       End of the period that can be treated as safely attributable before a
+       conflicting identity, shunt arrival, sign-out, inactivity timeout, or
+       maximum-duration cap is reached.
+
+   clean_end may be earlier than the full chain end where a strong end signal occures before
+   a timeout.
+------------------------------------------------------------------------------ */
 
 window_end_candidates AS (
   SELECT
@@ -2243,7 +2473,7 @@ window_end_candidates AS (
 
     IF(a.auid_distinct_iuid_count = 1, 180, 10) AS inactivity_tail_minutes
 
-  FROM anchor_last_activity a
+  FROM activity_window_seed_boundaries a
 ),
 
 windows_base AS (
@@ -2262,7 +2492,7 @@ windows_base AS (
     ) AS hard_end,
 
     LEAST(
-      IFNULL(next_diff_signin_at, max_cap_at),
+      IFNULL(next_different_iuid_window_start_at, max_cap_at),
       IF(
         auid_distinct_iuid_count > 1,
         IFNULL(next_shunt_arrival_at, max_cap_at),
@@ -2289,6 +2519,19 @@ windows_base AS (
 
   FROM window_end_candidates
 ),
+
+/* --------------------------------------------------------------------------
+   5.7. Detect overlapping identity windows
+
+   Split each AUID timeline into atomic intervals using window start and end
+   timestamps.
+
+   Count the distinct active IUIDs within each interval. Where more than one IUID
+   is active, combine adjacent overlapping intervals into overlap components.
+
+   Overlap indicates that an unresolved event cannot safely inherit one identity
+   without further evidence.
+------------------------------------------------------------------------------ */
 
 overlap_seed AS (
   SELECT auid, window_start AS interval_timestamp FROM windows_base
@@ -2389,6 +2632,20 @@ overlap_component_hard_bounds AS (
   GROUP BY auid, overlap_component_id
 ),
 
+/* --------------------------------------------------------------------------
+   5.8. Extend overlapping periods using observed device activity
+
+   Where windows overlap, inspect navigable device activity within the overlap
+   component.
+
+   Extend the chain end using the final relevant device activity plus the
+   applicable inactivity threshold, while respecting the hard end and 24 hour
+   maximum cap.
+
+   This preserves the full ambiguous activity period so it is not incorrectly
+   reclassified as clean activity immediately after the initial overlap.
+------------------------------------------------------------------------------ */
+
 overlap_component_last_device_activity AS (
   SELECT
     oc.auid,
@@ -2443,6 +2700,28 @@ windows_base_final AS (
   FROM windows_overlap_extended w
 ),
 
+/* --------------------------------------------------------------------------
+   5.9. Segment windows and classify attribution quality
+
+   Split windows into atomic time segments and calculate the number of active
+   IUIDs in each segment.
+
+   Assign one quality label:
+
+     CLEAN:
+       One attributable IUID and no known ambiguity.
+
+     OVERLAPPING:
+       More than one active IUID, or unresolved pre existing activity makes a
+       multi IUID AUID unsafe.
+
+     POST_IDENTITY_CONFLICT:
+       The segment falls after the clean attribution boundary (and of the clean end rules is applied)
+       but remains inside the wider activity chain
+
+   Only CLEAN segments may assign an IUID automatically.
+------------------------------------------------------------------------------ */
+
 segment_boundaries AS (
   SELECT auid, window_start AS interval_timestamp FROM windows_base_final
   UNION DISTINCT
@@ -2494,7 +2773,7 @@ activity_window_segments AS (
     w.last_high_conf_activity_at,
     w.inactivity_tail_end_at,
     w.inactivity_tail_minutes,
-    w.next_diff_signin_at,
+    w.next_different_iuid_window_start_at,
     w.next_shunt_arrival_at,
     w.first_attributed_signout_at,
     w.max_cap_at,
@@ -2557,7 +2836,7 @@ current_activity_windows AS (
     last_high_conf_activity_at,
     inactivity_tail_end_at,
     inactivity_tail_minutes,
-    next_diff_signin_at,
+    next_different_iuid_window_start_at,
     next_shunt_arrival_at,
     first_attributed_signout_at,
     max_cap_at,
@@ -2573,36 +2852,15 @@ current_activity_windows AS (
   FROM activity_window_segments
 ),
 
-/*
-  Performance optimisation: bucketed window matching.
+/* --------------------------------------------------------------------------
+   5.10. Match unresolved candidates to activity windows efficiently
 
-  Original logic:
-    Match each candidate event against all activity windows for the same
-    AUID using timestamp range predicates:
+   Assign candidate events and activity windows to 15-minute buckets before
+   applying exact timestamp predicates.
 
-      e.occurred_at >= w.window_start
-      AND e.occurred_at < w.window_end
-
-  Problem:
-    For high-activity or high-conflict AUIDs with many overlapping windows,
-    this creates an expensive range join explosion:
-
-      candidate events × possible windows
-
-    Even relatively small datasets can therefore become very slow if a small
-    number of AUIDs contain many activity windows.
-
-  Optimisation:
-    1. Assign candidate events to 15-minute timestamp buckets.
-    2. Expand activity windows into the same bucket space.
-    3. First join on:
-         - AUID
-         - bucket
-    4. Then apply the exact timestamp predicates afterwards.
-
-  This dramatically reduces the number of candidate window comparisons while
-  fully preserving the original matching semantics and exact timestamp logic.
-*/
+   The bucket join reduces the number of candidate window comparisons for
+   high activity AUIDs without changing the final matching semantics.
+------------------------------------------------------------------------------ */
 
 candidate_events_for_window_match AS (
   SELECT
@@ -2626,6 +2884,22 @@ current_activity_windows_bucketed AS (
   ) AS bucket
 ),
 
+/* --------------------------------------------------------------------------
+   5.11. Summarise candidate window matches and apply the safety gate
+
+   For each unresolved candidate event, count the matched windows and classify
+   the result.
+
+   An event is eligible for fallback assignment only where:
+     - exactly one distinct clean IUID matches
+     - at least one clean window matches
+     - no non-clean window matches
+     - no overlapping window matches
+     - no post-conflict window matches
+     - no unknown pre-existing activity window matches
+
+   This prevents assignment where the temporal evidence is ambiguous.
+------------------------------------------------------------------------------ */
 
 window_matches AS (
   SELECT
@@ -2746,15 +3020,6 @@ events_with_window_context AS (
     wg.has_single_unambiguous_clean_window,
 
     (
-      ${sqlNotInList("e.request_path", publicAndAuthPagePaths)}
-      AND ${sqlNotStartsWithAny("e.request_path", authPrefixes)}
-    ) AS is_not_obvious_public_or_auth_event,
-
-    FALSE AS has_previous_resolved_same_iuid_30m,
-    FALSE AS has_next_resolved_same_iuid_30m,
-    FALSE AS has_referrer_to_previous_resolved_same_iuid,
-
-    (
       wg.eligible_window_start IS NOT NULL
       AND e.occurred_at >= wg.eligible_window_start
       AND e.occurred_at <= TIMESTAMP_ADD(wg.eligible_window_start, INTERVAL 30 MINUTE)
@@ -2766,6 +3031,17 @@ events_with_window_context AS (
   LEFT JOIN window_gate wg
     ON e.request_uuid = wg.request_uuid
 ),
+
+/* --------------------------------------------------------------------------
+   5.12. Apply AUID-risk-specific fallback rules
+
+   Assign an eligible clean-window IUID where: the AUID has one historical IUID 
+   but contains unanchored activity OR the AUID has multiple historical IUIDs, but 
+   the matched window contains only one active IUID and no unknown pre-existing activity.
+
+   This ensures that multi IUID AUIDs face an additional safety gate. It is important that the valid
+   pre-sign in paths are all added correctly here or it will block multi-user iuid assignment where no known risk exists.
+------------------------------------------------------------------------------ */
 
 window_assignment_decision AS (
   SELECT
@@ -2823,6 +3099,32 @@ window_assignment_decision AS (
   FROM events_with_window_context
 ),
 
+/* --------------------------------------------------------------------------
+   5.13. Retain narrow context for the Stage 6 repair walk
+
+   Preserve only the window context fields required by the later repair stage.
+
+   Some unresolved events must retain this context even where Stage 5 does not
+   assign an IUID. Stage 6 uses it to prevent repair assignments that conflict
+   with activity window evidence or occur inside ambiguous periods.
+------------------------------------------------------------------------------ */
+
+window_context_for_downstream AS (
+  SELECT
+    request_uuid,
+
+    eligible_window_iuid,
+    eligible_window_start,
+
+    matched_overlapping_windows,
+    matched_post_conflict_windows,
+    matched_unknown_preexisting_activity_windows,
+
+    eligible_window_has_unknown_preexisting_activity
+
+  FROM window_assignment_decision
+),
+
 window_assignments_to_apply AS (
   SELECT
     request_uuid,
@@ -2839,7 +3141,7 @@ window_assignments_to_apply AS (
       ELSE 'ACTIVITY_WINDOW_CLEAN_FALLBACK'
     END AS applied_iuid_method,
 
-    'PART_3_ACTIVITY_WINDOW_FALLBACK' AS applied_resolution_stage,
+    'STAGE_5_ACTIVITY_WINDOW_FALLBACK' AS applied_resolution_stage,
 
     window_assignment_reason,
     window_assignment_supporting_evidence,
@@ -2862,28 +3164,40 @@ window_assignments_to_apply AS (
 
     window_gate_reason,
     has_single_unambiguous_clean_window,
-
-    has_previous_resolved_same_iuid_30m,
-    has_next_resolved_same_iuid_30m,
-    has_referrer_to_previous_resolved_same_iuid,
     is_near_window_start_post_auth_activity,
-
     CURRENT_TIMESTAMP() AS window_assignment_applied_at
 
   FROM window_assignment_decision
   WHERE should_apply_window_iuid = TRUE
 ),
 
+/* --------------------------------------------------------------------------
+   5.14. Update event-level identity state
+
+   Preserve identities assigned in earlier stages.
+
+   For previously unresolved events, apply the eligible activity window IUID
+   where the Stage 5 safety gate succeeds.
+
+   Update the three field identity audit interface only for successful
+   assignments. Retain the narrow Stage 6 repair support context and discard
+   temporary window diagnostics.
+------------------------------------------------------------------------------ */
+
 current_state_after_window_assignments AS (
   SELECT
     e.* EXCEPT (
+      distinct_iuid_count_ever,
       current_iuid,
       current_iuid_method,
       current_resolution_stage,
-      current_iteration,
-      is_currently_resolved,
       identity_resolution_priority
     ),
+
+/* Rename the all-time AUID identity-count field at the Stage 5 boundary.
+   Downstream models use this clearer AUID-level name when applying safety
+   thresholds. */
+e.distinct_iuid_count_ever AS auid_distinct_iuid_count,
 
     COALESCE(e.current_iuid, a.applied_iuid) AS current_iuid,
 
@@ -2907,11 +3221,6 @@ current_state_after_window_assignments AS (
       ELSE e.current_resolution_stage
     END AS current_resolution_stage,
 
-    3 AS current_iteration,
-
-    COALESCE(e.current_iuid, a.applied_iuid) IS NOT NULL
-      AS is_currently_resolved,
-
     CASE
       WHEN e.identity_resolution_locked = TRUE
         THEN 100
@@ -2925,37 +3234,19 @@ current_state_after_window_assignments AS (
       ELSE 0
     END AS identity_resolution_priority,
 
-    a.window_assignment_reason,
-    a.window_assignment_supporting_evidence,
-    COALESCE(a.matched_windows_total, 0) AS matched_windows_total,
-    COALESCE(a.matched_clean_windows, 0) AS matched_clean_windows,
-    COALESCE(a.matched_non_clean_windows, 0) AS matched_non_clean_windows,
-    COALESCE(a.matched_overlapping_windows, 0) AS matched_overlapping_windows,
-    COALESCE(a.matched_post_conflict_windows, 0) AS matched_post_conflict_windows,
-    COALESCE(a.matched_unknown_preexisting_activity_windows, 0) AS matched_unknown_preexisting_activity_windows,
+    COALESCE(wc.matched_overlapping_windows, 0) AS matched_overlapping_windows,
+    COALESCE(wc.matched_post_conflict_windows, 0) AS matched_post_conflict_windows,
+    COALESCE(wc.matched_unknown_preexisting_activity_windows, 0) AS matched_unknown_preexisting_activity_windows,
 
-    a.matched_any_distinct_iuid,
-    a.matched_clean_distinct_iuid,
-    a.matched_clean_iuids,
-    a.applied_iuid AS eligible_window_iuid,
-    a.eligible_window_start,
-    a.eligible_window_end,
-    a.eligible_window_quality,
-    a.eligible_window_active_iuid_count,
-    a.eligible_window_has_unknown_preexisting_activity,
-    a.window_gate_reason,
-    a.has_single_unambiguous_clean_window,
-    a.has_previous_resolved_same_iuid_30m,
-    a.has_next_resolved_same_iuid_30m,
-    a.has_referrer_to_previous_resolved_same_iuid,
-    a.is_near_window_start_post_auth_activity,
-    a.window_assignment_applied_at,
+    wc.eligible_window_iuid,
+    wc.eligible_window_start,
+    wc.eligible_window_has_unknown_preexisting_activity,
 
-    a.applied_iuid IS NOT NULL AS assigned_by_activity_window_fallback
-
-  FROM current_identity_resolution_state e
-  LEFT JOIN window_assignments_to_apply a
-    ON e.request_uuid = a.request_uuid
+    FROM current_identity_resolution_state e
+    LEFT JOIN window_context_for_downstream wc
+      ON e.request_uuid = wc.request_uuid
+    LEFT JOIN window_assignments_to_apply a
+      ON e.request_uuid = a.request_uuid
 )
 
 SELECT *
@@ -2964,15 +3255,56 @@ FROM current_state_after_window_assignments
 `);
 
 /* --------------------------------------------------------------------------
-   9A. Component 4 input: second walk input scope
+   6A. Targeted post-window repair propagation: define recursive-walk input scope
 
-   Incremental model. This is the only place that decides full refresh vs
-   incremental rebuild scope for the post-window repair walk.
--------------------------------------------------------------------------- */
+   Create the event subset that will be passed into the targeted post-window
+   repair model.
+
+   This model exists as a separate incremental input table because the repair
+   walk itself uses WITH RECURSIVE and must therefore run in a standard Dataform
+   table rather than inside an incremental MERGE model.
+
+   Stage 5 has already:
+     - applied clean activity-window fallback assignments where safe;
+     - retained narrow window-context fields for unresolved events;
+     - preserved the event-level identity state required by later repair logic.
+
+   This Stage 6A input model acts as the boundary between that durable Stage 5
+   state and the standard recursive repair-run table created in Stage 6B.
+
+   On a full refresh:
+     - identity_rebuild_checkpoint is set to the configured pipeline start date;
+     - all valid Stage 5 events from that date onwards are included.
+
+   On an incremental run:
+     - recursiveWalkInputScopePreOps() calculates an overlapping rebuild
+       checkpoint from the latest date already stored in this input table;
+     - the checkpoint is moved backwards by one day and the configured additional
+       rebuild hours;
+     - the existing contents of this temporary input table are cleared;
+     - only Stage 5 events occurring on or after the checkpoint are reloaded.
+
+   The overlapping rebuild period is intentional. It ensures that repair walks,
+   activity-window context, and downstream sessions crossing an incremental-run
+   boundary can be reconstructed consistently.
+
+   The standard recursive repair-run table in Stage 6B reads this scoped input
+   table and performs the targeted post-window walk only on the required event
+   subset.
+
+   Grain:
+     One row per valid web-request event within the current repair-walk scope.
+
+   Input:
+     identity_activity_windows_[event source]
+
+   Output:
+     identity_second_recursive_walk_input_[event source]
+------------------------------------------------------------------------------ */
 
 publish(
   secondWalkInputName,
-  incrementalEventConfig("Input scope for post-window repair walk")
+  incrementalEventConfig("Input scope for targeted post-window repair propagation")
 )
 .preOps(ctx => recursiveWalkInputScopePreOps(ctx))
 .query(ctx => `
@@ -2984,14 +3316,48 @@ WHERE occurred_at >= identity_rebuild_checkpoint
 `);
 
 /* --------------------------------------------------------------------------
-   9A. Component 4A: second recursive walk run
+   6B. Targeted post window repair propagation: run scoped recursive walk
 
-   Standard table. This keeps WITH RECURSIVE out of the incremental MERGE.
--------------------------------------------------------------------------- */
+   Attempt to assign identities to unresolved events that remain after the
+   Stage 5 activity-window fallback.
+
+   This is a deliberately local repair walk rather than a second full-history
+   reconstruction. Stage 6A has already restricted the input to the current
+   overlapping rebuild scope. This model further limits the event graph around
+   AUIDs containing repair candidates.
+
+   The repair walk uses three parent-link rule families:
+     - exact referrer links within a 120 minute lookback;
+     - null referrer or public landing page previous-parent fallbacks within a
+       30 minute lookback;
+     - near window start previous resolved parent links within a 30 minute
+       lookback.
+
+   Exact referrer links remain eligible during ambiguous activity window
+   periods. Weaker temporal fallback links are created only where Stage 5 has
+   not identified unsafe temporal context.
+
+   Repair proposals are applied only where:
+     - the proposed IUID does not conflict with an eligible Stage 5 window IUID
+     - no attributed sign out exists between the candidate event and the repair
+       source.
+
+   Existing identity assignments are preserved. Only previously unresolved
+   events may receive a Stage 6 identity.
+
+   Grain:
+     One row per valid web request event within the current repair walk scope.
+
+   Input:
+     identity_second_recursive_walk_input_[event source]
+
+   Output:
+     identity_second_recursive_walk_run_[event source]
+------------------------------------------------------------------------------ */
 
 publish(
   secondWalkRunName,
-  stagingConfig("Run post-window repair walk for current rebuild scope", {
+  stagingConfig( "Run targeted post-window repair propagation for current rebuild scope", {
     type: "table",
     bigquery: {
       partitionBy: "event_date",
@@ -3002,6 +3368,22 @@ publish(
 .query(ctx => `
 
 WITH RECURSIVE
+
+/* --------------------------------------------------------------------------
+   6B.1. Load Stage 5 state and identify repair candidates
+
+   Load the scoped Stage 5 event state.
+
+   Mark:
+     - navigable GET parents, excluding redirects
+     - events that already have an identity
+     - unresolved events eligible for repair
+     - negative activity window context
+     - unknown pre-existing activity risk
+
+   Only unresolved, unlocked events on uncertain single IUID or high risk
+   multi IUID AUIDs enter the repair walk.
+------------------------------------------------------------------------------ */
 
 current_state AS (
   SELECT *
@@ -3049,6 +3431,19 @@ events_base AS (
     AND e.auid IS NOT NULL
 ),
 
+/* --------------------------------------------------------------------------
+   6B.2. Restrict the local AUID event graph
+
+   For each AUID containing repair candidates, load only events betweenn two hours 
+   before the earliest candidate and the latest candidate timestamp.
+
+   The two hour lower bound covers the longest lookback used by any individual
+   parent link rule.
+
+   Stage 6 is intentionally local. Longer journeys should already have been
+   resolved through Stage 4 recursive propagation or Stage 5 activity windows.
+------------------------------------------------------------------------------ */
+
 candidate_events AS (
   SELECT *
   FROM events_base
@@ -3063,20 +3458,22 @@ candidate_auid_time_bounds AS (
       PERFORMANCE STRATEGY 1:
       Bound the local AUID scope around repair candidates.
 
-      The original Part 4 could pull a candidate AUID's whole history into
-      events_scope. That made later joins and windows operate over far more
-      rows than the repair rules could actually use.
+      Stage 6 is intentionally a local repair walk rather than a full-history
+      reconstruction. It searches for reachable identity evidence within two hours
+      before the earliest candidate event.
 
-      These bounds preserve the rule lookbacks:
+      This covers the maximum lookback required by any single repair rule:
         - explicit referrer: 120 minutes
         - previous parent: 30 minutes
         - near-window-start parent: 30 minutes
 
-      Resolved events are still included as anchors, but only when they are
-      close enough to candidate events to be reachable by the repair rules.
+      A longer multi-edge chain may extend beyond this local scope and will not be
+      repaired in Stage 6. Longer journeys should already have been resolved by the
+      stricter Stage 4 propagation or Stage 5 activity windows.
     */
+
     TIMESTAMP_SUB(MIN(occurred_at), INTERVAL 2 HOUR) AS min_needed_at,
-    TIMESTAMP_ADD(MAX(occurred_at), INTERVAL 30 MINUTE) AS max_needed_at
+    MAX(occurred_at) AS max_needed_at
 
   FROM candidate_events
   GROUP BY auid
@@ -3105,17 +3502,22 @@ children_to_repair AS (
 ),
 
 /* --------------------------------------------------------------------------
-   Parent lookup tables
+   6B.3. Prepare rule specific parent lookups
 
-   PERFORMANCE STRATEGY 2:
-   Use pre-filtered parent tables so each rule joins against the smallest
-   relevant parent population.
+   Create narrow parent tables for the three repair rule families.
 
-   This does not change rule logic. It only prevents each rule from repeatedly
-   joining to a broader parent_lookup than it needs.
--------------------------------------------------------------------------- */
+   Eligible parents are:
+     - navigable GET events; or
+     - events that already have an identity.
 
-parent_lookup AS (
+   Sign out requests are excluded so later activity cannot inherit an identity
+   directly from a sign out event.
+
+   Separate lookup tables reduce repeated joins against unnecessary rows without
+   changing the rule logic.
+------------------------------------------------------------------------------ */
+
+  parent_lookup AS (
   SELECT
     request_uuid,
     occurred_at,
@@ -3128,8 +3530,11 @@ parent_lookup AS (
     hour_bucket,
     minute_bucket
   FROM events_scope
-  WHERE is_navigable_parent = TRUE
-     OR has_current_identity = TRUE
+  WHERE (
+      is_navigable_parent = TRUE
+      OR has_current_identity = TRUE
+    )
+    AND ${sqlNotInList("request_path", signOutPaths)}
 ),
 
 referrer_parent_lookup AS (
@@ -3161,20 +3566,26 @@ previous_parent_lookup AS (
 ),
 
 /* --------------------------------------------------------------------------
-   Rule 1: explicit referrer to resolved or unresolved same-AUID parent
+   6B.4. Rule 1: exact-referrer parent links
 
-   Bounded multi-candidate version.
+   Match a candidate child to an earlier same-AUID parent where:
+     - child referrer path-and-query equals parent path-and-query;
+     - the parent occurred within the previous 120 minutes;
+     - the parent is not the same request.
 
-   For each child, keep:
-     1. closest valid explicit-referrer parent
-     2. closest resolved explicit-referrer parent
+   Keep:
+     - the closest valid exact referrer parent;
+     - the closest resolved exact referrer parent.
 
-   PERFORMANCE STRATEGY 3A:
-   Use hour buckets as equality join keys for the 120-minute referrer lookback.
+   Resolved parents receive HIGH confidence. Unresolved parents receive MEDIUM
+   confidence and may allow a chain to reach resolved evidence indirectly.
 
-   The exact timestamp filters remain for correctness. The hour bucket only
-   narrows the join candidate set before the range filter is applied.
--------------------------------------------------------------------------- */
+   Exact referrer links remain eligible even where Stage 5 identified overlap or
+   post conflict activity-window context.
+
+   Hour buckets reduce the initial join size. Exact timestamp predicates remain
+   in place for correctness.
+------------------------------------------------------------------------------ */
 
 referrer_children AS (
   SELECT child.*
@@ -3212,8 +3623,8 @@ repair_referrer_closest_parent AS (
 
     CASE
       WHEN parent.has_current_identity = TRUE
-        THEN 'PART_4_REFERRER_TO_RESOLVED_PARENT_SAME_AUID'
-      ELSE 'PART_4_REFERRER_TO_UNRESOLVED_PARENT_SAME_AUID'
+        THEN 'STAGE_6_REFERRER_TO_RESOLVED_PARENT_SAME_AUID'
+      ELSE 'STAGE_6_REFERRER_TO_UNRESOLVED_PARENT_SAME_AUID'
     END AS match_source,
 
     FALSE AS is_weak_previous_parent_rule
@@ -3244,7 +3655,7 @@ repair_referrer_closest_resolved_parent AS (
     parent.occurred_at AS parent_at,
 
     'HIGH' AS match_confidence,
-    'PART_4_REFERRER_TO_RESOLVED_PARENT_SAME_AUID' AS match_source,
+    'STAGE_6_REFERRER_TO_RESOLVED_PARENT_SAME_AUID' AS match_source,
 
     FALSE AS is_weak_previous_parent_rule
 
@@ -3272,22 +3683,29 @@ repair_referrer_candidates AS (
 ),
 
 /* --------------------------------------------------------------------------
-   Rule 2: short-gap previous parent for null/home referrer
+   6B.5. Rule 2: short-gap previous-parent fallbacks
 
-   Bounded multi-candidate version.
+   Where no useful explicit referrer is available, link selected events to the
+   nearest recent same-AUID parent within 30 minutes.
 
-   For each child, keep:
-     1. closest valid previous parent
-     2. closest resolved previous parent
+   Apply this weak fallback only where:
+     - the referrer is NULL or a configured public landing-page path
+     - the child is not a sign-in page
+     - Stage 5 did not identify overlap or post-conflict context
+     - high-risk multi-IUID AUIDs do not have unknown pre-existing activity risk
 
-   PERFORMANCE STRATEGY 3B:
+   Unsafe weak edges are excluded before recursion begins. This prevents an
+   ambiguous link from entering the repair graph while preserving stronger
+   exact referrer routes.
+
+   PERFORMANCE STRATEGY:
    Use generated minute buckets as equality join keys for the 30-minute
    previous-parent lookback.
 
    The exact timestamp filters remain for correctness. The generated minute
    buckets prevent BigQuery from joining every child to all same-AUID parent
    rows before applying the time range.
--------------------------------------------------------------------------- */
+------------------------------------------------------------------------------ */
 
 home_or_null_children AS (
   SELECT child.*
@@ -3297,6 +3715,25 @@ home_or_null_children AS (
       OR ${sqlInList("child.request_referer_path_and_query", preAuthPagePaths)}
     )
     AND ${sqlNotInList("child.request_path", signInPagePaths)}
+
+    /*
+      Weak previous-parent links are permitted only where the child event is
+      not already inside an ambiguous temporal period identified by Stage 5.
+
+      If this condition fails, no weak edge is created for the child. The
+      recursive chain is therefore broken at that point, while stronger
+      explicit-referrer links remain available.
+    */
+    AND child.has_negative_window_context = FALSE
+
+    /*
+      For high-risk multi-IUID AUIDs, also block weak links where Stage 5 found
+      evidence of unknown activity before the candidate window.
+    */
+    AND (
+      child.auid_risk_classification != 'HIGH_RISK_MULTI_IUID_AUID'
+      OR child.has_unknown_preexisting_activity_risk = FALSE
+    )
 ),
 
 home_or_null_child_parent_minutes AS (
@@ -3328,15 +3765,15 @@ repair_home_or_null_closest_parent AS (
     CASE
       WHEN child.request_referer_path_and_query IS NULL
         AND parent.current_iuid IS NOT NULL
-        THEN 'PART_4_NULL_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
+        THEN 'STAGE_6_NULL_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
 
       WHEN child.request_referer_path_and_query IS NULL
-        THEN 'PART_4_NULL_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M'
+        THEN 'STAGE_6_NULL_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M'
 
       WHEN parent.current_iuid IS NOT NULL
-        THEN 'PART_4_HOME_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
+        THEN 'STAGE_6_HOME_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
 
-      ELSE 'PART_4_HOME_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M'
+      ELSE 'STAGE_6_HOME_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M'
     END AS match_source,
 
     TRUE AS is_weak_previous_parent_rule
@@ -3370,8 +3807,8 @@ repair_home_or_null_closest_resolved_parent AS (
 
     CASE
       WHEN child.request_referer_path_and_query IS NULL
-        THEN 'PART_4_NULL_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
-      ELSE 'PART_4_HOME_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
+        THEN 'STAGE_6_NULL_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
+      ELSE 'STAGE_6_HOME_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
     END AS match_source,
 
     TRUE AS is_weak_previous_parent_rule
@@ -3401,12 +3838,21 @@ repair_home_or_null_prev_parent AS (
 ),
 
 /* --------------------------------------------------------------------------
-   Rule 3: near-window-start previous resolved parent
+   6B.6. Rule 3: near-window-start previous resolved parent
 
-   Already resolved-only, so keep one closest rule-valid resolved parent.
+   For selected unresolved events occurring within 30 minutes of an eligible
+   Stage 5 window start, search for the nearest earlier resolved parent on the
+   same AUID.
 
-   PERFORMANCE STRATEGY 3C:
-   Reuse minute-bucket equality joins for this 30-minute resolved-parent search.
+   This temporal fallback is available only where:
+     - the child is not a public landing page or sign-in page;
+     - Stage 5 did not identify overlap or post-conflict context;
+     - high-risk multi IUID AUIDs do not have unknown pre-existing activity risk.
+
+   Only resolved parents are eligible for this rule.
+
+   PERFORMANCE STRATEGY:
+   Reuse minute bucket equality joins for this 30 minute resolved parent search.
 -------------------------------------------------------------------------- */
 
 near_window_start_children AS (
@@ -3417,6 +3863,11 @@ near_window_start_children AS (
     AND child.occurred_at <= TIMESTAMP_ADD(child.eligible_window_start, INTERVAL 30 MINUTE)
     AND ${sqlNotInList("child.request_path", preAuthPagePaths)}
     AND ${sqlNotInList("child.request_path", signInPagePaths)}
+    AND child.has_negative_window_context = FALSE
+    AND (
+      child.auid_risk_classification != 'HIGH_RISK_MULTI_IUID_AUID'
+      OR child.has_unknown_preexisting_activity_risk = FALSE
+    )
 ),
 
 near_window_start_child_parent_minutes AS (
@@ -3441,7 +3892,7 @@ repair_near_window_start_resolved_parent AS (
     parent.occurred_at AS parent_at,
 
     'MEDIUM' AS match_confidence,
-    'PART_4_NEAR_WINDOW_START_PREVIOUS_RESOLVED_PARENT_SAME_AUID' AS match_source,
+    'STAGE_6_NEAR_WINDOW_START_PREVIOUS_RESOLVED_PARENT_SAME_AUID' AS match_source,
 
     FALSE AS is_weak_previous_parent_rule
 
@@ -3462,8 +3913,22 @@ repair_near_window_start_resolved_parent AS (
 ),
 
 /* --------------------------------------------------------------------------
-   Choose the best rule-derived parent per child.
--------------------------------------------------------------------------- */
+   6B.7. Select the strongest parent link for each child
+
+   Combine all rule-derived candidates and retain one parent per child.
+
+   Apply the following precedence before recency:
+
+     1. exact referrer to resolved parent
+     2. exact referrer to unresolved parent
+     3. near-window-start previous resolved parent
+     4. null or public-landing-page fallback to resolved parent
+     5. null or public-landing-page fallback to unresolved parent
+
+   Where multiple candidates have the same rule strength, prefer:
+     - the most recent parent
+     - request UUID as a deterministic tiebreaker.
+------------------------------------------------------------------------------ */
 
 parent_candidates AS (
   SELECT * FROM repair_referrer_candidates
@@ -3491,21 +3956,49 @@ best_parent AS (
           parent_at,
           is_weak_previous_parent_rule
         )
-        ORDER BY
-          CASE match_confidence
-            WHEN 'HIGH' THEN 3
-            WHEN 'MEDIUM' THEN 2
-            WHEN 'LOW' THEN 1
-            ELSE 0
-          END DESC,
-          parent_at DESC,
-          parent_request_uuid
+    ORDER BY
+      CASE
+        WHEN match_source = 'STAGE_6_REFERRER_TO_RESOLVED_PARENT_SAME_AUID'
+          THEN 5
+
+        WHEN match_source = 'STAGE_6_REFERRER_TO_UNRESOLVED_PARENT_SAME_AUID'
+          THEN 4
+
+        WHEN match_source =
+          'STAGE_6_NEAR_WINDOW_START_PREVIOUS_RESOLVED_PARENT_SAME_AUID'
+          THEN 3
+
+        WHEN match_source IN (
+          'STAGE_6_NULL_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M',
+          'STAGE_6_HOME_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
+        )
+          THEN 2
+
+        WHEN match_source IN (
+          'STAGE_6_NULL_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M',
+          'STAGE_6_HOME_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M'
+        )
+          THEN 1
+
+        ELSE 0
+      END DESC,
+      parent_at DESC,
+      parent_request_uuid
         LIMIT 1
       )[OFFSET(0)] AS best
     FROM parent_candidates
     GROUP BY child_request_uuid
   )
 ),
+
+/* --------------------------------------------------------------------------
+   6B.8. Build the local repair graph
+
+   Attach the selected parent link to each event in scope.
+
+   Events that already have an identity are treated as terminal repair sources
+   and do not point backwards to another parent.
+------------------------------------------------------------------------------ */
 
 events_with_parent AS (
   SELECT
@@ -3524,6 +4017,21 @@ events_with_parent AS (
   LEFT JOIN best_parent bp
     ON e.request_uuid = bp.child_request_uuid
 ),
+
+/* --------------------------------------------------------------------------
+   6B.9. Recursively walk to the nearest resolved identity
+
+   Starting from each unresolved repair candidate, follow selected parent links
+   backwards until one of the following conditions:
+     - a currently resolved event is reached
+     - no parent exists
+     - a cycle is detected
+     - the defensive maximum depth of 25 links is reached.
+
+   Track visited request UUIDs to prevent recursive cycles.
+
+   The first reachable current IUID becomes the proposed repair identity.
+------------------------------------------------------------------------------ */
 
 repair_walk AS (
   SELECT
@@ -3571,6 +4079,18 @@ repair_walk AS (
     AND NOT p.request_uuid IN UNNEST(w.visited_request_uuids)
 ),
 
+/* --------------------------------------------------------------------------
+   6B.10. Collapse each repair walk to one proposed source
+
+   Reduce the recursive output to one result per starting request UUID.
+
+   Prefer the nearest reachable event containing a current IUID. Record:
+     - repair source request UUID
+     - repair source timestamp
+     - repair depth
+     - proposed repaired IUID
+------------------------------------------------------------------------------ */
+
 collapsed_repair_walk AS (
   SELECT
     start_request_uuid AS request_uuid,
@@ -3603,6 +4123,21 @@ repair_assignments AS (
   WHERE c.best_repair.nearest_current_iuid IS NOT NULL
 ),
 
+/* --------------------------------------------------------------------------
+   6B.11. Apply proposal level safety gates
+
+   Convert each reachable repair source into an identity proposal.
+
+   Apply the proposal only where:
+     - the repaired IUID does not conflict with an eligible Stage 5 window IUID
+     - no attributed sign-out for that IUID occurs between the candidate event
+       and the repair source.
+
+   These checks apply to both strong and weak repair routes.
+
+   Leave proposed identity audit fields NULL where no repaired IUID is found.
+------------------------------------------------------------------------------ */
+
 repair_walk_proposals AS (
   SELECT
     e.request_uuid,
@@ -3611,40 +4146,40 @@ repair_walk_proposals AS (
 
     CASE
       WHEN r.repaired_iuid IS NOT NULL
-        AND p.parent_match_source_repair = 'PART_4_REFERRER_TO_RESOLVED_PARENT_SAME_AUID'
-        THEN 'PART_4_REFERRER_TO_RESOLVED_PARENT_SAME_AUID'
+        AND p.parent_match_source_repair = 'STAGE_6_REFERRER_TO_RESOLVED_PARENT_SAME_AUID'
+        THEN 'STAGE_6_REFERRER_TO_RESOLVED_PARENT_SAME_AUID'
 
       WHEN r.repaired_iuid IS NOT NULL
-        AND p.parent_match_source_repair = 'PART_4_REFERRER_TO_UNRESOLVED_PARENT_SAME_AUID'
-        THEN 'PART_4_REFERRER_CHAIN_TO_RESOLVED_SAME_AUID'
-
-      WHEN r.repaired_iuid IS NOT NULL
-        AND p.parent_match_source_repair IN (
-          'PART_4_NULL_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M',
-          'PART_4_HOME_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
-        )
-        THEN 'PART_4_PREVIOUS_RESOLVED_PARENT_SAME_AUID_SHORT_GAP'
+        AND p.parent_match_source_repair = 'STAGE_6_REFERRER_TO_UNRESOLVED_PARENT_SAME_AUID'
+        THEN 'STAGE_6_REFERRER_CHAIN_TO_RESOLVED_SAME_AUID'
 
       WHEN r.repaired_iuid IS NOT NULL
         AND p.parent_match_source_repair IN (
-          'PART_4_NULL_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M',
-          'PART_4_HOME_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M'
+          'STAGE_6_NULL_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M',
+          'STAGE_6_HOME_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
         )
-        THEN 'PART_4_PREVIOUS_PARENT_CHAIN_TO_RESOLVED_SAME_AUID_SHORT_GAP'
+        THEN 'STAGE_6_PREVIOUS_RESOLVED_PARENT_SAME_AUID_SHORT_GAP'
 
       WHEN r.repaired_iuid IS NOT NULL
-        AND p.parent_match_source_repair = 'PART_4_NEAR_WINDOW_START_PREVIOUS_RESOLVED_PARENT_SAME_AUID'
-        THEN 'PART_4_NEAR_WINDOW_START_PREVIOUS_RESOLVED_PARENT_SAME_AUID'
+        AND p.parent_match_source_repair IN (
+          'STAGE_6_NULL_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M',
+          'STAGE_6_HOME_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M'
+        )
+        THEN 'STAGE_6_PREVIOUS_PARENT_CHAIN_TO_RESOLVED_SAME_AUID_SHORT_GAP'
 
       WHEN r.repaired_iuid IS NOT NULL
-        THEN 'PART_4_REPAIR_WALK_TO_NEAREST_CURRENT_IDENTITY'
+        AND p.parent_match_source_repair = 'STAGE_6_NEAR_WINDOW_START_PREVIOUS_RESOLVED_PARENT_SAME_AUID'
+        THEN 'STAGE_6_NEAR_WINDOW_START_PREVIOUS_RESOLVED_PARENT_SAME_AUID'
 
-      ELSE 'UNRESOLVED_AFTER_PART_4_REPAIR_WALK'
+      WHEN r.repaired_iuid IS NOT NULL
+        THEN 'STAGE_6_REPAIR_WALK_TO_NEAREST_CURRENT_IDENTITY'
+
+      ELSE 'UNRESOLVED_AFTER_STAGE_6_REPAIR_WALK'
     END AS proposed_iuid_method,
 
     CASE
       WHEN r.repaired_iuid IS NOT NULL
-        THEN 'PART_4_SECOND_RECURSIVE_WALK'
+        THEN 'STAGE_6_TARGETED_POST_WINDOW_REPAIR_PROPAGATION'
       ELSE NULL
     END AS proposed_resolution_stage,
 
@@ -3680,14 +4215,6 @@ repair_walk_proposals AS (
         OR e.eligible_window_iuid = r.repaired_iuid
       )
 
-      AND (
-        e.auid_risk_classification != 'HIGH_RISK_MULTI_IUID_AUID'
-        OR (
-          COALESCE(p.parent_is_weak_previous_parent_rule_repair, FALSE) = FALSE
-          OR e.has_unknown_preexisting_activity_risk = FALSE
-        )
-      )
-
       AND NOT EXISTS (
         SELECT 1
         FROM events_base s
@@ -3706,11 +4233,6 @@ repair_walk_proposals AS (
       WHEN e.eligible_window_iuid IS NOT NULL
         AND e.eligible_window_iuid != r.repaired_iuid
         THEN 'BLOCKED_PROPOSED_IUID_CONFLICTS_WITH_ELIGIBLE_WINDOW_IUID'
-
-      WHEN e.auid_risk_classification = 'HIGH_RISK_MULTI_IUID_AUID'
-        AND COALESCE(p.parent_is_weak_previous_parent_rule_repair, FALSE) = TRUE
-        AND e.has_unknown_preexisting_activity_risk = TRUE
-        THEN 'BLOCKED_HIGH_RISK_WEAK_PARENT_WITH_UNKNOWN_PREEXISTING_ACTIVITY'
 
       WHEN EXISTS (
         SELECT 1
@@ -3735,6 +4257,18 @@ repair_walk_proposals AS (
     ON e.request_uuid = r.request_uuid
   WHERE e.is_repair_walk_candidate = TRUE
 ),
+
+/* --------------------------------------------------------------------------
+   6B.12. Retain the best eligible repair proposal
+
+   Keep only proposals that pass the final safety gates.
+
+   Where more than one eligible proposal exists defensively retain the strongest:
+     - higher identity-resolution priority
+     - shorter repair depth
+     - earlier creation timestamp
+     - IUID as a deterministic tiebreaker
+------------------------------------------------------------------------------ */
 
 deduplicated_repair_walk_proposals AS (
   SELECT
@@ -3768,16 +4302,28 @@ deduplicated_repair_walk_proposals AS (
   WHERE should_apply_proposed_iuid = TRUE
     AND proposed_iuid IS NOT NULL
   GROUP BY request_uuid
-),
+)
 
-updated_current_state AS (
+/* --------------------------------------------------------------------------
+   6B.13. Update the event-level identity state
+
+   Preserve all existing identity assignments.
+
+   For a previously unresolved event, apply the best eligible Stage 6 repair
+   proposal and update
+     - current_iuid
+     - current_resolution_stage
+     - current_iuid_method
+     - identity_resolution_priority
+
+   Do not persist temporary graph or proposal diagnostics.
+------------------------------------------------------------------------------ */
+
   SELECT
     c.* EXCEPT (
       current_iuid,
       current_iuid_method,
       current_resolution_stage,
-      current_iteration,
-      is_currently_resolved,
       identity_resolution_priority
     ),
 
@@ -3802,15 +4348,6 @@ updated_current_state AS (
       ELSE c.current_resolution_stage
     END AS current_resolution_stage,
 
-    4 AS current_iteration,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN TRUE
-      ELSE c.is_currently_resolved
-    END AS is_currently_resolved,
-
     CASE
       WHEN c.identity_resolution_locked = TRUE
         THEN 100
@@ -3822,95 +4359,45 @@ updated_current_state AS (
         THEN p.best_proposal.proposed_identity_resolution_priority
 
       ELSE c.identity_resolution_priority
-    END AS identity_resolution_priority,
-
-    p.best_proposal.proposed_assignment_created_at AS repair_walk_assignment_created_at,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN TRUE
-      ELSE FALSE
-    END AS repair_walk_assignment_applied,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.repair_source_request_uuid
-      ELSE NULL
-    END AS repair_walk_source_request_uuid,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.repair_source_occurred_at
-      ELSE NULL
-    END AS repair_walk_source_occurred_at,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.repair_depth
-      ELSE NULL
-    END AS repair_walk_depth,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.parent_request_uuid_repair
-      ELSE NULL
-    END AS repair_walk_parent_request_uuid,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.parent_match_confidence_repair
-      ELSE NULL
-    END AS repair_walk_parent_match_confidence,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.parent_match_source_repair
-      ELSE NULL
-    END AS repair_walk_parent_match_source,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.parent_is_weak_previous_parent_rule_repair
-      ELSE NULL
-    END AS repair_walk_parent_is_weak_previous_parent_rule,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN p.best_proposal.repair_walk_gate_reason
-      ELSE NULL
-    END AS repair_walk_gate_reason,
-
-    CASE
-      WHEN c.current_iuid IS NULL
-        AND p.best_proposal.proposed_iuid IS NOT NULL
-        THEN CURRENT_TIMESTAMP()
-      ELSE NULL
-    END AS repair_walk_assignment_applied_at
+    END AS identity_resolution_priority
 
   FROM current_state c
   LEFT JOIN deduplicated_repair_walk_proposals p
     ON c.request_uuid = p.request_uuid
-)
-
-SELECT *
-FROM updated_current_state
 
 `);
 
 /* --------------------------------------------------------------------------
-   9B. Component 4B: second recursive walk state
+6C. Targeted post-window repair propagation: persist durable state
 
-   Incremental table. No recursive SQL. This persists the second walk run.
--------------------------------------------------------------------------- */
+Persist the scoped Stage 6B post-window repair-walk output into the durable
+incremental event-state table read by downstream models.
+
+Stage 6B runs as a standard table because it uses WITH RECURSIVE. That table
+contains only the current rebuild scope produced by Stage 6A. This Stage 6C
+model converts that scoped run output back into durable incremental state.
+
+On a full refresh:
+- rebuild the complete valid event history.
+
+On an incremental run:
+- calculate the overlapping rebuild checkpoint;
+- delete the affected period from the existing durable state table;
+- replace that period with the newly calculated Stage 6B results;
+- retain historical rows outside the rebuild scope unchanged.
+
+This separation allows recursive SQL to be used without sacrificing the
+incremental behaviour required for production runs.
+
+Grain:
+One row per valid web-request event.
+
+Input:
+identity_second_recursive_walk_run_[event source]
+
+Output:
+identity_second_recursive_walk_[event source]
+------------------------------------------------------------------------------ */
 
 publish(
   secondWalkName,
@@ -3924,79 +4411,186 @@ FROM ${ctx.ref(secondWalkRunName)}
 
 `);
 
-  /* --------------------------------------------------------------------------
-     10. Component 5: resolve admin identities
-  -------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   7. Produce final solved event output with admin AUID normalisation
+
+   Create the final identity resolution output consumed by downstream web
+   analytics models.
+
+   Stages 3 to 6 infer the best available IUID for each web-request event.
+   This final stage preserves that inferred identity and its audit fields, then
+   applies a separate downstream safeguard for admin activity.
+
+   Admin users may move between user contexts through privileged or partially
+   observable paths. As a result, the propagated IUID attached to admin activity
+   may not reliably identify the human administrator or the user context in
+   which the request should be analysed.
+
+   To prevent admin activity from contaminating ordinary user journeys:
+     - identify each AUID that has ever produced qualifying admin-page activity;
+     - flag every event associated with that historically admin-exposed AUID;
+     - assign a stable synthetic analytics identity derived from the AUID.
+
+   A separate synthetic identity is created for each admin-exposed AUID rather
+   than assigning one service-wide admin identity. This avoids stitching
+   activity from unrelated admin devices into artificial long-running sessions.
+
+   Preserve `current_iuid` unchanged. It remains the auditable identity inferred
+   by the propagation pipeline. Downstream sessionisation and routine behavioural
+   analytics should use `admin_normalised_iuid`.
+
+   This model is rebuilt across the complete durable Stage 6C history rather
+   than incrementally. A newly observed admin-page visit changes the appropriate
+   downstream identity for all historical activity on the same AUID. Rebuilding
+   the complete final table ensures that older rows are updated consistently.
+
+   Grain:
+     One row per valid web-request event.
+
+   Input:
+     identity_second_recursive_walk_[event source]
+
+   Output:
+     identity_solved_events_[event source]
+------------------------------------------------------------------------------ */
 
 publish(
   resolvedAdminName,
-  incrementalEventConfig("Solved events with inferred identity")
+  stagingConfig(
+    "Final solved web-request events with inferred identity and admin-AUID normalisation",
+    {
+      type: "table",
+      bigquery: {
+        partitionBy: "event_date",
+        clusterBy: ["auid", "current_iuid"]
+      }
+    }
+  )
 )
-.preOps(ctx => identityEventCheckpointPreOps(ctx))
 .query(ctx => `
 
 WITH
 
-current_state AS (
+/* --------------------------------------------------------------------------
+   7.1. Load the complete durable identity resolution state
+
+   Load all valid event level identity assignments produced by Stage 6C.
+
+   The complete history is required because admin exposure is an all-time AUID
+   classification. AUIDs observed on an admin page must be normalised consistently
+   across both historical and recent activity.
+------------------------------------------------------------------------------ */
+
+identity_resolution_state AS (
   SELECT *
   FROM ${ctx.ref(secondWalkName)}
-  WHERE occurred_at >= identity_rebuild_checkpoint
 ),
 
-admin_page_events AS (
-  SELECT *
-  FROM current_state
-  WHERE request_method = 'GET'
+/* --------------------------------------------------------------------------
+   7.2. Identify historically admin exposed AUIDs
+
+   Treat an AUID as admin-exposed where it has ever produced a qualifying GET
+   request to a configured admin page path.
+
+   Exclude redirect responses because they do not represent meaningful page
+   activity.
+
+   Grain:
+     One row per historically admin-exposed AUID.
+------------------------------------------------------------------------------ */
+
+admin_exposed_auids AS (
+  SELECT DISTINCT
+    auid
+  FROM identity_resolution_state
+  WHERE auid IS NOT NULL
+    AND request_method = 'GET'
     AND COALESCE(SAFE_CAST(response_status AS STRING), 'X')
-      NOT IN ('301','302','303','307','308')
-    AND ${sqlRegexpContainsAny("request_path", adminPagePatterns)}
+      NOT IN ('301', '302', '303', '307', '308')
+    AND (${sqlRegexpContainsAny("request_path", adminPagePatterns)})
 ),
 
-admin_iuids AS (
-  SELECT DISTINCT current_iuid AS iuid
-  FROM admin_page_events
-  WHERE current_iuid IS NOT NULL
+/* --------------------------------------------------------------------------
+   7.3. Produce the explicit final output schema
 
-  UNION DISTINCT
+   Retain:
+     - the event fields required by downstream web analytics
+     - the three-field identity audit interface
+     - the two additional fields required by downstream processing
+     - the admin-exposure flag
+     - the analytics-safe normalised identity
 
-  SELECT DISTINCT CAST(request_user_id AS STRING) AS iuid
-  FROM admin_page_events
-  WHERE request_user_id IS NOT NULL
-),
+   For ordinary activity:
+     admin_normalised_iuid = current_iuid
 
-admin_group AS (
+   For activity on a historically admin exposed AUID:
+     admin_normalised_iuid = stable synthetic identity derived from the AUID
+
+   Include the event source name when hashing so the synthetic identity is
+   explicitly namespaced to the current service.
+------------------------------------------------------------------------------ */
+
+final_solved_events AS (
   SELECT
-    COALESCE(
-      CONCAT(
-        'ADMIN_GROUP:',
-        TO_HEX(SHA256(STRING_AGG(iuid, '|' ORDER BY iuid)))
-      ),
-      'ADMIN_GROUP:NO_ADMIN_IDENTITIES'
-    ) AS admin_group_id
-  FROM admin_iuids
-),
+    e.request_uuid,
+    e.occurred_at,
+    e.event_date,
+    e.event_type,
+    e.auid,
+    e.request_user_id,
 
-final AS (
-  SELECT
-    e.*,
+    e.request_path,
+    e.request_query,
+    e.request_path_and_query,
+    e.request_referer_path_and_query,
+    e.request_referer_domain,
+    e.request_method,
+    e.response_status,
+    e.response_content_type,
 
-    e.current_iuid IN (
-      SELECT iuid FROM admin_iuids
-    ) AS current_iuid_is_admin_identity,
+    e.entity_table_name,
+    e.namespace,
+    e.device_category,
 
+    /* Auditable identity resolution output. */
+    e.current_iuid,
+    e.current_iuid_method,
+    e.current_resolution_stage,
+
+    /* Additional fields required by downstream processing. */
+    e.identity_resolution_priority,
+    e.auid_distinct_iuid_count AS distinct_auid_iuid_count,
+
+    /* Flag all activity associated with a historically admin-exposed AUID. */
+    (admin.auid IS NOT NULL) AS current_auid_is_admin_exposed,
+
+    /* Use a stable per-AUID synthetic identity for admin-exposed activity.
+       Preserve the inferred IUID unchanged in current_iuid for audit and QA. */
     CASE
-      WHEN e.current_iuid IN (SELECT iuid FROM admin_iuids)
-        THEN g.admin_group_id
+      WHEN admin.auid IS NOT NULL
+        THEN CONCAT(
+          'ADMIN_AUID:',
+          TO_HEX(
+            SHA256(
+              CONCAT(
+                ${sqlString(params.eventSourceName)},
+                '|',
+                e.auid
+              )
+            )
+          )
+        )
+
       ELSE e.current_iuid
     END AS admin_normalised_iuid
 
-  FROM current_state e
-  CROSS JOIN admin_group g
+  FROM identity_resolution_state e
+  LEFT JOIN admin_exposed_auids admin
+    ON e.auid = admin.auid
 )
 
 SELECT *
-FROM final
-WHERE occurred_at >= identity_rebuild_checkpoint
+FROM final_solved_events
 
 `);
 };
