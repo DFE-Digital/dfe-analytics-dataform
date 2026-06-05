@@ -2,6 +2,7 @@ module.exports = {
 
     afqts: {
         startDate: "2026-03-01",
+
         identity: {
             anchorSources: [{
                     entityTableName: "teachers",
@@ -52,26 +53,60 @@ module.exports = {
                     dataField: "data",
                     userIdKey: "author_id"
                 }
-            ],
-            signOutPaths: ["/teacher/signed_out", "/teacher/sign_out", "/staff/sign_out", "/staff/signed_out"]
+            ]
         },
+
         paths: {
-            homePagePaths: ["/", "/?", "/eligibility/start", "/teacher/sign_in_or_sign_up", "/eligibility/qualifications", "/eligibility/degree", "/eligibility/work-experience", "/eligibility/work-experience-referee", "/eligibility/misconduct", "/eligibility/work-experience-in-england", "/eligibility/teach-children", "/eligibility/result"],
-            signInPagePaths: ["/teacher/magic_link", "/teacher/sign_in", "/staff/sign_in", "/staff/auth/entra_id/callback"],
-            signOutPagePaths: ["/teacher/signed_out", "/teacher/sign_out", "/staff/sign_out", "/staff/signed_out"],
-            preAuthAllowListPages: ["/", "/?", "/eligibility/start", "/teacher/sign_in_or_sign_up", "/eligibility/qualifications", "/eligibility/degree", "/eligibility/work-experience", "/eligibility/work-experience-referee", "/eligibility/misconduct", "/eligibility/work-experience-in-england", "/eligibility/teach-children", "/eligibility/result", "/teacher/magic_link", "/teacher/sign_in", "/staff/sign_in", "/staff/auth/entra_id/callback", "/teacher/signed_out", "/teacher/sign_out", "/staff/sign_out", "/staff/signed_out"],
-            authPrefixes: ["/auth/"],
-            adminPagePatterns: [".*/admin.*", ".*/support/.*", ".*/staff/.*", ".*/assessor/.*"]
+            preAuth: [
+                "/",
+                "/?",
+                "/eligibility/start",
+                "/teacher/sign_in_or_sign_up",
+                "/eligibility/qualifications",
+                "/eligibility/degree",
+                "/eligibility/work-experience",
+                "/eligibility/work-experience-referee",
+                "/eligibility/misconduct",
+                "/eligibility/work-experience-in-england",
+                "/eligibility/teach-children",
+                "/eligibility/result"
+            ],
+
+            signIn: [
+                "/teacher/magic_link",
+                "/teacher/sign_in",
+                "/staff/sign_in",
+                "/staff/auth/entra_id/callback"
+            ],
+
+            signOut: [
+                "/teacher/signed_out",
+                "/teacher/sign_out",
+                "/staff/sign_out",
+                "/staff/signed_out"
+            ],
+
+            authPrefixes: [
+                "/auth/"
+            ],
+
+            adminPatterns: [
+                ".*/admin.*",
+                ".*/support/.*",
+                ".*/staff/.*",
+                ".*/assessor/.*"
+            ]
         },
+
         features: {
             enableAdminNormalisation: true,
-            enableJourneyStitching: true,
             enablePreAuthPageStitching: true
         }
     },
 
     apply: {
-        startDate: "2025-06-01",
+        startDate: "2026-01-01",
+
         identity: {
             anchorSources: [{
                     entityTableName: "candidates",
@@ -179,27 +214,58 @@ module.exports = {
                     dataField: "data",
                     userIdKey: "provider_user_id"
                 }
-            ],
-            signOutPaths: ["/candidate/sign-out", "/candidate/sign-in/expired", "/candidate/sign-out", "/auth/dfe-support/sign-out"]
+            ]
         },
+
         paths: {
-            homePagePaths: ["/", "/?"],
-            signInPagePaths: ["/candidate/sign-in/check-email", "/candidate/sign-in/confirm", "/provider/sign-in", "/candidate/sign-in", "/support/sign-in", "/login"],
-            signOutPagePaths: ["/candidate/sign-out", "/candidate/sign-in/expired", "/candidate/sign-out", "/auth/dfe-support/sign-out"],
-            preAuthAllowListPages: ["/", "/?", "/candidate/sign-in/check-email", "/candidate/sign-in/confirm", "/provider/sign-in", "/candidate/sign-in", "/support/sign-in", "/login"],
-            excludedPathsForActivity: ["/", "/?", "/candidate/sign-in/check-email", "/candidate/sign-in/confirm", "/provider/sign-in", "/candidate/sign-in", "/support/sign-in", "/login", "/candidate/sign-out", "/candidate/sign-in/expired", "/candidate/sign-out", "/auth/dfe-support/sign-out"],
-            authPrefixes: ["/auth/"],
-            adminPagePatterns: [".*/admin.*", ".*/support/.*"]
+            preAuth: [
+                "/",
+                "/?",
+                "/candidate/account",
+                "/candidate/sign-in/expired",
+                "/candidate/sign-up",
+                "/candidate/sign-up/check-email",
+                "/candidate/apply",
+                "/candidate/find-feedback",
+                "/auth/failure"
+            ],
+
+            signIn: [
+                "/candidate/sign-in/check-email",
+                "/candidate/sign-in/confirm",
+                "/provider/sign-in",
+                "/candidate/sign-in",
+                "/support/sign-in",
+                "/login",
+                "/auth/one-login/callback"
+            ],
+
+            signOut: [
+                "/candidate/sign-out",
+                "/candidate/sign-in/expired",
+                "/candidate/sign-out",
+                "/auth/dfe-support/sign-out"
+            ],
+
+            authPrefixes: [
+                "/auth/"
+            ],
+
+            adminPatterns: [
+                ".*/admin.*",
+                ".*/support/.*"
+            ]
         },
+
         features: {
             enableAdminNormalisation: true,
-            enableJourneyStitching: true,
             enablePreAuthPageStitching: true
         }
     },
 
     gse: {
         startDate: "2026-01-01",
+
         identity: {
             anchorSources: [{
                 entityTableName: "users",
@@ -209,28 +275,50 @@ module.exports = {
                 requestMethods: ["GET"],
                 dataField: "hidden_data",
                 userIdKey: "sub"
-            }],
-            signOutPaths: ["/candidate/sign-out", "/candidate/sign-in/expired", "/candidate/sign-out", "/auth/dfe-support/sign-out"]
+            }]
         },
+
         paths: {
-            homePagePaths: ["/", "/?"],
-            signInPagePaths: ["/candidate/sign-in/check-email", "/candidate/sign-in/confirm", "/provider/sign-in", "/candidate/sign-in", "/support/sign-in", "/login"],
-            signOutPagePaths: ["/candidate/sign-out", "/candidate/sign-in/expired", "/candidate/sign-out", "/auth/dfe-support/sign-out"],
-            preAuthAllowListPages: ["/", "/?", "/candidate/sign-in/check-email", "/candidate/sign-in/confirm", "/provider/sign-in", "/candidate/sign-in", "/support/sign-in", "/login"],
-            excludedPathsForActivity: ["/", "/?", "/candidate/sign-in/check-email", "/candidate/sign-in/confirm", "/provider/sign-in", "/candidate/sign-in", "/support/sign-in", "/login", "/candidate/sign-out", "/candidate/sign-in/expired", "/candidate/sign-out", "/auth/dfe-support/sign-out"],
-            authPrefixes: ["/auth/"],
-            adminPagePatterns: [".*/admin.*", ".*/support/.*"]
+            preAuth: [
+                "/",
+                "/?"
+            ],
+
+            signIn: [
+                "/candidate/sign-in/check-email",
+                "/candidate/sign-in/confirm",
+                "/provider/sign-in",
+                "/candidate/sign-in",
+                "/support/sign-in",
+                "/login"
+            ],
+
+            signOut: [
+                "/candidate/sign-out",
+                "/candidate/sign-in/expired",
+                "/candidate/sign-out",
+                "/auth/dfe-support/sign-out"
+            ],
+
+            authPrefixes: [
+                "/auth/"
+            ],
+
+            adminPatterns: [
+                ".*/admin.*",
+                ".*/support/.*"
+            ]
         },
+
         features: {
             enableAdminNormalisation: true,
-            enableJourneyStitching: true,
             enablePreAuthPageStitching: true
         }
     },
 
-
     publish: {
         startDate: "2026-03-01",
+
         identity: {
             anchorSources: [{
                     entityTableName: "saved_course",
@@ -316,7 +404,7 @@ module.exports = {
                         "/course/*/",
                         "/candidate/recent-searches/clear_all",
                         "/support/*/providers/*/users/*",
-                        "/support/providers-onboarding-form-requests/new",
+                        "/support/providers-onboarding-form-requests/new"
                     ],
                     requestMethods: ["GET"],
                     dataField: "data",
@@ -375,27 +463,49 @@ module.exports = {
                     dataField: "data",
                     userIdKey: "id"
                 }
-            ],
-            signOutPaths: ["/sign-out", "/auth/dfe/signout", "/auth/one-login/backchannel-logout"]
+            ]
         },
+
         paths: {
-            homePagePaths: ["/", "/?"],
-            signInPagePaths: ["/auth/one-login/callback", "/candidate/saved-courses/sign_in", "/candidate/saved-courses/after_auth", "/sign-in", "/auth/dfe/callback"],
-            signOutPagePaths: ["/sign-out", "/auth/dfe/signout", "/auth/one-login/backchannel-logout"],
-            preAuthAllowListPages: ["/", "/?", "/auth/one-login/callback", "/candidate/saved-courses/sign_in", "/candidate/saved-courses/after_auth", "/sign-in", "/auth/dfe/callback"],
-            excludedPathsForActivity: ["/", "/?", "/auth/one-login/callback", "/candidate/saved-courses/sign_in", "/candidate/saved-courses/after_auth", "/sign-in", "/auth/dfe/callback", "/sign-out", "/auth/dfe/signout", "/auth/one-login/backchannel-logout"],
-            authPrefixes: ["/auth/"],
-            adminPagePatterns: [".*/admin.*", ".*/support.*", ".*/wp-admin.*"]
+            preAuth: [
+                "/",
+                "/?"
+            ],
+
+            signIn: [
+                "/auth/one-login/callback",
+                "/candidate/saved-courses/sign_in",
+                "/candidate/saved-courses/after_auth",
+                "/sign-in",
+                "/auth/dfe/callback"
+            ],
+
+            signOut: [
+                "/sign-out",
+                "/auth/dfe/signout",
+                "/auth/one-login/backchannel-logout"
+            ],
+
+            authPrefixes: [
+                "/auth/"
+            ],
+
+            adminPatterns: [
+                ".*/admin.*",
+                ".*/support.*",
+                ".*/wp-admin.*"
+            ]
         },
+
         features: {
             enableAdminNormalisation: true,
-            enableJourneyStitching: true,
             enablePreAuthPageStitching: true
         }
     },
 
     register: {
         startDate: "2026-01-01",
+
         identity: {
             anchorSources: [{
                     entityTableName: "users",
@@ -415,27 +525,47 @@ module.exports = {
                     dataField: "data",
                     userIdKey: "user_id"
                 }
-            ],
-            signOutPaths: ["/sign-out", "/auth/dfe/sign-out", "/auth/failure"]
+            ]
         },
+
         paths: {
-            homePagePaths: ["/", "/?"],
-            signInPagePaths: ["/auth/dfe/callback", "/sign-in/", "/sign-in"],
-            signOutPagePaths: ["/sign-out", "/auth/dfe/sign-out", "/auth/failure"],
-            preAuthAllowListPages: ["/", "/?", "/auth/dfe/callback", "/sign-in/", "/sign-in"],
-            excludedPathsForActivity: ["/", "/?", "/auth/dfe/callback", "/sign-in/", "/sign-in", "/sign-out", "/auth/dfe/sign-out", "/auth/failure"],
-            authPrefixes: ["/auth/"],
-            adminPagePatterns: [".*/admin.*", ".*/system-admin.*", ".*/wp-admin.*"]
+            preAuth: [
+                "/",
+                "/?"
+            ],
+
+            signIn: [
+                "/auth/dfe/callback",
+                "/sign-in/",
+                "/sign-in"
+            ],
+
+            signOut: [
+                "/sign-out",
+                "/auth/dfe/sign-out",
+                "/auth/failure"
+            ],
+
+            authPrefixes: [
+                "/auth/"
+            ],
+
+            adminPatterns: [
+                ".*/admin.*",
+                ".*/system-admin.*",
+                ".*/wp-admin.*"
+            ]
         },
+
         features: {
             enableAdminNormalisation: true,
-            enableJourneyStitching: true,
             enablePreAuthPageStitching: true
         }
     },
 
     itt_mentor: {
         startDate: "2025-06-01",
+
         identity: {
             anchorSources: [{
                     entityTableName: "users",
@@ -509,27 +639,47 @@ module.exports = {
                     dataField: "data",
                     userIdKey: "user_id"
                 }
-            ],
-            signOutPaths: ["/auth/dfe/sign-out", "/auth/failure"]
+            ]
         },
+
         paths: {
-            homePagePaths: ["/", "/?"],
-            signInPagePaths: ["/auth/dfe/callback", "/sign-in"],
-            signOutPagePaths: ["/auth/dfe/sign-out", "/auth/failure"],
-            preAuthAllowListPages: ["/", "/auth/dfe/callback", "/sign-in"],
-            excludedPathsForActivity: ["/", "/auth/dfe/callback", "/sign-in", "/auth/dfe/sign-out", "/auth/failure"],
-            authPrefixes: ["/auth/"],
-            adminPagePatterns: [".*/admin.*", ".*/support.*", ".*/wp-admin.*", ".*/administrator.*"]
+            preAuth: [
+                "/",
+                "/?",
+                "/grant-conditions"
+            ],
+
+            signIn: [
+                "/auth/dfe/callback",
+                "/sign-in"
+            ],
+
+            signOut: [
+                "/auth/dfe/sign-out",
+                "/auth/failure"
+            ],
+
+            authPrefixes: [
+                "/auth/"
+            ],
+
+            adminPatterns: [
+                ".*/admin.*",
+                ".*/support.*",
+                ".*/wp-admin.*",
+                ".*/administrator.*"
+            ]
         },
+
         features: {
             enableAdminNormalisation: true,
-            enableJourneyStitching: true,
             enablePreAuthPageStitching: true
         }
     },
 
     find_placements: {
         startDate: "2025-06-01",
+
         identity: {
             anchorSources: [{
                     entityTableName: "users",
@@ -555,27 +705,47 @@ module.exports = {
                     dataField: "data",
                     userIdKey: "created_by_id"
                 }
-            ],
-            signOutPaths: ["/auth/dfe/sign-out", "/auth/failure"]
+            ]
         },
+
         paths: {
-            homePagePaths: ["/", "/?"],
-            signInPagePaths: ["/sign-in", "/login", "/auth/dfe/callback"],
-            signOutPagePaths: ["/auth/dfe/sign-out", "/auth/failure"],
-            preAuthAllowListPages: ["/", "/sign-in", "/login", "/auth/dfe/callback"],
-            excludedPathsForActivity: ["/", "/sign-in", "/login", "/auth/dfe/callback", "/auth/dfe/sign-out", "/auth/failure"],
-            authPrefixes: ["/auth/"],
-            adminPagePatterns: [".*/admin.*", ".*/support.*", ".*/wp-admin.*", ".*/administrator.*"]
+            preAuth: [
+                "/",
+                "/?"
+            ],
+
+            signIn: [
+                "/sign-in",
+                "/login",
+                "/auth/dfe/callback"
+            ],
+
+            signOut: [
+                "/auth/dfe/sign-out",
+                "/auth/failure"
+            ],
+
+            authPrefixes: [
+                "/auth/"
+            ],
+
+            adminPatterns: [
+                ".*/admin.*",
+                ".*/support.*",
+                ".*/wp-admin.*",
+                ".*/administrator.*"
+            ]
         },
+
         features: {
             enableAdminNormalisation: true,
-            enableJourneyStitching: true,
             enablePreAuthPageStitching: true
         }
     },
 
     teaching_vacancies: {
         startDate: "2026-04-01",
+
         identity: {
             anchorSources: [{
                     entityTableName: "jobseekers",
@@ -719,23 +889,42 @@ module.exports = {
                     dataField: "hidden_data",
                     userIdKey: "publisher_id"
                 }
-            ],
-            signOutPaths: ["/jobseekers/sign_out", "/publishers/sign-out"]
+            ]
         },
+
         paths: {
-            homePagePaths: ["/", "/?"],
-            signInPagePaths: ["/jobseekers/auth/govuk_one_login/callback", "/jobseekers/sign-in", "/pages/sign-in", "/auth/dfe/callback", "/publishers/sign-in"],
-            signOutPagePaths: ["/jobseekers/sign_out", "/publishers/sign-out"],
-            preAuthAllowListPages: ["/", "/?", "/jobseekers/auth/govuk_one_login/callback", "/jobseekers/sign-in", "/pages/sign-in", "/auth/dfe/callback", "/publishers/sign-in"],
-            excludedPathsForActivity: ["/", "/?", "/jobseekers/auth/govuk_one_login/callback", "/jobseekers/sign-in", "/pages/sign-in", "/auth/dfe/callback", "/publishers/sign-in", "/jobseekers/sign_out", "/publishers/sign-out"],
-            authPrefixes: ["/auth/"],
-            adminPagePatterns: [".*/admin.*", ".*/wp-admin.*", ".*/administrator.*"]
+            preAuth: [
+                "/",
+                "/?"
+            ],
+
+            signIn: [
+                "/jobseekers/auth/govuk_one_login/callback",
+                "/jobseekers/sign-in",
+                "/pages/sign-in",
+                "/auth/dfe/callback",
+                "/publishers/sign-in"
+            ],
+
+            signOut: [
+                "/jobseekers/sign_out",
+                "/publishers/sign-out"
+            ],
+
+            authPrefixes: [
+                "/auth/"
+            ],
+
+            adminPatterns: [
+                ".*/admin.*",
+                ".*/wp-admin.*",
+                ".*/administrator.*"
+            ]
         },
+
         features: {
             enableAdminNormalisation: true,
-            enableJourneyStitching: true,
             enablePreAuthPageStitching: true
         }
     }
-
 };

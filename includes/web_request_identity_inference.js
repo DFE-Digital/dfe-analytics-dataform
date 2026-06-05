@@ -10,7 +10,7 @@ Each service can define its own:
     - admin page patterns
     - earliest valid source data date (typically this will be chosen based on the amount of data that can be processed. Testing suggest 10 million web request events is the maximum that can be processed in a single run.)
 */
-  const identityConfig = require("../definitions/web_analytics_identity_inference_config_upd");
+  const identityConfig = require("../definitions/web_analytics_identity_inference_config");
 
 /* Load dfe-analytics shared parameter helper functions. */
   const parameter_functions = require("./parameter_functions");
@@ -4072,7 +4072,7 @@ repair_referrer_closest_parent AS (
     )
 
   QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY child.request_uuid
+    PARTITION BY child.request_uuid, child.occurred_at
     ORDER BY
       parent.occurred_at DESC,
       parent.has_current_identity DESC,
@@ -4099,10 +4099,13 @@ repair_referrer_closest_resolved_parent AS (
    AND parent.hour_bucket = child.parent_hour_bucket
    AND parent.occurred_at < child.occurred_at
    AND parent.occurred_at >= TIMESTAMP_SUB(child.occurred_at, INTERVAL 120 MINUTE)
-   AND parent.request_uuid != child.request_uuid
+   AND NOT (
+  parent.request_uuid = child.request_uuid
+  AND parent.occurred_at = child.occurred_at
+)
 
   QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY child.request_uuid
+    PARTITION BY child.request_uuid, child.occurred_at
     ORDER BY
       parent.occurred_at DESC,
       parent.request_uuid
@@ -4217,12 +4220,15 @@ repair_home_or_null_closest_parent AS (
    AND parent.minute_bucket = child.parent_minute_bucket
    AND parent.occurred_at < child.occurred_at
    AND parent.occurred_at >= TIMESTAMP_SUB(child.occurred_at, INTERVAL 30 MINUTE)
-   AND parent.request_uuid != child.request_uuid
+   AND NOT (
+  parent.request_uuid = child.request_uuid
+  AND parent.occurred_at = child.occurred_at
+)
 
   WHERE ${sqlNotInList("parent.request_path", preAuthPagePaths)}
 
   QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY child.request_uuid
+    PARTITION BY child.request_uuid, child.occurred_at
     ORDER BY
       parent.occurred_at DESC,
       parent.request_uuid DESC
@@ -4252,12 +4258,15 @@ repair_home_or_null_closest_resolved_parent AS (
    AND parent.minute_bucket = child.parent_minute_bucket
    AND parent.occurred_at < child.occurred_at
    AND parent.occurred_at >= TIMESTAMP_SUB(child.occurred_at, INTERVAL 30 MINUTE)
-   AND parent.request_uuid != child.request_uuid
+   AND NOT (
+  parent.request_uuid = child.request_uuid
+  AND parent.occurred_at = child.occurred_at
+)
 
   WHERE ${sqlNotInList("parent.request_path", preAuthPagePaths)}
 
   QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY child.request_uuid
+    PARTITION BY child.request_uuid, child.occurred_at
     ORDER BY
       parent.occurred_at DESC,
       parent.request_uuid DESC
@@ -4335,10 +4344,13 @@ repair_near_window_start_resolved_parent AS (
    AND parent.minute_bucket = child.parent_minute_bucket
    AND parent.occurred_at < child.occurred_at
    AND parent.occurred_at >= TIMESTAMP_SUB(child.occurred_at, INTERVAL 30 MINUTE)
-   AND parent.request_uuid != child.request_uuid
+   AND NOT (
+  parent.request_uuid = child.request_uuid
+  AND parent.occurred_at = child.occurred_at
+)
 
-  QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY child.request_uuid
+    QUALIFY ROW_NUMBER() OVER (
+      PARTITION BY child.request_uuid, child.occurred_at
     ORDER BY
       parent.occurred_at DESC,
       parent.request_uuid
@@ -4374,53 +4386,58 @@ parent_candidates AS (
 best_parent AS (
   SELECT
     child_request_uuid,
+    child_at,
     best.parent_request_uuid,
+    best.parent_at,
     best.match_confidence,
     best.match_source,
     best.is_weak_previous_parent_rule
   FROM (
     SELECT
       child_request_uuid,
+      child_at,
+
       ARRAY_AGG(
         STRUCT(
           parent_request_uuid,
+          parent_at,
           match_confidence,
           match_source,
-          parent_at,
           is_weak_previous_parent_rule
         )
-    ORDER BY
-      CASE
-        WHEN match_source = 'STAGE_6_REFERRER_TO_RESOLVED_PARENT_SAME_AUID'
-          THEN 5
+        ORDER BY
+          CASE
+            WHEN match_source = 'STAGE_6_REFERRER_TO_RESOLVED_PARENT_SAME_AUID'
+              THEN 5
 
-        WHEN match_source = 'STAGE_6_REFERRER_TO_UNRESOLVED_PARENT_SAME_AUID'
-          THEN 4
+            WHEN match_source = 'STAGE_6_REFERRER_TO_UNRESOLVED_PARENT_SAME_AUID'
+              THEN 4
 
-        WHEN match_source =
-          'STAGE_6_NEAR_WINDOW_START_PREVIOUS_RESOLVED_PARENT_SAME_AUID'
-          THEN 3
+            WHEN match_source =
+              'STAGE_6_NEAR_WINDOW_START_PREVIOUS_RESOLVED_PARENT_SAME_AUID'
+              THEN 3
 
-        WHEN match_source IN (
-          'STAGE_6_NULL_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M',
-          'STAGE_6_HOME_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
-        )
-          THEN 2
+            WHEN match_source IN (
+              'STAGE_6_NULL_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M',
+              'STAGE_6_HOME_REFERRER_PREVIOUS_RESOLVED_PARENT_SAME_AUID_30M'
+            )
+              THEN 2
 
-        WHEN match_source IN (
-          'STAGE_6_NULL_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M',
-          'STAGE_6_HOME_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M'
-        )
-          THEN 1
+            WHEN match_source IN (
+              'STAGE_6_NULL_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M',
+              'STAGE_6_HOME_REFERRER_PREVIOUS_UNRESOLVED_PARENT_SAME_AUID_30M'
+            )
+              THEN 1
 
-        ELSE 0
-      END DESC,
-      parent_at DESC,
-      parent_request_uuid
+            ELSE 0
+          END DESC,
+          parent_at DESC,
+          parent_request_uuid
         LIMIT 1
       )[OFFSET(0)] AS best
+
     FROM parent_candidates
-    GROUP BY child_request_uuid
+    GROUP BY child_request_uuid, child_at
   )
 ),
 
@@ -4442,6 +4459,11 @@ events_with_parent AS (
       ELSE bp.parent_request_uuid
     END AS parent_request_uuid_repair,
 
+    CASE
+      WHEN e.has_current_identity = TRUE THEN NULL
+      ELSE bp.parent_at
+    END AS parent_occurred_at_repair,
+
     bp.match_confidence AS parent_match_confidence_repair,
     bp.match_source AS parent_match_source_repair,
     bp.is_weak_previous_parent_rule AS parent_is_weak_previous_parent_rule_repair
@@ -4449,6 +4471,7 @@ events_with_parent AS (
   FROM events_scope e
   LEFT JOIN best_parent bp
     ON e.request_uuid = bp.child_request_uuid
+   AND e.occurred_at = bp.child_at
 ),
 
 /* --------------------------------------------------------------------------
@@ -4469,16 +4492,27 @@ events_with_parent AS (
 repair_walk AS (
   SELECT
     e.request_uuid AS start_request_uuid,
+    e.occurred_at AS start_occurred_at,
+
     e.request_uuid AS current_request_uuid,
     e.occurred_at AS current_occurred_at,
+
     e.parent_request_uuid_repair AS parent_request_uuid,
+    e.parent_occurred_at_repair AS parent_occurred_at,
+
     e.has_current_identity,
     e.current_iuid,
     0 AS depth,
 
-    [e.request_uuid] AS visited_request_uuids,
+    [
+      STRUCT(
+        e.request_uuid AS request_uuid,
+        e.occurred_at AS occurred_at
+      )
+    ] AS visited_events,
 
-    IF(e.has_current_identity, e.current_iuid, NULL) AS nearest_current_iuid
+    IF(e.has_current_identity, e.current_iuid, NULL)
+      AS nearest_current_iuid
 
   FROM events_with_parent e
   WHERE e.is_repair_walk_candidate = TRUE
@@ -4487,15 +4521,27 @@ repair_walk AS (
 
   SELECT
     w.start_request_uuid,
+    w.start_occurred_at,
+
     p.request_uuid AS current_request_uuid,
     p.occurred_at AS current_occurred_at,
+
     p.parent_request_uuid_repair AS parent_request_uuid,
+    p.parent_occurred_at_repair AS parent_occurred_at,
+
     p.has_current_identity,
     p.current_iuid,
     w.depth + 1 AS depth,
 
-    ARRAY_CONCAT(w.visited_request_uuids, [p.request_uuid])
-      AS visited_request_uuids,
+    ARRAY_CONCAT(
+      w.visited_events,
+      [
+        STRUCT(
+          p.request_uuid AS request_uuid,
+          p.occurred_at AS occurred_at
+        )
+      ]
+    ) AS visited_events,
 
     COALESCE(
       w.nearest_current_iuid,
@@ -4505,11 +4551,22 @@ repair_walk AS (
   FROM repair_walk w
   JOIN events_with_parent p
     ON w.parent_request_uuid = p.request_uuid
+   AND w.parent_occurred_at = p.occurred_at
+
   WHERE w.parent_request_uuid IS NOT NULL
-    AND w.parent_request_uuid != w.current_request_uuid
+
+    AND NOT (
+      w.parent_request_uuid = w.current_request_uuid
+      AND w.parent_occurred_at = w.current_occurred_at
+    )
+
     AND w.nearest_current_iuid IS NULL
     AND w.depth < 25
-    AND NOT p.request_uuid IN UNNEST(w.visited_request_uuids)
+
+    AND STRUCT(
+      p.request_uuid AS request_uuid,
+      p.occurred_at AS occurred_at
+    ) NOT IN UNNEST(w.visited_events)
 ),
 
 /* --------------------------------------------------------------------------
@@ -4527,6 +4584,7 @@ repair_walk AS (
 collapsed_repair_walk AS (
   SELECT
     start_request_uuid AS request_uuid,
+    start_occurred_at AS occurred_at,
 
     ARRAY_AGG(
       STRUCT(
@@ -4542,16 +4600,25 @@ collapsed_repair_walk AS (
     )[OFFSET(0)] AS best_repair
 
   FROM repair_walk
-  GROUP BY start_request_uuid
+  GROUP BY
+    start_request_uuid,
+    start_occurred_at
 ),
 
 repair_assignments AS (
   SELECT
     c.request_uuid,
-    c.best_repair.current_request_uuid AS repair_source_request_uuid,
-    c.best_repair.current_occurred_at AS repair_source_occurred_at,
+    c.occurred_at,
+
+    c.best_repair.current_request_uuid
+      AS repair_source_request_uuid,
+
+    c.best_repair.current_occurred_at
+      AS repair_source_occurred_at,
+
     c.best_repair.depth AS repair_depth,
     c.best_repair.nearest_current_iuid AS repaired_iuid
+
   FROM collapsed_repair_walk c
   WHERE c.best_repair.nearest_current_iuid IS NOT NULL
 ),
@@ -4574,6 +4641,7 @@ repair_assignments AS (
 repair_walk_proposals AS (
   SELECT
     e.request_uuid,
+    e.occurred_at,
 
     r.repaired_iuid AS proposed_iuid,
 
@@ -4686,8 +4754,10 @@ repair_walk_proposals AS (
   FROM events_scope e
   LEFT JOIN events_with_parent p
     ON e.request_uuid = p.request_uuid
+  AND e.occurred_at = p.occurred_at
   LEFT JOIN repair_assignments r
     ON e.request_uuid = r.request_uuid
+  AND e.occurred_at = r.occurred_at
   WHERE e.is_repair_walk_candidate = TRUE
 ),
 
@@ -4706,7 +4776,7 @@ repair_walk_proposals AS (
 deduplicated_repair_walk_proposals AS (
   SELECT
     request_uuid,
-
+    occurred_at,
     ARRAY_AGG(
       STRUCT(
         proposed_iuid,
@@ -4734,7 +4804,7 @@ deduplicated_repair_walk_proposals AS (
   FROM repair_walk_proposals
   WHERE should_apply_proposed_iuid = TRUE
     AND proposed_iuid IS NOT NULL
-  GROUP BY request_uuid
+  GROUP BY request_uuid, occurred_at
 )
 
 /* --------------------------------------------------------------------------
@@ -4797,6 +4867,7 @@ deduplicated_repair_walk_proposals AS (
   FROM current_state c
   LEFT JOIN deduplicated_repair_walk_proposals p
     ON c.request_uuid = p.request_uuid
+  AND c.occurred_at = p.occurred_at
 
 `);
 

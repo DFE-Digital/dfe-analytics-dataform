@@ -1,4 +1,4 @@
-const identityConfig = require("../definitions/web_analytics_identity_inference_config_upd");
+const identityConfig = require("../definitions/web_analytics_identity_inference_config");
 const parameter_functions = require("./parameter_functions");
 
 module.exports = params => {

@@ -9,6 +9,7 @@ dfeAnalyticsDataform({
     urlRegex: "find-placement-schools.education.gov.uk",
     transformEntityEvents: true,
     enableSessionTables: true,
+    enableWebRequestIdentityResolution: true,
     enableSessionDetailsTable: true,
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     expirationDays: 2555, // days in 7 years
