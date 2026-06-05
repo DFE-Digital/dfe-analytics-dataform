@@ -173,8 +173,8 @@ ${ctx.incremental() ? `
         IF(deletions.deleted_at > cdc_updated_at, deletions.deleted_at, NULL)
       ) AS valid_to,
       deletions.deleted_at IS NOT NULL
-        AND deletions.deleted_at > updated_at
-        AND LEAD(updated_at) OVER (
+        AND deletions.deleted_at > ${hasTimestamps ? `updated_at` : `cdc_updated_at`} 
+        AND LEAD(${hasTimestamps ? `updated_at` : `cdc_updated_at`}) OVER (
           PARTITION BY live_records.${primaryKey}
           ORDER BY ${hasTimestamps ? `updated_at ASC, ` : ``}cdc_updated_at ASC
         ) IS NULL AS is_deleted,
