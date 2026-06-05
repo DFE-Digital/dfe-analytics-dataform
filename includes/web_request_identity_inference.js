@@ -909,7 +909,7 @@ publish(
     schema: "web_analytics_staging_tables",
     type: "incremental",
     protected: true,
-    uniqueKey: ["request_uuid"],
+    uniqueKey: ["request_uuid", "occurred_at"],
     tags: [
       params.eventSourceName.toLowerCase(),
       "identity-staging"
@@ -1176,7 +1176,7 @@ publish(
     schema: "web_analytics_staging_tables",
     type: "incremental",
     protected: false,
-    uniqueKey: ["request_uuid"],
+    uniqueKey: ["request_uuid", "occurred_at"],
     tags: [
       params.eventSourceName.toLowerCase(),
       "identity-staging"
@@ -1361,6 +1361,7 @@ events_with_part_1_identity AS (
 anchors_all AS (
   SELECT DISTINCT
     request_uuid,
+    occurred_at,
     known_anchor_iuid AS inferred_user_id,
     auid,
     TRUE AS is_anchor
@@ -1600,6 +1601,7 @@ events_supp AS (
   FROM events_base e
   LEFT JOIN anchors_all a
     ON e.request_uuid = a.request_uuid
+    AND e.occurred_at = a.occurred_at 
   LEFT JOIN auid_shared_context_proxy_map c
     ON e.auid = c.auid
 ),
@@ -1738,7 +1740,10 @@ p1_referrer_candidates AS (
     ON child.request_referer_path_and_query = parent.request_path_and_query
    AND parent.hour_bucket = child.parent_hour_bucket
    AND parent.occurred_at < child.occurred_at
-   AND parent.request_uuid != child.request_uuid
+   AND NOT (
+      parent.request_uuid = child.request_uuid
+      AND parent.occurred_at = child.occurred_at
+    )
    AND parent.occurred_at >= TIMESTAMP_SUB(child.occurred_at, INTERVAL 120 MINUTE)
    AND (
      child.auid = parent.auid
@@ -1802,7 +1807,7 @@ p1_bootstrap_first_child_after_callback AS (
      OR ${sqlInList("child.request_referer_path_and_query", preAuthPagePaths)}
 
   QUALIFY ROW_NUMBER() OVER (
-    PARTITION BY anc.anchor_request_uuid
+    PARTITION BY anc.anchor_request_uuid, anc.anchor_at
     ORDER BY child.occurred_at ASC, child.request_uuid ASC
   ) = 1
 ),
@@ -1879,12 +1884,15 @@ p1_parent_candidates AS (
 p1_best_parent AS (
   SELECT
     child_request_uuid,
+    child_at,
     best.parent_request_uuid,
+    best.parent_at,
     best.match_confidence,
     best.match_source
   FROM (
     SELECT
       child_request_uuid,
+      child_at,
 
       ARRAY_AGG(
         STRUCT(parent_request_uuid, match_confidence, match_source, parent_at)
@@ -1900,7 +1908,7 @@ p1_best_parent AS (
       )[OFFSET(0)] AS best
 
     FROM p1_parent_candidates
-    GROUP BY child_request_uuid
+    GROUP BY child_request_uuid, child_at
   )
 ),
 
@@ -1936,6 +1944,7 @@ events_with_parent_pass1 AS (
 
       ELSE bp.parent_request_uuid
     END AS parent_request_uuid_pass1,
+    bp.parent_at AS parent_occurred_at_pass1,
 
     bp.match_confidence AS parent_match_confidence_pass1,
     bp.match_source AS parent_match_source_pass1,
@@ -1944,6 +1953,7 @@ events_with_parent_pass1 AS (
   FROM events_supp e
   LEFT JOIN p1_best_parent bp
     ON e.request_uuid = bp.child_request_uuid
+    AND e.occurred_at = bp.child_at
 ),
 
 /* -------------------------------------------------------------------------- 
@@ -1963,8 +1973,11 @@ proxy assisted assignments can be identified in current_iuid_method.
 walk_pass1 AS (
   SELECT
     e.request_uuid AS start_request_uuid,
+    e.occurred_at AS start_occurred_at,
     e.request_uuid AS current_request_uuid,
+    e.occurred_at AS current_occurred_at,
     e.parent_request_uuid_pass1 AS parent_request_uuid,
+    e.parent_occurred_at_pass1 AS parent_occurred_at,
     0 AS depth,
 
     e.parent_match_used_shared_context_proxy_pass1
@@ -1976,8 +1989,11 @@ walk_pass1 AS (
 
   SELECT
     w.start_request_uuid,
+    w.start_occurred_at,
     p.request_uuid AS current_request_uuid,
+    p.occurred_at AS current_occurred_at,
     p.parent_request_uuid_pass1 AS parent_request_uuid,
+    p.parent_occurred_at_pass1 AS parent_occurred_at,
     w.depth + 1 AS depth,
 
     (
@@ -1988,8 +2004,11 @@ walk_pass1 AS (
   FROM walk_pass1 w
   JOIN events_with_parent_pass1 p
     ON w.parent_request_uuid = p.request_uuid
+    AND w.parent_occurred_at = p.occurred_at
   WHERE w.parent_request_uuid IS NOT NULL
-    AND w.parent_request_uuid != w.current_request_uuid
+    AND NOT (
+      w.parent_request_uuid = w.current_request_uuid
+      AND w.parent_occurred_at = w.current_occurred_at)
     AND w.depth < 100
 ),
 
@@ -2004,9 +2023,10 @@ only where it contains exactly one anchor IUID.
 collapsed_pass1 AS (
   SELECT
     start_request_uuid AS request_uuid,
+    start_occurred_at AS occurred_at,
 
     MAX_BY(
-      current_request_uuid,
+      STRUCT(current_request_uuid, current_occurred_at),
       IF(parent_request_uuid IS NULL, 1, 0)
     ) AS chain_id_pass1,
 
@@ -2014,22 +2034,20 @@ collapsed_pass1 AS (
       AS chain_used_shared_context_proxy
 
   FROM walk_pass1
-  GROUP BY start_request_uuid
+  GROUP BY start_request_uuid, start_occurred_at
 ),
 
 chain_anchor_summary_pass1 AS (
   SELECT
     c.chain_id_pass1,
 
-    COUNT(DISTINCT e.walk_anchor_iuid)
-      AS chain_distinct_anchor_iuid_count,
-
-    MIN(e.walk_anchor_iuid)
-      AS chain_single_anchor_iuid
+    COUNT(DISTINCT e.walk_anchor_iuid) AS chain_distinct_anchor_iuid_count,
+    MIN(e.walk_anchor_iuid) AS chain_single_anchor_iuid
 
   FROM collapsed_pass1 c
   JOIN events_with_parent_pass1 e
-    ON c.request_uuid = e.request_uuid
+    ON c.chain_id_pass1.current_request_uuid = e.request_uuid
+   AND c.chain_id_pass1.current_occurred_at = e.occurred_at
   WHERE e.walk_is_anchor = TRUE
     AND e.walk_anchor_iuid IS NOT NULL
   GROUP BY c.chain_id_pass1
@@ -2099,7 +2117,7 @@ likely_shunt_arrival_candidates AS (
     parent.occurred_at AS shunt_parent_at,
 
     COUNT(*) OVER (
-      PARTITION BY child.request_uuid
+      PARTITION BY child.request_uuid, child.occurred_at
     ) AS candidate_count_last_3h
 
   FROM shunt_child_buckets child
@@ -2115,6 +2133,7 @@ likely_shunt_arrival_candidates AS (
 likely_shunt_arrivals AS (
   SELECT
     child_request_uuid,
+    child_at,
     TRUE AS likely_shunt_arrival
   FROM likely_shunt_arrival_candidates
   WHERE candidate_count_last_3h = 1
@@ -2123,6 +2142,7 @@ likely_shunt_arrivals AS (
 walked_events AS (
   SELECT
     e.request_uuid,
+    e.occurred_at,
 
     e.parent_request_uuid_pass1,
     e.parent_match_confidence_pass1,
@@ -2139,10 +2159,12 @@ walked_events AS (
   FROM events_with_parent_pass1 e
   LEFT JOIN collapsed_pass1 c
     ON e.request_uuid = c.request_uuid
+  AND e.occurred_at = c.occurred_at
   LEFT JOIN chain_anchor_summary_pass1 cas
     ON c.chain_id_pass1 = cas.chain_id_pass1
   LEFT JOIN likely_shunt_arrivals s
     ON e.request_uuid = s.child_request_uuid
+    AND e.occurred_at = s.child_at
 )
 
 /* -------------------------------------------------------------------------- 
@@ -2222,6 +2244,7 @@ fields required by Stage 5. Discard temporary graph diagnostics.
   FROM events_with_part_1_identity direct
   LEFT JOIN walked_events w
     ON direct.request_uuid = w.request_uuid
+    AND direct.occurred_at = w.occurred_at
 
 `);
 
@@ -2264,7 +2287,7 @@ publish(
     schema: "web_analytics_staging_tables",
     type: "incremental",
     protected: true,
-    uniqueKey: ["request_uuid"],
+    uniqueKey: ["request_uuid", "occurred_at"],
     tags: [
       params.eventSourceName.toLowerCase(),
       "identity-staging"
@@ -2365,7 +2388,7 @@ FROM ${ctx.ref(conservativeWalkRunName)}
       schema: "web_analytics_staging_tables",
       type: "incremental",
       protected: true,
-      uniqueKey: ["request_uuid"],
+      uniqueKey: ["request_uuid", "occurred_at"],
       tags: [
         params.eventSourceName.toLowerCase(),
         "identity-staging"
@@ -3601,7 +3624,7 @@ FROM current_state_after_window_assignments
       schema: "web_analytics_staging_tables",
       type: "incremental",
       protected: false,
-      uniqueKey: ["request_uuid"],
+      uniqueKey: ["request_uuid", "occurred_at"],
       tags: [
         params.eventSourceName.toLowerCase(),
         "identity-staging"
@@ -4043,7 +4066,10 @@ repair_referrer_closest_parent AS (
    AND parent.hour_bucket = child.parent_hour_bucket
    AND parent.occurred_at < child.occurred_at
    AND parent.occurred_at >= TIMESTAMP_SUB(child.occurred_at, INTERVAL 120 MINUTE)
-   AND parent.request_uuid != child.request_uuid
+   AND NOT (
+      parent.request_uuid = child.request_uuid
+      AND parent.occurred_at = child.occurred_at
+    )
 
   QUALIFY ROW_NUMBER() OVER (
     PARTITION BY child.request_uuid
@@ -4813,7 +4839,7 @@ publish(
     schema: "web_analytics_staging_tables",
     type: "incremental",
     protected: true,
-    uniqueKey: ["request_uuid"],
+    uniqueKey: ["request_uuid", "occurred_at"],
     tags: [
       params.eventSourceName.toLowerCase(),
       "identity-staging"

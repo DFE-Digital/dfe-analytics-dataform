@@ -107,9 +107,6 @@ constrained pre auth stitching.
   const enablePreAuthPageStitching =
   webAnalytics.features?.enablePreAuthPageStitching ?? true;
 
-  const enableJourneyStitching =
-    webAnalytics.features?.enableJourneyStitching ?? false;
-
 /* -------------------------------------------------------------------------- 
 5. Define SQL-generation helpers 
 
@@ -571,7 +568,11 @@ signed_in_session_start_events AS (
 
 pre_auth_pages AS (
   SELECT request_path
-  FROM UNNEST(${sqlStringArray(preAuthStitchablePagePaths)}) AS request_path
+  FROM UNNEST(${
+    enablePreAuthPageStitching
+      ? sqlStringArray(preAuthStitchablePagePaths)
+      : "[]"
+  }) AS request_path
 ),
 
 stitched_pre_auth_pages AS (
@@ -1458,31 +1459,160 @@ journey_session_map AS (
    merged correctly.
 ------------------------------------------------------------------------------ */
 
-all_sessions_with_journey_id AS (
+all_sessions_with_core_session_id AS (
   SELECT
     s.*,
+    COALESCE(j.journey_id, s.session_id) AS core_session_id,
 
     CASE
       WHEN s.auid_distinct_iuid_count > 1 THEN TRUE
       ELSE FALSE
-    END AS known_multi_user_device,
-
-    COALESCE(j.journey_id, s.session_id) AS journey_id
+    END AS known_multi_user_device
 
   FROM all_sessions s
   LEFT JOIN journey_session_map j
     USING (session_id)
 ),
 
+journey_rebuilt_pages AS (
+  SELECT
+    s.core_session_id AS session_id,
+    s.user_id,
+    s.admin_exposed_session,
+    s.includes_low_confidence_identity_propagation,
+    s.includes_stitched_pre_auth_pages,
+    s.user_signed_in,
+    s.session_type,
+    s.behavioural_user_type,
+    s.auid_distinct_iuid_count,
+    s.multiple_auid_session,
+    s.device_id,
+    s.session_auids,
+    s.session_namespace,
+    s.utm_source,
+    s.utm_medium,
+    s.utm_campaign,
+    s.medium,
+    s.device_category,
+    s.known_multi_user_device,
+
+    p.request_uuid,
+    p.anonymised_user_agent_and_ip,
+    p.page_domain,
+    p.page_path,
+    p.page_path_and_query,
+    p.previous_page_domain,
+    p.previous_page_path,
+    p.previous_page_path_and_query,
+    p.page_entry_time,
+    p.continuity_type_to_current_page
+
+  FROM all_sessions_with_core_session_id s,
+  UNNEST(s.pages_visited_details) AS p
+),
+
+journey_rebuilt_page_times AS (
+  SELECT
+    *,
+
+    LEAD(page_entry_time) OVER (
+      PARTITION BY session_id
+      ORDER BY page_entry_time, request_uuid
+    ) AS page_exit_time,
+
+    TIMESTAMP_DIFF(
+      LEAD(page_entry_time) OVER (
+        PARTITION BY session_id
+        ORDER BY page_entry_time, request_uuid
+      ),
+      page_entry_time,
+      SECOND
+    ) AS page_duration_seconds
+
+  FROM journey_rebuilt_pages
+),
+
+all_sessions_after_journey_stitching AS (
+  SELECT
+    session_id,
+
+    ARRAY_AGG(user_id IGNORE NULLS ORDER BY user_signed_in DESC, page_entry_time LIMIT 1)[SAFE_OFFSET(0)] AS user_id,
+
+    LOGICAL_OR(admin_exposed_session) AS admin_exposed_session,
+    LOGICAL_OR(includes_low_confidence_identity_propagation) AS includes_low_confidence_identity_propagation,
+    LOGICAL_OR(includes_stitched_pre_auth_pages) AS includes_stitched_pre_auth_pages,
+    LOGICAL_OR(user_signed_in) AS user_signed_in,
+
+    ARRAY_AGG(session_type ORDER BY user_signed_in DESC, page_entry_time LIMIT 1)[OFFSET(0)] AS session_type,
+    ARRAY_AGG(behavioural_user_type ORDER BY user_signed_in DESC, page_entry_time LIMIT 1)[OFFSET(0)] AS behavioural_user_type,
+
+    MAX(auid_distinct_iuid_count) AS auid_distinct_iuid_count,
+    LOGICAL_OR(multiple_auid_session) AS multiple_auid_session,
+
+    ARRAY_AGG(device_id ORDER BY user_signed_in DESC, page_entry_time LIMIT 1)[OFFSET(0)] AS device_id,
+
+    ARRAY_AGG(
+      DISTINCT anonymised_user_agent_and_ip IGNORE NULLS
+      ORDER BY anonymised_user_agent_and_ip
+    ) AS session_auids,
+
+    ARRAY_AGG(session_namespace ORDER BY page_entry_time LIMIT 1)[OFFSET(0)] AS session_namespace,
+    ARRAY_AGG(previous_page_domain ORDER BY page_entry_time LIMIT 1)[OFFSET(0)] AS session_referer_domain,
+
+    ARRAY_AGG(page_path ORDER BY page_entry_time LIMIT 1)[OFFSET(0)] AS start_page,
+    ARRAY_AGG(page_path ORDER BY page_entry_time DESC LIMIT 1)[OFFSET(0)] AS exit_page,
+
+    ARRAY_AGG(utm_source ORDER BY page_entry_time LIMIT 1)[OFFSET(0)] AS utm_source,
+    ARRAY_AGG(utm_medium ORDER BY page_entry_time LIMIT 1)[OFFSET(0)] AS utm_medium,
+    ARRAY_AGG(utm_campaign ORDER BY page_entry_time LIMIT 1)[OFFSET(0)] AS utm_campaign,
+    ARRAY_AGG(medium ORDER BY page_entry_time LIMIT 1)[OFFSET(0)] AS medium,
+    ARRAY_AGG(device_category ORDER BY page_entry_time LIMIT 1)[OFFSET(0)] AS device_category,
+
+    MIN(page_entry_time) AS session_start_timestamp,
+    MAX(page_entry_time) AS final_session_page_timestamp,
+
+    CASE
+      WHEN MAX(page_entry_time) = MIN(page_entry_time) THEN NULL
+      ELSE TIMESTAMP_DIFF(MAX(page_entry_time), MIN(page_entry_time), SECOND)
+    END AS session_time_in_seconds,
+
+    COUNT(*) AS count_pages_visited,
+
+    ARRAY_AGG(
+      STRUCT(
+        request_uuid,
+        anonymised_user_agent_and_ip,
+        page_domain,
+        page_path,
+        page_path_and_query,
+        previous_page_domain,
+        previous_page_path,
+        previous_page_path_and_query,
+        page_entry_time,
+        page_exit_time,
+        page_duration_seconds AS duration,
+        continuity_type_to_current_page
+      )
+      ORDER BY page_entry_time, request_uuid
+    ) AS pages_visited_details,
+
+    LOGICAL_OR(known_multi_user_device) AS known_multi_user_device,
+
+    session_id AS journey_id
+
+  FROM journey_rebuilt_page_times
+  GROUP BY session_id
+),
+
 final AS (
   SELECT *
-  FROM all_sessions_with_journey_id
+  FROM all_sessions_after_journey_stitching
   ${ctx.incremental()
     ? `WHERE final_session_page_timestamp >= session_replace_checkpoint`
     : ``}
 )
-` : `
 
+` : `
 
 final AS (
   SELECT
