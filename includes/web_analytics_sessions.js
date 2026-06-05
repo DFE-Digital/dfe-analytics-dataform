@@ -445,7 +445,7 @@ signed_in_events_with_session_boundaries AS (
 
       WHEN referer_path_and_query = prev_page_path_and_query
        AND TIMESTAMP_DIFF(occurred_at, prev_occurred_at, MINUTE) <= 180
-        THEN "Continued from previous user page: exact referrer match within 6 hours"
+        THEN "Continued from previous user page: exact referrer match within 3 hours"
 
       ELSE "Started a new user session after a gap"
     END AS continuity_type_to_current_page,
