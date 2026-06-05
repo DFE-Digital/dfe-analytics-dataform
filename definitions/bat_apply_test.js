@@ -3,15 +3,16 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
-    disabled: true,
+    disabled: false,
     transformEntityEvents: true,
     eventSourceName: "apply",
     bqProjectName: "rugged-abacus-218110",
-    bqDatasetName: "apply_events_production_data_retention_schedule_test",
+    bqDatasetName: "apply_events_production",
     bqEventsTableName: "events",
     urlRegex: "apply-for-teacher-training.service.gov.uk",
     compareChecksums: true,
     enableSessionTables: true,
+    enableWebRequestIdentityInference: true,
     enableSessionDetailsTable:true,
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     expirationDays: 50000,
