@@ -3,6 +3,7 @@ const dfeAnalyticsDataform = require("../");
 const findpubDatasetName = "publish_api_events_production";
 
 dfeAnalyticsDataform({
+    disabled: true,
     eventSourceName: "publish",
     bqDatasetName: findpubDatasetName,
     bqEventsTableName: "events",

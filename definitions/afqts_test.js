@@ -1,6 +1,7 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
+    disabled: true,
     eventSourceName: "afqts",
     bqProjectName: "apply-for-qts-in-england",
     bqDatasetName: "events_production",

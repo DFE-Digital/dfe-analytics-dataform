@@ -3,6 +3,7 @@ const dfeAnalyticsDataform = require("../");
 const find_placementsDatasetName = "fps_events_production";
 
 dfeAnalyticsDataform({
+    disabled: true,
     eventSourceName: "find_placements",
     bqDatasetName: find_placementsDatasetName,
     bqEventsTableName: "events",

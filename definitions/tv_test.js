@@ -1,6 +1,7 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
+    disabled: true,
     eventSourceName: "teaching_vacancies",
     bqDatasetName: "production_dataset",
     bqEventsTableName: "events-dfe-analytics",

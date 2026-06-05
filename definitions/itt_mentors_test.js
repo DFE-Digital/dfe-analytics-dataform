@@ -3,6 +3,7 @@ const dfeAnalyticsDataform = require("../");
 const itt_mentorDatasetName = "itt_mentor_events_production";
 
 dfeAnalyticsDataform({
+        disabled: true,
     eventSourceName: "itt_mentor",
     bqDatasetName: itt_mentorDatasetName,
     bqEventsTableName: "events",

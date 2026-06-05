@@ -1,20 +1,37 @@
-/* For use by dfe-analytics-dataform developers working with Register test data only - for example code to use in your project, see definitions/example.js */
- 
+/* Test definition for Airbyte dual-run with data. Reads from rtt_airbyte_production (Airbyte source)
+   NOTE: This runs ALONGSIDE the existing dfe-analytics pipeline, not instead of it.
+*/
+
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
-    disabled: false,
+    disabled: true,
     eventSourceName: "register",
     bqDatasetName: "register_events_production",
     bqEventsTableName: "events",
     urlRegex: "register-trainee-teachers.service.gov.uk",
-    transformEntityEvents: true,
+    transformEntityEvents: false,
     compareChecksums: false,
-    enableSessionTables: true,
-    enableWebRequestIdentityResolution: true,
-    enableSessionDetailsTable:true,
+    enableSessionTables: false,
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     expirationDays: false,
+    enableMonitoring: false,
+    
+    // NEW: Enable Airbyte
+    enableAirbyteSource: true,
+    
+    airbyteConfig: {
+        datasetName: "rtt_airbyte_production",                    
+        outputSuffix: "_airbyte",               
+        primaryKeyField: "id"
+    },
+
+    airbyteHeartbeat: {
+        datasetName: "rtt_airbyte_production",
+        freshnessHours: 12,
+        tableName: 'airbyte_heartbeat'
+    },
+    
     dataSchema: [{
             entityTableName: "academic_cycles",
             description: "",
@@ -101,6 +118,36 @@ dfeAnalyticsDataform({
                 keyName: "message",
                 dataType: "string",
                 description: "Message describing the error in detail."
+            }]
+        },
+            {
+            entityTableName: "bulk_update_trainee_uploads",
+            materialisation: "view",
+            description: "This table contains information about the bulk upload update for trainees",
+            keys: [{
+                keyName: "number_of_trainees",
+                dataType: "integer",
+                description: "Number of trainees present in bulk trainee upload"
+            }, {
+                keyName: "provider_id",
+                dataType: "string",
+                description: "Accredited Provider ID"
+            }, {
+                keyName: "status",
+                dataType: "string",
+                description: "Describes the state of the upload: uploaded, pending, validated, in_progress, succeeded, cancelled, failed"
+            }, {
+                keyName: "submitted_at",
+                dataType: "timestamp",
+                description: "Date and time bulk trainee file was uploaded at"
+            }, {
+                keyName: "submitted_by_id",
+                dataType: "string",
+                description: "ID of user who submitted the bulk trainee upload for processing"
+            }, {
+                keyName: "version",
+                dataType: "string",
+                description: "Version of the code used to handle bulk uploads"
             }]
         },
         {
@@ -190,7 +237,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "start_date",
                 dataType: "date",
-                description: ""
+                description: "",
+                historic: true
             }, {
                 keyName: "study_mode",
                 dataType: "string",
@@ -288,7 +336,7 @@ dfeAnalyticsDataform({
             }]
         },
         {
-            entityTableName: "dqt_trn_requests",
+            entityTableName: "trs_trn_requests",
             description: "",
             materialisation: "view",
             keys: [{
@@ -440,31 +488,7 @@ dfeAnalyticsDataform({
             }]
         },
         {
-            entityTableName: "hesa_trn_submissions",
-            description: "",
-            materialisation: "view",
-            keys: [{
-                keyName: "submitted_at",
-                dataType: "timestamp",
-                description: ""
-            }]
-        },
-        {
-            entityTableName: "hesa_collection_requests",
-            description: "",
-            materialisation: "view",
-            keys: [{
-                keyName: "requested_at",
-                dataType: "timestamp",
-                description: ""
-            }, {
-                keyName: "state",
-                dataType: "string",
-                description: ""
-            }]
-        },
-        {
-            entityTableName: "lead_partners",
+            entityTableName: "training_partners",
             description: "",
             keys: [{
                     keyName: "urn",
@@ -498,17 +522,18 @@ dfeAnalyticsDataform({
                 }, {
                     keyName: "discarded_at",
                     dataType: "timestamp",
-                    description: "Timestamp at which a lead partner was discarded"
+                    description: "Timestamp at which a training partner was discarded"
                 }
             ]
         },
         {
-            entityTableName: "lead_partner_users",
-            description: "Contains information on association of service users with lead partners.",
+            entityTableName: "training_partner_users",
+            description: "Contains information on association of service users with training partners.",
             keys: [{
-                    keyName: "lead_partner_id",
+                    keyName: "training_partner_id",
+                    pastKeyNames: ["lead_partner_id"],
                     dataType: "string",
-                    description: "Unique id of the lead partner."
+                    description: "Unique id of the training partner."
                 },
                 {
                     keyName: "user_id",
@@ -516,21 +541,6 @@ dfeAnalyticsDataform({
                     description: "Unique id of the user."
                 }
             ]
-        },
-        {
-            entityTableName: "lead_school_users",
-            description: "",
-            keys: [{
-                keyName: "lead_school_id",
-                dataType: "string",
-                description: "",
-                foreignKeyTable: "schools"
-            }, {
-                keyName: "user_id",
-                dataType: "string",
-                description: "",
-                foreignKeyTable: "users"
-            }]
         },
         {
             entityTableName: "nationalisations",
@@ -808,6 +818,10 @@ dfeAnalyticsDataform({
                     dataType: "date",
                     description: "Date trainee was deferred"
                 }, {
+                    keyName: "defer_reason",
+                    dataType: "string",
+                    description: "Reason that the trainee deferred"
+                }, {
                     keyName: "disability_disclosure",
                     dataType: "string",
                     description: ""
@@ -872,6 +886,10 @@ dfeAnalyticsDataform({
                     dataType: "timestamp",
                     description: "Timestamp of last HESA update"
                 }, {
+                    keyName: "funding_eligibility",
+                    dataType: "string",
+                    description: "Funding eligibility status of the trainee, derived from the latest available HESA fund_code. Possible values are eligible or not_eligible."
+                }, {
                     keyName: "iqts_country",
                     dataType: "string",
                     description: "Country where training is being undertaken for trainees on iQTS route"
@@ -891,13 +909,15 @@ dfeAnalyticsDataform({
                     hidden: true
                 },
                 {
-                    keyName: "lead_partner_id",
+                    keyName: "training_partner_id",
+                    pastKeyNames: ["lead_partner_id"],
                     dataType: "string",
-                    description: "Lead partner",
+                    description: "Training partner",
                 }, {
-                    keyName: "lead_partner_not_applicable",
+                    keyName: "training_partner_not_applicable",
+                    pastKeyNames: ["lead_partner_not_applicable"],
                     dataType: "boolean",
-                    description: "Lead partner not applicable, true or false",
+                    description: "Training partner not applicable, true or false",
                 }, {
                     keyName: "outcome_date",
                     dataType: "date",
@@ -981,19 +1001,18 @@ dfeAnalyticsDataform({
                 }, {
                     keyName: "withdraw_date",
                     dataType: "date",
-                    description: "Date trainee withdrew from course"
+                    description: "Date trainee withdrew from course",
+                    historic: true
                 }, {
                     keyName: "withdraw_reasons_details",
                     dataType: "string",
-                    description: "Details of the reason a trainee withdrew from course"
+                    description: "Details of the reason a trainee withdrew from course",
+                    historic: true
                 }, {
                     keyName: "withdraw_reasons_dfe_details",
                     dataType: "string",
-                    description: ""
-                }, {
-                    keyName: "hesa_trn_submission_id",
-                    dataType: "string",
-                    description: ""
+                    description: "",
+                    historic: true
                 }, {
                     keyName: "created_from_hesa",
                     dataType: "boolean",
@@ -1003,13 +1022,10 @@ dfeAnalyticsDataform({
                     dataType: "boolean",
                     description: ""
                 }, {
-                    keyName: "slug_sent_to_dqt_at",
+                    keyName: "slug_sent_to_trs_at",
+                    pastKeyNames: ["slug_sent_to_dqt_at"],
                     dataType: "timestamp",
                     description: ""
-                }, {
-                    keyName: "previous_hesa_id",
-                    dataType: "string",
-                    description: "Value immediately before this update of: HESA unique student identifier. Presence of this implies an HEI trainee."
                 }
             ]
         },
@@ -1027,6 +1043,47 @@ dfeAnalyticsDataform({
                 dataType: "string",
                 description: "UID of the reason a trainee withdrew from a course",
                 foreignKeyTable: "withdrawal_reasons"
+            }, {
+                keyName: "trainee_withdrawal_id",
+                dataType: "string",
+                description: "UID of the trainee withdrawal",
+                foreignKeyTable: "withdrawal_reasons"
+            }]
+        },
+        {
+            entityTableName: "trainee_withdrawals",
+            description: "",
+            dataFreshnessDays: 7,
+            keys: [{
+                keyName: "another_reason",
+                dataType: "string",
+                description: "Reason that the trainee withdrew",
+            }, {
+                keyName: "date",
+                dataType: "date",
+                description: "Date on which the trainee's withdrawal takes place.",
+            }, {
+                keyName: "discarded_at",
+                dataType: "timestamp",
+                description: "Timestamp indicating when the trainee withdrawal record was discarded.",
+            }, {
+                keyName: "future_interest",
+                dataType: "string",
+                description: "Indicates whether the trainee is interested in pursuing teacher training in the future.",
+            }, {
+                keyName: "safeguarding_concern_reasons",
+                dataType: "string",
+                description: "Lists safeguarding concern reasons if there are any.",
+                hidden: true
+            }, {
+                keyName: "trainee_id",
+                dataType: "string",
+                description: "UID of the trainee who withdrew from a course",
+                foreignKeyTable: "trainees"
+            }, {
+                keyName: "trigger",
+                dataType: "string",
+                description: "Specifies who initiated the withdrawal, either the provider or the trainee.",
             }]
         },
         {
@@ -1066,6 +1123,21 @@ dfeAnalyticsDataform({
                 keyName: "welcome_email_sent_at",
                 dataType: "timestamp",
                 description: ""
+            }, {
+                keyName: "first_name",
+                dataType: "string",
+                description: "First name of the user",
+                hidden: true
+            }, {
+                keyName: "last_name",
+                dataType: "string",
+                description: "Last name of the user",
+                hidden: true
+            }, {
+                keyName: "email",
+                dataType: "string",
+                description: "Email address of the user",
+                hidden: true
             }]
         },
         {
@@ -1097,5 +1169,11 @@ dfeAnalyticsDataform({
                 foreignKeyTable: "users"
             }]
         }
-    ]
+    ],
+
+    customEventSchema: [{
+        eventType: "api_request",
+        description: "Custom event containing details of requests to the Register API.",
+        keys: []
+    }]
 });

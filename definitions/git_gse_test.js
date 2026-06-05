@@ -1,6 +1,7 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
+        disabled: true,
     eventSourceName: "gse",
     bqProjectName: "get-into-teaching",
     bqDatasetName: "gse_events_production",
