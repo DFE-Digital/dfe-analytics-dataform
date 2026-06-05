@@ -1163,7 +1163,9 @@ FROM events_with_current_identity_state
    identities are later persisted back into the durable incremental state table.
 
    Grain:
-     One row per valid web request event within the current recursive walk scope.
+   One row per valid web request event within the current recursive walk scope.
+   A web request event is uniquely identified by the combination of request_uuid
+   and occurred_at.
 
    Output:
      identity_conservative_recursive_walk_input_[event source]
@@ -1302,8 +1304,8 @@ publish(
       Grain: one row per valid web request event within the current recursive walk scope.`,
     dependencies: params.dependencies,
     columns: {
-      request_uuid: `Unique identifier for the web request event. This is the grain of the table.`,
-      occurred_at: `Timestamp at which the web request event occurred.`,
+      request_uuid: `Unique identifier for the web-request event. Together with occurred_at, this forms the grain of the table.`,
+      occurred_at: `Timestamp at which the web-request event occurred. Together with request_uuid, this forms the grain of the table.`,
       event_date: `Calendar date on which the web request event occurred. Derived from occurred_at and used to partition the table.`,
       event_type: `Type of source event. This model retains web request events only.`,
       auid: `Anonymous user identifier observed on the web request event. Derived from anonymised_user_agent_and_ip.`,
@@ -1340,7 +1342,6 @@ publish(
   }
 )
 .query(ctx => `
-
 
 WITH RECURSIVE
 
@@ -3723,7 +3724,9 @@ WHERE occurred_at >= identity_rebuild_checkpoint
    events may receive a Stage 6 identity.
 
    Grain:
-     One row per valid web request event within the current repair walk scope.
+   One row per valid web request event within the current recursive walk scope.
+   A web request event is uniquely identified by the combination of request_uuid
+   and occurred_at.
 
    Input:
      identity_second_recursive_walk_input_[event source]
@@ -3752,8 +3755,8 @@ publish(
       Grain: one row per valid web-request event within the current repair-walk scope.`,
     dependencies: params.dependencies,
     columns: {
-      request_uuid: `Unique identifier for the web-request event. This is the grain of the table.`,
-      occurred_at: `Timestamp at which the web-request event occurred.`,
+      request_uuid: `Unique identifier for the web-request event. Together with occurred_at, this forms the grain of the table.`,
+      occurred_at: `Timestamp at which the web-request event occurred. Together with request_uuid, this forms the grain of the table.`,
       event_date: `Calendar date on which the web-request event occurred. Derived from occurred_at and used to partition the table.`,
       event_type: `Type of source event. This model retains web-request events only.`,
       auid: `Anonymous user identifier observed on the web-request event. Derived from anonymised_user_agent_and_ip.`,

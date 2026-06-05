@@ -104,6 +104,14 @@ constrained pre auth stitching.
   ...signInPagePaths
   ]);
 
+  /* Pre-auth page stitching is enabled by default but can be disabled for an
+  individual service through the service-specific configuration file.
+
+  Where enabled, eligible anonymous pre-auth and sign-in pages may be attached to
+  the immediately following resolved-user session under the narrow matching rules
+  defined below. Where disabled, the pre-auth stitching path list is empty and no
+  anonymous pages are attached to resolved-user sessions. */
+
   const enablePreAuthPageStitching =
   webAnalytics.features?.enablePreAuthPageStitching ?? true;
 
@@ -550,6 +558,11 @@ signed_in_session_start_events AS (
 
 /* --------------------------------------------------------------------------
    3. Attach eligible anonymous pre-auth pages to resolved-user sessions
+
+   This segment only has an impact where pre-auth page stitching is enabled in the
+   service specific configuration file. The feature is enabled by default but
+   can be disabled by setting features.enablePreAuthPageStitching to false in
+   the appropriate section of the web_analytics_identity_inference_config.js file.
 
    The identity-resolution pipeline intentionally avoids assigning an IUID to
    some pre-auth public activity. Attach a narrow set of those pages to the
