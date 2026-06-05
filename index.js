@@ -1,4 +1,4 @@
-const version = "2.5.0";
+const version = "2.5.1";
 
 const parameterFunctions = require("./includes/parameter_functions");
 
@@ -86,6 +86,7 @@ module.exports = (params) => {
         }], // an array of day or date ranges between which some assertions will be disabled if other parameters are set to disable them. Each range is a hash containing either the integer values fromDay, fromMonth, toDay and toMonth *or* the date values fromDate and toDate. Defaults to an approximation to school holidays each year.
 
         enableAirbyteSource: false, // Master switch for Airbyte processing
+        hasTimestamps: true,       // global default; set to false for non-Rails services without created_at/updated_at
 
         airbyteConfig: {
             datasetName: null, // name of the BigQuery dataset that Airbyte streams data into

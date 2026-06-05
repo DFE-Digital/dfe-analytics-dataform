@@ -19,6 +19,7 @@ dfeAnalyticsDataform({
     
     // NEW: Enable Airbyte
     enableAirbyteSource: true,
+    hasTimestamps: true,
     
     airbyteConfig: {
         datasetName: "rtt_airbyte_production",                    
