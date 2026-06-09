@@ -28,6 +28,7 @@ module.exports = (params) => {
         const tableName = `${entitySchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
         const sourceTable = `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${entitySchema.entityTableName}\``;
         const primaryKey = entitySchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id';
+        const hasTimestamps = entitySchema.hasTimestamps;
 
         const fieldAssertionDependencies = params.airbyteEnableAssertions ?
             params.dataSchema.map(schema => schema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName) : [];
@@ -39,20 +40,26 @@ module.exports = (params) => {
                 uniqueKey: [primaryKey, "valid_from"],
                 description: `[AIRBYTE] Version history of ${entitySchema.entityTableName} entities. ${entitySchema.description || ''}`,
                 columns: Object.assign({
-                        [primaryKey]: `Primary key of the ${entitySchema.entityTableName} entity.`,
-                        valid_from: "Timestamp from which this version was valid (updated_at from the source).",
-                        valid_to: "Timestamp until which this version was valid. NULL = current.",
-                        is_current: "TRUE if this is the current version.",
-                        is_deleted: "TRUE if this entity is deleted.",
-                        version_number: "Sequential version number (1 = oldest).",
-                        created_at: "Timestamp this entity was first saved in the database.",
-                        updated_at: "Timestamp this entity was last updated in the database.",
-                        cdc_updated_at: "Timestamp of the CDC event captured by Airbyte.",
-                        deleted_at: "Timestamp of the CDC event at which the entity was deleted in the source database. NULL if not deleted.",
-                        _airbyte_raw_id: "Unique identifier assigned by Airbyte to each raw record ingested.",
-                        _airbyte_extracted_at: "Timestamp of the Airbyte extraction"
-                    },
-                    ...(entitySchema.keys ? parameterFunctions.getKeyColumns(entitySchema.keys) : [])
+                    [primaryKey]: `Primary key of the ${entitySchema.entityTableName} entity.`,
+                    valid_from: hasTimestamps
+                        ? "Timestamp from which this version was valid (updated_at from the source database)."
+                        : "Timestamp from which this version was valid (CDC event timestamp from Airbyte, used as a substitute because this entity does not have an updated_at column in the source database).",
+                    valid_to: "Timestamp until which this version was valid. NULL if this is the current version.",
+                    is_current: "TRUE if this is the most recent non-deleted version of the entity.",
+                    is_deleted: "TRUE if this entity has been soft-deleted via a CDC deletion event.",
+                    version_number: "Sequential version number for this entity, starting at 1 (oldest).",
+                    ...(hasTimestamps ? {
+                        created_at: "Timestamp this entity was first saved in the source database.",
+                        updated_at: "Timestamp this entity was last updated in the source database. Also used as valid_from to derive version history.",
+                    } : {
+                        created_at: "Always NULL. This entity does not have a created_at column in the source database (non-Rails service).",
+                    }),
+                    cdc_updated_at: "Timestamp of the CDC change event captured by Airbyte. Derived from _ab_cdc_updated_at. For entities without updated_at, this is also used as valid_from.",
+                    deleted_at: "Timestamp of the CDC deletion event at which this entity was deleted in the source database. NULL if the entity has not been deleted.",
+                    _airbyte_raw_id: "Unique identifier assigned by Airbyte to each raw record ingested from the source.",
+                    _airbyte_extracted_at: "Timestamp when Airbyte extracted this record from the source database.",
+                },
+                ...(entitySchema.keys ? parameterFunctions.getKeyColumns(entitySchema.keys) : [])
                 ),
                 bigquery: {
                     partitionBy: "DATE(valid_to)",
@@ -89,8 +96,7 @@ WITH
       CAST(${primaryKey} AS STRING) AS ${primaryKey},
       * EXCEPT (
           ${primaryKey},
-          created_at,
-          updated_at,
+          ${hasTimestamps ? 'created_at, updated_at,' : ''}
           _airbyte_raw_id,
           _airbyte_meta,
           _airbyte_generation_id,
@@ -99,8 +105,11 @@ WITH
           _ab_cdc_deleted_at
       ),
       TIMESTAMP(LEFT(_ab_cdc_updated_at, 26)) AS cdc_updated_at,
-      TIMESTAMP(created_at) AS created_at,
-      TIMESTAMP(updated_at) AS updated_at,
+      ${hasTimestamps
+        ? `TIMESTAMP(created_at) AS created_at, TIMESTAMP(updated_at) AS updated_at,`
+        : `CAST(NULL AS TIMESTAMP) AS created_at,`
+        /* updated_at omitted entirely; cdc_updated_at takes its role */
+        }
       TIMESTAMP(_ab_cdc_deleted_at) AS deleted_at,
       CAST(_airbyte_raw_id AS STRING) AS _airbyte_raw_id
     FROM ${sourceTable}
@@ -108,7 +117,7 @@ WITH
       ${primaryKey} IS NOT NULL
       AND _airbyte_extracted_at > extracted_at_checkpoint
     QUALIFY ROW_NUMBER() OVER (
-      PARTITION BY CAST(${primaryKey} AS STRING), TIMESTAMP(updated_at)
+      PARTITION BY CAST(${primaryKey} AS STRING), ${hasTimestamps ? `TIMESTAMP(updated_at)` : `cdc_updated_at`}
       ORDER BY _airbyte_extracted_at DESC
     ) = 1
   ),
@@ -131,7 +140,8 @@ ${ctx.incremental() ? `
         SELECT 1
         FROM source_data s
         WHERE s.${primaryKey} = ${ctx.self()}.${primaryKey}
-          AND s.updated_at = ${ctx.self()}.updated_at
+          AND s.${hasTimestamps ? `updated_at` : `cdc_updated_at`} 
+            = ${ctx.self()}.${hasTimestamps ? `updated_at` : `cdc_updated_at`}
       )
   ),
 ` : ``}
@@ -153,29 +163,29 @@ ${ctx.incremental() ? `
   )
     SELECT
       live_records.*,
-      updated_at AS valid_from,
+      ${hasTimestamps ? `updated_at` : `cdc_updated_at`} AS valid_from,
       /* valid_to is either the next version's updated_at, or if no next version exists, the deletion timestamp (if deleted) */
       COALESCE(
-        LEAD(updated_at) OVER (
-          PARTITION BY live_records.${primaryKey}
-          ORDER BY updated_at ASC, cdc_updated_at ASC
+        LEAD(${hasTimestamps ? `updated_at` : `cdc_updated_at`}) OVER (
+            PARTITION BY live_records.${primaryKey}
+            ORDER BY ${hasTimestamps ? `updated_at ASC, ` : ``} cdc_updated_at ASC
         ),
         IF(deletions.deleted_at > cdc_updated_at, deletions.deleted_at, NULL)
       ) AS valid_to,
       deletions.deleted_at IS NOT NULL
-        AND deletions.deleted_at > updated_at
-        AND LEAD(updated_at) OVER (
+        AND deletions.deleted_at > ${hasTimestamps ? `updated_at` : `cdc_updated_at`} 
+        AND LEAD(${hasTimestamps ? `updated_at` : `cdc_updated_at`}) OVER (
           PARTITION BY live_records.${primaryKey}
-          ORDER BY updated_at ASC, cdc_updated_at ASC
+          ORDER BY ${hasTimestamps ? `updated_at ASC, ` : ``}cdc_updated_at ASC
         ) IS NULL AS is_deleted,
       ROW_NUMBER() OVER (
         PARTITION BY live_records.${primaryKey}
-        ORDER BY updated_at DESC, cdc_updated_at DESC
+        ORDER BY ${hasTimestamps ? `updated_at DESC, ` : ``}cdc_updated_at DESC
       ) = 1
         AND (deletions.deleted_at IS NULL OR deletions.deleted_at <= cdc_updated_at) AS is_current,
       ROW_NUMBER() OVER (
         PARTITION BY live_records.${primaryKey}
-        ORDER BY updated_at ASC, cdc_updated_at ASC
+        ORDER BY ${hasTimestamps ? `updated_at ASC, ` : ``}cdc_updated_at ASC
       ) AS version_number
     FROM live_records
     LEFT JOIN deletions USING (${primaryKey})

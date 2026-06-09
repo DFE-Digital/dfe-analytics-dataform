@@ -28,7 +28,8 @@ const validTopLevelParameters = ['eventSourceName',
     // Airbyte parameters
     'enableAirbyteSource',
     'airbyteConfig',
-    'airbyteHeartbeat'
+    'airbyteHeartbeat',
+    'hasTimestamps'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
     'description',
@@ -38,7 +39,8 @@ const validDataSchemaTableParameters = ['entityTableName',
     'dataFreshnessDays',
     'dataFreshnessDisableDuringRange',
     'materialisation',
-    'expirationDays'
+    'expirationDays',
+    'hasTimestamps'
 ];
 const validCustomEventSchemaEventParameters = ['eventType',
     'description',
@@ -199,6 +201,10 @@ function validateParams(params) {
             throw new Error("datasetName parameter is required in the airbyteConfig configuration block when enableAirbyteSource is true");
         }
 
+        if (params.hasTimestamps !== undefined && typeof params.hasTimestamps !== 'boolean') {
+    throw new Error(`hasTimestamps must be a boolean value (true or false), not "${params.hasTimestamps}".`);
+}
+
         // Validate dataSchema has required fields for Airbyte
         params.dataSchema.forEach(entity => {
             if (!entity.entityTableName) {
@@ -206,6 +212,9 @@ function validateParams(params) {
             }
             if (!entity.keys) {
                 throw new Error(`Entity '${entity.entityTableName}' must have 'keys' defined for Airbyte processing`);
+            }
+            if (entity.hasTimestamps !== undefined && typeof entity.hasTimestamps !== 'boolean') {
+        throw new Error(`hasTimestamps for entity '${entity.entityTableName}' must be a boolean value (true or false), not "${entity.hasTimestamps}".`);
             }
         });
     }
@@ -219,6 +228,13 @@ function setDefaultSchemaParameters(params) {
         if (!tableSchema.materialisation) {
             tableSchema.materialisation = 'table';
         }
+
+        if (tableSchema.hasTimestamps === undefined) {
+            tableSchema.hasTimestamps = params.hasTimestamps !== undefined
+                ? params.hasTimestamps
+                : true;
+        }
+        
         // Set default value of key level hiddenPolicyTagLocation to match event source level hiddenPolicyTagLocation if not set explicitly and the field is actually hidden
         tableSchema.keys.forEach(key => {
             if (key.hidden && !key.hiddenPolicyTagLocation) {
