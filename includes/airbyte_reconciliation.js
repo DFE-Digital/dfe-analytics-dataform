@@ -25,6 +25,7 @@ function reconciliationNames(params, entitySchema) {
     primaryKey: entitySchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id',
     sourceTable: `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${entitySchema.entityTableName}\``,
     versionTableName: `${entitySchema.entityTableName}_version_${params.eventSourceName}${suffix}`,
+    latestTableName: `${entitySchema.entityTableName}_latest_${params.eventSourceName}${suffix}`,
     fullRefreshesTableName: `${entitySchema.entityTableName}_airbyte_full_refreshes_${params.eventSourceName}`,
     reconciliationDeletesTableName: `${entitySchema.entityTableName}_airbyte_reconciliation_deletes_${params.eventSourceName}`,
     volumeGuardAssertionName: `${entitySchema.entityTableName}_airbyte_reconciliation_exceeds_safe_delete_volume_${params.eventSourceName}`,
@@ -149,6 +150,7 @@ WHERE
 function volumeGuardQuery(
     deletesTable,
     versionTable,
+    latestTable,
     primaryKeyField,
     maxDeleteFraction,
     forceReconcileSnapshotLsn
@@ -160,9 +162,7 @@ function volumeGuardQuery(
   SELECT
     COUNT(*) AS live_row_count
   FROM
-    ${versionTable}
-  WHERE
-    valid_to IS NULL
+    ${latestTable}
 ),
 pending AS (
   SELECT
@@ -202,7 +202,7 @@ module.exports = (params) => {
       description: `[AIRBYTE] Full refresh snapshots of ${entitySchema.entityTableName} detected by LSN signature, used to reconcile deletions missed by CDC.`
     }).query(ctx => fullRefreshDetectionQuery(
       names.sourceTable,
-      ctx.resolve(names.versionTableName), // resolve, not ref: avoids dependency cycle
+      ctx.resolve(names.latestTableName), // resolve, not ref: avoids dependency cycle
       params.airbyteReconciliation.minLiveFraction,
       params.airbyteReconciliation.minSnapshotAgeMinutes,
       params.airbyteReconciliation.detectionWindowDays
@@ -217,7 +217,8 @@ module.exports = (params) => {
     }).query(ctx => reconciliationDeletesQuery(
       names.sourceTable,
       ctx.ref(names.fullRefreshesTableName),
-      ctx.resolve(names.versionTableName), // resolve, not ref: avoids dependency cycle
+      ctx.resolve(names.versionTableName),
+      ctx.resolve(names.latestTableName),
       names.primaryKey,
       ctx.incremental() ? ctx.self() : null
     ));
@@ -227,7 +228,7 @@ module.exports = (params) => {
       description: `[AIRBYTE] Blocks the ${entitySchema.entityTableName} version table if pending inferred deletions exceed airbyteReconciliation.maxDeleteFraction of live rows, which may indicate a bulk transaction misclassified as a full refresh.`
     }).query(ctx => volumeGuardQuery(
       ctx.ref(names.reconciliationDeletesTableName),
-      ctx.resolve(names.versionTableName), // resolve, not ref: avoids dependency cycle
+      ctx.resolve(names.latestTableName),
       names.primaryKey,
       params.airbyteReconciliation.maxDeleteFraction,
       params.airbyteReconciliation.forceReconcileSnapshotLsn

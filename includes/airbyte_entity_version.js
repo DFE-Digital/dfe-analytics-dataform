@@ -165,7 +165,7 @@ ${ctx.incremental() ? `
       UNION ALL
       /* Synthetic deletions inferred from Airbyte full refresh reconciliation */
       SELECT ${primaryKey}, deleted_at_assumed AS deleted_at
-      FROM ${ctx.ref(reconciliationDeletesTableName)}` : ``}
+      FROM ${ctx.ref(reconciliationNames.reconciliationDeletesTableName)}` : ``}
     )
     GROUP BY ${primaryKey}
   ),

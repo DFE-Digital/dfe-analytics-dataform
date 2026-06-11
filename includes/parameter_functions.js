@@ -195,9 +195,6 @@ function validateParams(params) {
             }
         });
 
-        if (params.airbyteReconciliation.enabled && !params.enableAirbyteSource) {
-            throw new Error("airbyteReconciliation.enabled requires enableAirbyteSource: true");
-        }
         if (!params.airbyteConfig) {
             throw new Error("airbyteConfig configuration block is required at the top level of the configuration passed to dfeAnalyticsDataform() when enableAirbyteSource is true.");
         }
@@ -206,8 +203,8 @@ function validateParams(params) {
         }
 
         if (params.hasTimestamps !== undefined && typeof params.hasTimestamps !== 'boolean') {
-    throw new Error(`hasTimestamps must be a boolean value (true or false), not "${params.hasTimestamps}".`);
-}
+            throw new Error(`hasTimestamps must be a boolean value (true or false), not "${params.hasTimestamps}".`);
+        }
 
         // Validate dataSchema has required fields for Airbyte
         params.dataSchema.forEach(entity => {
@@ -221,6 +218,10 @@ function validateParams(params) {
         throw new Error(`hasTimestamps for entity '${entity.entityTableName}' must be a boolean value (true or false), not "${entity.hasTimestamps}".`);
             }
         });
+    }
+
+    if (params.airbyteReconciliation.enabled && !params.enableAirbyteSource) {
+            throw new Error("airbyteReconciliation.enabled requires enableAirbyteSource: true");
     }
     return params;
 }
