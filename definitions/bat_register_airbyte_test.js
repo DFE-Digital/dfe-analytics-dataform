@@ -32,6 +32,14 @@ dfeAnalyticsDataform({
         freshnessHours: 12,
         tableName: 'airbyte_heartbeat'
     },
+
+    airbyteReconciliation: {
+                enabled: true,
+                minLiveFraction: 0.8,
+                maxDeleteFraction: 0.5,
+                minSnapshotAgeMinutes: 60,
+                detectionWindowDays: 60
+    },
     
     dataSchema: [{
             entityTableName: "academic_cycles",

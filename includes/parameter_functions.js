@@ -29,7 +29,8 @@ const validTopLevelParameters = ['eventSourceName',
     'enableAirbyteSource',
     'airbyteConfig',
     'airbyteHeartbeat',
-    'hasTimestamps'
+    'hasTimestamps',
+    'airbyteReconciliation'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
     'description',
@@ -194,6 +195,9 @@ function validateParams(params) {
             }
         });
 
+        if (params.airbyteReconciliation.enabled && !params.enableAirbyteSource) {
+            throw new Error("airbyteReconciliation.enabled requires enableAirbyteSource: true");
+        }
         if (!params.airbyteConfig) {
             throw new Error("airbyteConfig configuration block is required at the top level of the configuration passed to dfeAnalyticsDataform() when enableAirbyteSource is true.");
         }
