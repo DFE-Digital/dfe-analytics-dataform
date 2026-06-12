@@ -24,7 +24,7 @@ dfeAnalyticsDataform({
     airbyteConfig: {
         datasetName: "rtt_airbyte_production",
         tableSuffix: "_airbyte",
-        defaultPrimaryKeyField: "id"
+        PrimaryKeyField: "id"
     },
 
     airbyteHeartbeat: {
