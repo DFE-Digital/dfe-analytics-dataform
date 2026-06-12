@@ -115,7 +115,6 @@ module.exports = (params) => {
         ...params
     };
 
-    // Deep-merge this nested config so callers can override individual keys without losing defaults.
     params.airbyteReconciliation = {
         enabled: false,
         minLiveFraction: 0.8,
@@ -123,7 +122,7 @@ module.exports = (params) => {
         minSnapshotAgeMinutes: 60,
         detectionWindowDays: 7,
         forceReconcileSnapshotLsn: null,
-        ...(params.airbyteReconciliation || {})
+        ...(params.airbyteReconciliation)
     };
 
     // If disabled is true, stop right here, return no action definitions, and don't try to validate parameters
