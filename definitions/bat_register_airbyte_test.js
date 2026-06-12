@@ -746,7 +746,7 @@ dfeAnalyticsDataform({
             keys: [{
                     keyName: "additional_dttp_data",
                     dataType: "string",
-                    description: "Additional dttp data shown were applicable",
+                    description: "Additional dttp data shown where applicable",
                     hidden: true
                 }, {
                     keyName: "additional_ethnic_background",
