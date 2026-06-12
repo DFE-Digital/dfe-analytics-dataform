@@ -220,9 +220,6 @@ function validateParams(params) {
         });
     }
 
-    if (params.airbyteReconciliation.enabled && !params.enableAirbyteSource) {
-            throw new Error("airbyteReconciliation.enabled requires enableAirbyteSource: true");
-    }
     return params;
 }
 
