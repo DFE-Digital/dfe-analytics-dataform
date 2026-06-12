@@ -218,7 +218,6 @@ module.exports = (params) => {
       names.sourceTable,
       ctx.ref(names.fullRefreshesTableName),
       ctx.resolve(names.versionTableName),
-      ctx.resolve(names.latestTableName),
       names.primaryKey,
       ctx.incremental() ? ctx.self() : null
     ));
@@ -228,6 +227,7 @@ module.exports = (params) => {
       description: `[AIRBYTE] Blocks the ${entitySchema.entityTableName} version table if pending inferred deletions exceed airbyteReconciliation.maxDeleteFraction of live rows, which may indicate a bulk transaction misclassified as a full refresh.`
     }).query(ctx => volumeGuardQuery(
       ctx.ref(names.reconciliationDeletesTableName),
+      ctx.resolve(names.versionTableName),
       ctx.resolve(names.latestTableName),
       names.primaryKey,
       params.airbyteReconciliation.maxDeleteFraction,
