@@ -36,7 +36,7 @@ dfeAnalyticsDataform({
     airbyteReconciliation: {
         enabled: true,
         minLiveFraction: 0.8,
-        maxDeleteFraction: 0.5,
+        maxDeleteFraction: 0.2,
         minSnapshotAgeMinutes: 60,
         detectionWindowDays: 60
     },

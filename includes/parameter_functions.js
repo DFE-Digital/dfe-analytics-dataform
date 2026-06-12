@@ -220,6 +220,15 @@ function validateParams(params) {
         });
     }
 
+    if (params.airbyteReconciliation !== undefined) {
+    if (typeof params.airbyteReconciliation !== 'object' || params.airbyteReconciliation === null) {
+        throw new Error(`airbyteReconciliation must be an object, not "${params.airbyteReconciliation}".`);
+    }
+    if (params.airbyteReconciliation.enabled !== undefined && typeof params.airbyteReconciliation.enabled !== 'boolean') {
+        throw new Error(`airbyteReconciliation.enabled must be a boolean, not "${params.airbyteReconciliation.enabled}".`);
+    }
+}
+
     return params;
 }
 

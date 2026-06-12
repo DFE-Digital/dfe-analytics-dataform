@@ -106,6 +106,8 @@ snapshot_pks AS (
     latest_snapshot
   ON
     airbyte_source._ab_cdc_lsn = latest_snapshot.lsn
+    AND airbyte_source._airbyte_extracted_at >= latest_snapshot.snapshot_started_at 
+        AND latest_snapshot.snapshot_finished_at
 )
 SELECT
   version.${primaryKeyField} AS ${primaryKeyField},
@@ -135,7 +137,8 @@ WHERE
 function volumeGuardQuery({deletesTable, versionTable, primaryKeyField, maxDeleteFraction, forceReconcileSnapshotLsn}) {
   const overrideClause = forceReconcileSnapshotLsn
     ? `
-  AND pending.snapshot_lsn != ${JSON.stringify(forceReconcileSnapshotLsn)} /* one-shot override set in airbyteReconciliation; set, run, remove */`
+  AND pending.snapshot_lsn != ${JSON.stringify(forceReconcileSnapshotLsn)} /* one-shot override set in airbyteReconciliation; set, run, remove */`
+
     : '';
   return `WITH live AS (
   SELECT
@@ -147,8 +150,10 @@ function volumeGuardQuery({deletesTable, versionTable, primaryKeyField, maxDelet
 ),
 pending AS (
   SELECT
-    log.snapshot_lsn AS snapshot_lsn,
-    COUNT(*) AS pending_delete_count
+    log.snapshot_lsn AS snapshot_lsn,
+
+    COUNT(*) AS pending_delete_count
+
   FROM
     ${deletesTable} AS log
   INNER JOIN
@@ -156,8 +161,10 @@ pending AS (
   ON
     version.${primaryKeyField} = log.${primaryKeyField}
     AND version.valid_to IS NULL
-  GROUP BY
-    log.snapshot_lsn
+  GROUP BY
+
+    log.snapshot_lsn
+
 )
 SELECT
   pending.snapshot_lsn,
