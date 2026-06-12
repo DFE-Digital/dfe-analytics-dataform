@@ -106,7 +106,8 @@ snapshot_pks AS (
     latest_snapshot
   ON
     airbyte_source._ab_cdc_lsn = latest_snapshot.lsn
-    AND airbyte_source._airbyte_extracted_at >= latest_snapshot.snapshot_started_at 
+    AND airbyte_source._airbyte_extracted_at 
+    BETWEEN latest_snapshot.snapshot_started_at 
         AND latest_snapshot.snapshot_finished_at
 )
 SELECT
