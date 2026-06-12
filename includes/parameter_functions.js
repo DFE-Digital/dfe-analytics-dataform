@@ -29,7 +29,8 @@ const validTopLevelParameters = ['eventSourceName',
     'enableAirbyteSource',
     'airbyteConfig',
     'airbyteHeartbeat',
-    'hasTimestamps'
+    'hasTimestamps',
+    'airbyteReconciliation'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
     'description',
@@ -202,8 +203,8 @@ function validateParams(params) {
         }
 
         if (params.hasTimestamps !== undefined && typeof params.hasTimestamps !== 'boolean') {
-    throw new Error(`hasTimestamps must be a boolean value (true or false), not "${params.hasTimestamps}".`);
-}
+            throw new Error(`hasTimestamps must be a boolean value (true or false), not "${params.hasTimestamps}".`);
+        }
 
         // Validate dataSchema has required fields for Airbyte
         params.dataSchema.forEach(entity => {
@@ -218,6 +219,16 @@ function validateParams(params) {
             }
         });
     }
+
+    if (params.airbyteReconciliation !== undefined) {
+        if (typeof params.airbyteReconciliation !== 'object' || params.airbyteReconciliation === null) {
+            throw new Error(`airbyteReconciliation must be an object, not "${params.airbyteReconciliation}".`);
+        }
+        if (params.airbyteReconciliation.enabled !== undefined && typeof params.airbyteReconciliation.enabled !== 'boolean') {
+            throw new Error(`airbyteReconciliation.enabled must be a boolean, not "${params.airbyteReconciliation.enabled}".`);
+        }
+    }
+
     return params;
 }
 

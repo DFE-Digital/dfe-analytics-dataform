@@ -1,6 +1,7 @@
 /* Generates {entity}_latest_{source}{suffix} tables from Airbyte raw data; Contains the most recent version of each entity. */
 
 const parameterFunctions = require("./parameter_functions");
+const airbyteReconciliation = require("./airbyte_reconciliation");
 
 module.exports = (params) => {
     if (!params.enableAirbyteSource) return null;
@@ -20,7 +21,12 @@ module.exports = (params) => {
 
         publish(tableSchema.entityTableName + "_latest_" + params.eventSourceName + suffix, {
             ...params.defaultConfig,
-            dependencies: fieldAssertionDependencies, 
+            dependencies: [
+                ...fieldAssertionDependencies,
+                ...(params.airbyteReconciliation.enabled
+                    ? [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName]
+                    : [])
+            ],
             type: tableSchema.materialisation || 'table',
             ...((tableSchema.materialisation || 'table') == "table" ? {
                 assertions: {

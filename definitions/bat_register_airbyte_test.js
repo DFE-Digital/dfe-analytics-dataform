@@ -16,14 +16,14 @@ dfeAnalyticsDataform({
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     expirationDays: false,
     enableMonitoring: false,
-    
+
     // NEW: Enable Airbyte
     enableAirbyteSource: true,
     hasTimestamps: true,
-    
+
     airbyteConfig: {
-        datasetName: "rtt_airbyte_production",                    
-        outputSuffix: "_airbyte",               
+        datasetName: "rtt_airbyte_production",
+        tableSuffix: "_airbyte",
         primaryKeyField: "id"
     },
 
@@ -32,7 +32,15 @@ dfeAnalyticsDataform({
         freshnessHours: 12,
         tableName: 'airbyte_heartbeat'
     },
-    
+
+    airbyteReconciliation: {
+        enabled: true,
+        minLiveFraction: 0.8,
+        maxDeleteFraction: 0.2,
+        minSnapshotAgeMinutes: 60,
+        detectionWindowDays: 60
+    },
+
     dataSchema: [{
             entityTableName: "academic_cycles",
             description: "",
@@ -121,7 +129,7 @@ dfeAnalyticsDataform({
                 description: "Message describing the error in detail."
             }]
         },
-            {
+        {
             entityTableName: "bulk_update_trainee_uploads",
             materialisation: "view",
             description: "This table contains information about the bulk upload update for trainees",
@@ -736,6 +744,16 @@ dfeAnalyticsDataform({
             description: "",
             dataFreshnessDays: 3,
             keys: [{
+                    keyName: "additional_dttp_data",
+                    dataType: "string",
+                    description: "Additional dttp data shown where applicable",
+                    hidden: true
+                }, {
+                    keyName: "additional_ethnic_background",
+                    dataType: "string",
+                    description: "Additional ethnicity detail recorded in Register",
+                    hidden: true
+                }, {
                     keyName: "apply_application_id",
                     dataType: "string",
                     description: "Foreign key to apply_applications identifier register_apply_applications .id",
@@ -870,6 +888,16 @@ dfeAnalyticsDataform({
                     description: "",
                     foreignKeyTable: "academic_cycles"
                 }, {
+                    keyName: "ethnic_background",
+                    dataType: "string",
+                    description: "Primary ethnicity category selected by the trainee",
+                    hidden: true
+                }, {
+                    keyName: "ethnic_group",
+                    dataType: "string",
+                    description: "Broad demographic ethnic classification category specified by the trainee",
+                    hidden: true
+                }, {
                     keyName: "first_names",
                     dataType: "string",
                     description: "First name of the trainee",
@@ -908,8 +936,12 @@ dfeAnalyticsDataform({
                     dataType: "string",
                     description: "Last name of the trainee",
                     hidden: true
-                },
-                {
+                }, {
+                    keyName: "middle_names",
+                    dataType: "string",
+                    description: "Middle name(s) of the trainee",
+                    hidden: true
+                }, {
                     keyName: "training_partner_id",
                     pastKeyNames: ["lead_partner_id"],
                     dataType: "string",
@@ -942,6 +974,11 @@ dfeAnalyticsDataform({
                     description: "Registers unique provider identifier. Not used by other services.",
                     foreignKeyTable: "providers"
                 }, {
+                    keyName: "provider_trainee_id",
+                    dataType: "string",
+                    description: "Providers unique trainee identifier. Not used by other services.",
+                    hidden: true
+                }, {
                     keyName: "recommended_for_award_at",
                     dataType: "timestamp",
                     description: ""
@@ -966,6 +1003,11 @@ dfeAnalyticsDataform({
                     dataType: "string",
                     description: "",
                     foreignKeyTable: "academic_cycles"
+                }, {
+                    keyName: "searchable",
+                    dataType: "string",
+                    description: "Weighted full text search tokens used to make the trainee record searchable",
+                    hidden: true
                 }, {
                     keyName: "sex",
                     dataType: "string",
@@ -1168,6 +1210,29 @@ dfeAnalyticsDataform({
                 dataType: "string",
                 description: "",
                 foreignKeyTable: "users"
+            }]
+        },
+        {
+            entityTableName: "feedback_items",
+            description: "Stores responses from the Register integrated feedback form",
+            keys: [{
+                keyName: "satisfaction_level",
+                dataType: "string",
+                description: "User satisfaction rating from the feedback form",
+            }, {
+                keyName: "improvement_suggestion",
+                dataType: "string",
+                description: "Free text comments where users describe issues, suggestions, or ideas for improving Register."
+            }, {
+                keyName: "name",
+                dataType: "string",
+                description: "The respondent’s name, collected for internal follow up where needed.",
+                hidden: true
+            }, {
+                keyName: "email",
+                dataType: "string",
+                description: "The respondent’s email, collected for internal follow up where needed.",
+                hidden: true
             }]
         }
     ],
