@@ -135,7 +135,7 @@ WHERE
 function volumeGuardQuery({deletesTable, versionTable, primaryKeyField, maxDeleteFraction, forceReconcileSnapshotLsn}) {
   const overrideClause = forceReconcileSnapshotLsn
     ? `
-  AND pending.snapshot_lsn != ${forceReconcileSnapshotLsn} /* one-shot override set in airbyteReconciliation; set, run, remove */`
+  AND pending.snapshot_lsn != ${JSON.stringify(forceReconcileSnapshotLsn)} /* one-shot override set in airbyteReconciliation; set, run, remove */`
     : '';
   return `WITH live AS (
   SELECT
@@ -147,8 +147,8 @@ function volumeGuardQuery({deletesTable, versionTable, primaryKeyField, maxDelet
 ),
 pending AS (
   SELECT
-    COUNT(*) AS pending_delete_count,
-    ANY_VALUE(log.snapshot_lsn) AS snapshot_lsn
+    log.snapshot_lsn AS snapshot_lsn,
+    COUNT(*) AS pending_delete_count
   FROM
     ${deletesTable} AS log
   INNER JOIN
@@ -156,6 +156,8 @@ pending AS (
   ON
     version.${primaryKeyField} = log.${primaryKeyField}
     AND version.valid_to IS NULL
+  GROUP BY
+    log.snapshot_lsn
 )
 SELECT
   pending.snapshot_lsn,
