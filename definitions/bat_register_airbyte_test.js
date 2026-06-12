@@ -23,8 +23,8 @@ dfeAnalyticsDataform({
 
     airbyteConfig: {
         datasetName: "rtt_airbyte_production",
-        outputSuffix: "_airbyte",
-        primaryKeyField: "id"
+        tableSuffix: "_airbyte",
+        defaultPrimaryKeyField: "id"
     },
 
     airbyteHeartbeat: {
@@ -746,7 +746,8 @@ dfeAnalyticsDataform({
             keys: [{
                     keyName: "additional_dttp_data",
                     dataType: "string",
-                    description: "Additional dttp data shown where applicable",
+                    description: "Additional dttp data shown where applicable",
+
                     hidden: true
                 }, {
                     keyName: "additional_ethnic_background",
