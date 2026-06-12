@@ -1,21 +1,14 @@
 /* Generates full-refresh reconciliation tables for Airbyte CDC entities. 
 
    For each entity in dataSchema, when params.airbyteReconciliation.enabled:
-    - {entity}_airbyte_full_refreshes_{source}            (table)
-        Completed Airbyte full-refresh snapshots, detected by LSN signature:
-        a full refresh emits the entire table under a single _ab_cdc_lsn with
-        zero deletes.
-    - {entity}_airbyte_reconciliation_deletes_{source}    (incremental, protected)
-        Append-only log of entities inferred deleted because they were absent
-        from the latest full refresh. Consumed by the deletions CTE in
-        airbyte_entity_version.js, and the permanent audit trail. protected:
-        a version-table full refresh must REPRODUCE reconciled deletions, not
-        resurrect ghost rows.
-    - {entity}_airbyte_reconciliation_exceeds_safe_delete_volume_{source} (assertion)
-        Circuit breaker: fails when pending inferred deletions exceed
-        maxDeleteFraction of live rows (the signature of a bulk transaction
-        misclassified as a full refresh). The version table depends on this
-        assertion, so a trip blocks application.
+  - {entity}_airbyte_full_refreshes_{source}                       (table)
+  - {entity}_airbyte_reconciliation_deletes_{source}               (incremental, protected)
+  - {entity}_airbyte_reconciliation_exceeds_safe_delete_volume_{source} (assertion)
+  - {entity}_airbyte_reconciliation_apply_{source}                 (operation: UPDATE)
+
+  The apply operation folds inferred deletions into the version table the same way the builder folds observed CDC deletions: 
+  by closing the last live version (valid_to / is_current / is_deleted / deleted_at). No INSERT needed.
+
 */
 
 /* Shared naming/reference helper */
