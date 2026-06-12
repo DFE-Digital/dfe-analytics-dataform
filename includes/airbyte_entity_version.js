@@ -46,7 +46,7 @@ module.exports = (params) => {
                             "Timestamp from which this version was valid (CDC event timestamp from Airbyte, used as a substitute because this entity does not have an updated_at column in the source database).",
                         valid_to: "Timestamp until which this version was valid. NULL if this is the current version.",
                         is_current: "TRUE if this is the most recent non-deleted version of the entity.",
-                        is_deleted: "TRUE if this entity has been soft-deleted via a CDC deletion event.",
+                        is_deleted: "TRUE if this entity has been soft-deleted via a CDC deletion event or Airbyte full-refresh reconciliation.",
                         version_number: "Sequential version number for this entity, starting at 1 (oldest).",
                         ...(hasTimestamps ? {
                             created_at: "Timestamp this entity was first saved in the source database.",
