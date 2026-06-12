@@ -18,7 +18,6 @@
 
 const data_functions = require("./data_functions");
 const parameterFunctions = require("./parameter_functions");
-const airbyteReconciliation = require("./airbyte_reconciliation");
 
 module.exports = (params) => {
     if (!params.enableAirbyteSource) return null;
@@ -30,9 +29,6 @@ module.exports = (params) => {
         const sourceTable = `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${entitySchema.entityTableName}\``;
         const primaryKey = entitySchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id';
         const hasTimestamps = entitySchema.hasTimestamps;
-        const reconciliationNames = params.airbyteReconciliation.enabled
-          ? airbyteReconciliation.reconciliationNames(params, entitySchema)
-          : null;
 
         const fieldAssertionDependencies = params.airbyteEnableAssertions ?
             params.dataSchema.map(schema => schema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName) : [];
@@ -40,9 +36,7 @@ module.exports = (params) => {
         return publish(tableName, {
                 type: "incremental",
                 protected: false,
-                dependencies: fieldAssertionDependencies.concat(
-                              reconciliationNames ? [reconciliationNames.volumeGuardAssertionName] : []
-                            ),
+                dependencies: fieldAssertionDependencies,
                 uniqueKey: [primaryKey, "valid_from"],
                 description: `[AIRBYTE] Version history of ${entitySchema.entityTableName} entities. ${entitySchema.description || ''}`,
                 columns: Object.assign({
@@ -153,22 +147,14 @@ ${ctx.incremental() ? `
 ` : ``}
 
   deletions AS (
-  /* Filter out deletion rows, they signal that the previous version ended. Keep them in a separate CTE. */
+    /* Filter out deletion rows, they signal that the previous version ended. Keep them in a separate CTE. */
     SELECT
-      ${primaryKey},
-      MAX(deleted_at) AS deleted_at
-    FROM (
-      SELECT ${primaryKey}, deleted_at
-      FROM ${ctx.incremental() ? `combined_with_current_versions` : `source_data`}
-      WHERE deleted_at IS NOT NULL
-      ${params.airbyteReconciliation.enabled ? `
-      UNION ALL
-      /* Synthetic deletions inferred from Airbyte full refresh reconciliation */
-      SELECT ${primaryKey}, deleted_at_assumed AS deleted_at
-      FROM ${ctx.ref(reconciliationNames.reconciliationDeletesTableName)}` : ``}
-    )
+    ${primaryKey},
+    MAX(deleted_at) AS deleted_at
+    FROM ${ctx.incremental() ? `combined_with_current_versions` : `source_data`}
+    WHERE deleted_at IS NOT NULL
     GROUP BY ${primaryKey}
-  ),
+    ),
 
   live_records AS (
     SELECT *
