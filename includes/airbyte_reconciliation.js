@@ -25,10 +25,10 @@ function reconciliationNames(params, entitySchema) {
     primaryKey: entitySchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id',
     sourceTable: `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${entitySchema.entityTableName}\``,
     versionTableName: `${entitySchema.entityTableName}_version_${params.eventSourceName}${suffix}`,
-    latestTableName: `${entitySchema.entityTableName}_latest_${params.eventSourceName}${suffix}`,
     fullRefreshesTableName: `${entitySchema.entityTableName}_airbyte_full_refreshes_${params.eventSourceName}`,
     reconciliationDeletesTableName: `${entitySchema.entityTableName}_airbyte_reconciliation_deletes_${params.eventSourceName}`,
     volumeGuardAssertionName: `${entitySchema.entityTableName}_airbyte_reconciliation_exceeds_safe_delete_volume_${params.eventSourceName}`,
+    applyOperationName: `${entitySchema.entityTableName}_airbyte_reconciliation_apply_${params.eventSourceName}`,
   };
 }
 
@@ -36,18 +36,15 @@ function reconciliationNames(params, entitySchema) {
    A full refresh emits the entire table under a single _ab_cdc_lsn with zero deletes. 
    A single bulk transaction can mimic this, which is why application is gated by the volume guard assertion. 
 */
-function fullRefreshDetectionQuery(
-    airbyteSourceTable,
-    latestTable,
-    minLiveFraction,
-    minSnapshotAgeMinutes,
-    detectionWindowDays
-) {
-    return `WITH live AS (
+function fullRefreshDetectionQuery({ sourceTable, versionTable, minLiveFraction, minSnapshotAgeMinutes, detectionWindowDays }) {
+  return `WITH live AS (
+  /* Live rows are exactly valid_to IS NULL in this builder (deleted entities have valid_to set) */
   SELECT
     COUNT(*) AS live_row_count
   FROM
-    ${latestTable}
+    ${versionTable}
+  WHERE
+    valid_to IS NULL
 ),
 lsn_stats AS (
   SELECT
@@ -58,7 +55,7 @@ lsn_stats AS (
     MIN(_airbyte_extracted_at) AS snapshot_started_at,
     MAX(_airbyte_extracted_at) AS snapshot_finished_at
   FROM
-    ${airbyteSourceTable}
+    ${sourceTable}
   WHERE
     _airbyte_extracted_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL ${detectionWindowDays} DAY)
   GROUP BY
@@ -86,15 +83,10 @@ WHERE
 /* Step 2: Append-only log of inferred deletions. 
    selfTable is non-null on incremental runs and prevents re-logging PKs already recorded for the same snapshot.
 */
-function reconciliationDeletesQuery(
-  sourceTable,               // FQN of the raw Airbyte source table
-  detectionTable,            // resolved name of the detection table
-  versionTable,              // resolved name of the entity version table
-  primaryKeyField,           // e.g. 'id'
-  selfTable                  // resolved self name on incremental runs, else null
-) {
+function reconciliationDeletesQuery({sourceTable, detectionTable, versionTable, primaryKeyField, selfTable}) {
   const incrementalGuard = selfTable
-    ? `\n  AND NOT EXISTS (
+    ? `
+  AND NOT EXISTS (
     SELECT 1
     FROM ${selfTable} AS log
     WHERE log.${primaryKeyField} = version.${primaryKeyField}
@@ -147,22 +139,18 @@ WHERE
    Returns rows (fails) when the pending reconciliation would delete more than maxDeleteFraction of live rows - the signature of a bulk transaction misclassified as a full refresh.
    forceReconcileSnapshotLsn provides a deliberate one-shot override. 
 */
-function volumeGuardQuery(
-    deletesTable,
-    versionTable,
-    latestTable,
-    primaryKeyField,
-    maxDeleteFraction,
-    forceReconcileSnapshotLsn
-) {
+function volumeGuardQuery({deletesTable, versionTable, primaryKeyField, maxDeleteFraction, forceReconcileSnapshotLsn}) {
   const overrideClause = forceReconcileSnapshotLsn
-    ? `\n  AND pending.snapshot_lsn != ${forceReconcileSnapshotLsn} /* one-shot override set in airbyteReconciliation */`
+    ? `
+  AND pending.snapshot_lsn != ${forceReconcileSnapshotLsn} /* one-shot override set in airbyteReconciliation; set, run, remove */`
     : '';
   return `WITH live AS (
   SELECT
     COUNT(*) AS live_row_count
   FROM
-    ${latestTable}
+    ${versionTable}
+  WHERE
+    valid_to IS NULL
 ),
 pending AS (
   SELECT
@@ -189,6 +177,24 @@ WHERE
   SAFE_DIVIDE(pending.pending_delete_count, live.live_row_count) > ${maxDeleteFraction}${overrideClause}`;
 }
 
+/* Step 4: apply. Folds inferred deletions into the version table exactly like observed CDC deletions: close the last live version. 
+   Idempotent: valid_to IS NULL excludes already-applied rows; a real CDC delete that beat us to the same PK in the same run also drops out. 
+   The ordering guard protects rows first seen during/after the snapshot. */
+function applyReconciliationQuery({ versionTable, deletesTable, primaryKeyField }) {
+  return `UPDATE ${versionTable} AS version
+SET
+  version.valid_to = log.deleted_at_assumed,
+  version.deleted_at = log.deleted_at_assumed,
+  version.is_current = FALSE,
+  version.is_deleted = TRUE
+FROM
+  ${deletesTable} AS log
+WHERE
+  version.${primaryKeyField} = log.${primaryKeyField}
+  AND version.valid_to IS NULL
+  AND version.valid_from < log.snapshot_started_at`;
+}
+
 /* Publish the functions above */
 module.exports = (params) => {
   if (!params.enableAirbyteSource || !params.airbyteReconciliation.enabled) return null;
@@ -200,44 +206,54 @@ module.exports = (params) => {
       type: "table",
       tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'reconciliation'],
       description: `[AIRBYTE] Full refresh snapshots of ${entitySchema.entityTableName} detected by LSN signature, used to reconcile deletions missed by CDC.`
-    }).query(ctx => fullRefreshDetectionQuery(
-      names.sourceTable,
-      ctx.resolve(names.latestTableName), // resolve, not ref: avoids dependency cycle
-      params.airbyteReconciliation.minLiveFraction,
-      params.airbyteReconciliation.minSnapshotAgeMinutes,
-      params.airbyteReconciliation.detectionWindowDays
-    ));
+    }).query(ctx => fullRefreshDetectionQuery({
+      sourceTable: names.sourceTable,
+      versionTable: ctx.ref(names.versionTableName), // ref: runs AFTER version exists - this is what makes new entities bootstrap safely
+      minLiveFraction: params.airbyteReconciliation.minLiveFraction,
+      minSnapshotAgeMinutes: params.airbyteReconciliation.minSnapshotAgeMinutes,
+      detectionWindowDays: params.airbyteReconciliation.detectionWindowDays
+    }));
 
     publish(names.reconciliationDeletesTableName, {
       type: "incremental",
-      protected: true, // survives full refreshes: this log is what stops version-table rebuilds resurrecting reconciled ghost rows
+      protected: true, // survives full refreshes: the log is the audit trail and what lets a version-table rebuild reproduce reconciled deletions
       uniqueKey: [names.primaryKey, "snapshot_lsn"],
       tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'reconciliation'],
-      description: `[AIRBYTE] Append-only log of ${entitySchema.entityTableName} entities inferred deleted because they were absent from an Airbyte full refresh. Consumed by the deletions logic in the version table; also the permanent audit trail of reconciled deletions. deleted_at_assumed is the snapshot extraction time, unlike CDC deletion timestamps which are source-database time.`
-    }).query(ctx => reconciliationDeletesQuery(
-      names.sourceTable,
-      ctx.ref(names.fullRefreshesTableName),
-      ctx.resolve(names.versionTableName),
-      names.primaryKey,
-      ctx.incremental() ? ctx.self() : null
-    ));
+      description: `[AIRBYTE] Append-only log of ${entitySchema.entityTableName} entities inferred deleted because they were absent from an Airbyte full refresh. deleted_at_assumed is snapshot extraction time, unlike CDC deletion timestamps which are source-database time.`
+    }).query(ctx => reconciliationDeletesQuery({
+      sourceTable: names.sourceTable,
+      detectionTable: ctx.ref(names.fullRefreshesTableName),
+      versionTable: ctx.ref(names.versionTableName),
+      primaryKeyField: names.primaryKey,
+      selfTable: ctx.incremental() ? ctx.self() : null
+    }));
 
-    return assert(names.volumeGuardAssertionName, {
+    assert(names.volumeGuardAssertionName, {
       tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'reconciliation'],
-      description: `[AIRBYTE] Blocks the ${entitySchema.entityTableName} version table if pending inferred deletions exceed airbyteReconciliation.maxDeleteFraction of live rows, which may indicate a bulk transaction misclassified as a full refresh.`
-    }).query(ctx => volumeGuardQuery(
-      ctx.ref(names.reconciliationDeletesTableName),
-      ctx.resolve(names.versionTableName),
-      ctx.resolve(names.latestTableName),
-      names.primaryKey,
-      params.airbyteReconciliation.maxDeleteFraction,
-      params.airbyteReconciliation.forceReconcileSnapshotLsn
-    ));
+      description: `[AIRBYTE] Blocks the reconciliation apply step for ${entitySchema.entityTableName} if pending inferred deletions exceed airbyteReconciliation.maxDeleteFraction of live rows, which may indicate a bulk transaction misclassified as a full refresh.`
+    }).query(ctx => volumeGuardQuery({
+      deletesTable: ctx.ref(names.reconciliationDeletesTableName),
+      versionTable: ctx.ref(names.versionTableName),
+      primaryKeyField: names.primaryKey,
+      maxDeleteFraction: params.airbyteReconciliation.maxDeleteFraction,
+      forceReconcileSnapshotLsn: params.airbyteReconciliation.forceReconcileSnapshotLsn
+    }));
+
+    return operate(names.applyOperationName, {
+      tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'reconciliation'],
+      dependencyTargets: [{ name: names.volumeGuardAssertionName }], // declarative circuit breaker
+      description: `[AIRBYTE] Applies inferred deletions from full refresh reconciliation to the ${entitySchema.entityTableName} version table by closing the last live version.`
+    }).queries(ctx => applyReconciliationQuery({
+      versionTable: ctx.ref(names.versionTableName),
+      deletesTable: ctx.ref(names.reconciliationDeletesTableName),
+      primaryKeyField: names.primaryKey
+    }));
   });
 };
 
-// Named properties for airbyte_entity_version.js and Jest:
+// Named properties for airbyte_entity_latest.js and Jest:
 module.exports.reconciliationNames = reconciliationNames;
 module.exports.fullRefreshDetectionQuery = fullRefreshDetectionQuery;
 module.exports.reconciliationDeletesQuery = reconciliationDeletesQuery;
 module.exports.volumeGuardQuery = volumeGuardQuery;
+module.exports.applyReconciliationQuery = applyReconciliationQuery;
