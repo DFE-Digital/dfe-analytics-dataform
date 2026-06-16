@@ -40,26 +40,26 @@ module.exports = (params) => {
                 uniqueKey: [primaryKey, "valid_from"],
                 description: `[AIRBYTE] Version history of ${entitySchema.entityTableName} entities. ${entitySchema.description || ''}`,
                 columns: Object.assign({
-                    [primaryKey]: `Primary key of the ${entitySchema.entityTableName} entity.`,
-                    valid_from: hasTimestamps
-                        ? "Timestamp from which this version was valid (updated_at from the source database)."
-                        : "Timestamp from which this version was valid (CDC event timestamp from Airbyte, used as a substitute because this entity does not have an updated_at column in the source database).",
-                    valid_to: "Timestamp until which this version was valid. NULL if this is the current version.",
-                    is_current: "TRUE if this is the most recent non-deleted version of the entity.",
-                    is_deleted: "TRUE if this entity has been soft-deleted via a CDC deletion event.",
-                    version_number: "Sequential version number for this entity, starting at 1 (oldest).",
-                    ...(hasTimestamps ? {
-                        created_at: "Timestamp this entity was first saved in the source database.",
-                        updated_at: "Timestamp this entity was last updated in the source database. Also used as valid_from to derive version history.",
-                    } : {
-                        created_at: "Always NULL. This entity does not have a created_at column in the source database (non-Rails service).",
-                    }),
-                    cdc_updated_at: "Timestamp of the CDC change event captured by Airbyte. Derived from _ab_cdc_updated_at. For entities without updated_at, this is also used as valid_from.",
-                    deleted_at: "Timestamp of the CDC deletion event at which this entity was deleted in the source database. NULL if the entity has not been deleted.",
-                    _airbyte_raw_id: "Unique identifier assigned by Airbyte to each raw record ingested from the source.",
-                    _airbyte_extracted_at: "Timestamp when Airbyte extracted this record from the source database.",
-                },
-                ...(entitySchema.keys ? parameterFunctions.getKeyColumns(entitySchema.keys) : [])
+                        [primaryKey]: `Primary key of the ${entitySchema.entityTableName} entity.`,
+                        valid_from: hasTimestamps ?
+                            "Timestamp from which this version was valid (updated_at from the source database)." :
+                            "Timestamp from which this version was valid (CDC event timestamp from Airbyte, used as a substitute because this entity does not have an updated_at column in the source database).",
+                        valid_to: "Timestamp until which this version was valid. NULL if this is the current version.",
+                        is_current: "TRUE if this is the most recent non-deleted version of the entity.",
+                        is_deleted: "TRUE if this entity has been soft-deleted via a CDC deletion event or Airbyte full-refresh reconciliation.",
+                        version_number: "Sequential version number for this entity, starting at 1 (oldest).",
+                        ...(hasTimestamps ? {
+                            created_at: "Timestamp this entity was first saved in the source database.",
+                            updated_at: "Timestamp this entity was last updated in the source database. Also used as valid_from to derive version history.",
+                        } : {
+                            created_at: "Always NULL. This entity does not have a created_at column in the source database (non-Rails service).",
+                        }),
+                        cdc_updated_at: "Timestamp of the CDC change event captured by Airbyte. Derived from _ab_cdc_updated_at. For entities without updated_at, this is also used as valid_from.",
+                        deleted_at: "Timestamp of the CDC deletion event at which this entity was deleted in the source database. NULL if the entity has not been deleted.",
+                        _airbyte_raw_id: "Unique identifier assigned by Airbyte to each raw record ingested from the source.",
+                        _airbyte_extracted_at: "Timestamp when Airbyte extracted this record from the source database.",
+                    },
+                    ...(entitySchema.keys ? parameterFunctions.getKeyColumns(entitySchema.keys) : [])
                 ),
                 bigquery: {
                     partitionBy: "DATE(valid_to)",
@@ -147,14 +147,14 @@ ${ctx.incremental() ? `
 ` : ``}
 
   deletions AS (
-  /* Filter out deletion rows, they signal that the previous version ended. Keep them in a separate CTE. */
+    /* Filter out deletion rows, they signal that the previous version ended. Keep them in a separate CTE. */
     SELECT
-      ${primaryKey},
-      MAX(deleted_at) AS deleted_at
+    ${primaryKey},
+    MAX(deleted_at) AS deleted_at
     FROM ${ctx.incremental() ? `combined_with_current_versions` : `source_data`}
     WHERE deleted_at IS NOT NULL
     GROUP BY ${primaryKey}
-  ),
+    ),
 
   live_records AS (
     SELECT *
@@ -192,7 +192,7 @@ ${ctx.incremental() ? `
 
 
 `)
-      .postOps(ctx => `
+            .postOps(ctx => `
       ${data_functions.setKeyConstraints(ctx, dataform, {
         primaryKey: primaryKey + ", valid_from"
       })}
