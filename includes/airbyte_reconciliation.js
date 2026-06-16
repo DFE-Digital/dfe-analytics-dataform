@@ -6,7 +6,7 @@
   - {entity}_airbyte_reconciliation_exceeds_safe_delete_volume_{source} (assertion)
   - {entity}_airbyte_reconciliation_apply_{source}                 (operation: UPDATE)
 
-  The apply operation folds inferred deletions into the version table the same way the builder folds observed CDC deletions: 
+  The apply operation incorporates inferred deletions into the version table the same way the builder incorporates observed CDC deletions: 
   by closing the last live version (valid_to / is_current / is_deleted / deleted_at). No INSERT needed.
 
 */
@@ -177,7 +177,7 @@ WHERE
   SAFE_DIVIDE(pending.pending_delete_count, live.live_row_count) > ${maxDeleteFraction}${overrideClause}`;
 }
 
-/* Step 4: apply. Folds inferred deletions into the version table exactly like observed CDC deletions: close the last live version. 
+/* Step 4: apply. Incorporates inferred deletions into the version table exactly like observed CDC deletions: close the last live version. 
    Idempotent: valid_to IS NULL excludes already-applied rows; a real CDC delete that beat us to the same PK in the same run also drops out. 
    The ordering guard protects rows first seen during/after the snapshot. */
 function applyReconciliationQuery({ versionTable, deletesTable, primaryKeyField }) {
