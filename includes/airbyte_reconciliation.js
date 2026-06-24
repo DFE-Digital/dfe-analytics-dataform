@@ -187,8 +187,19 @@ SET
   version.deleted_at = log.deleted_at_assumed,
   version.is_current = FALSE,
   version.is_deleted = TRUE
-FROM
-  ${deletesTable} AS log
+FROM (
+  /* Deduplicate: one row per PK, using the earliest snapshot.
+     Without this, a PK that appears in multiple snapshots (multiple LSNs within detectionWindowDays) would match multiple source rows and BigQuery throws an error */
+  SELECT
+    ${primaryKeyField},
+    snapshot_started_at,
+    deleted_at_assumed
+  FROM ${deletesTable}
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY ${primaryKeyField}
+    ORDER BY deleted_at_assumed ASC
+  ) = 1
+) AS log
 WHERE
   version.${primaryKeyField} = log.${primaryKeyField}
   AND version.valid_to IS NULL
