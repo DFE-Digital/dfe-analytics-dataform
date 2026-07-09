@@ -97,8 +97,8 @@ module.exports = (params) => {
             
         },
 
-        enabledAirbyteLegacyMerge: true,
-        airbyteLegacyMergeCutoff: '2026-03-01',
+        enabledAirbyteLegacyMerge: false,
+        airbyteLegacyMergeCutoff: null,
 
         airbyteHeartbeat: {
                 freshnessHours: 12, // Number of hours to wait before triggering an assertion failure, if no new data has been received from Airbyte
