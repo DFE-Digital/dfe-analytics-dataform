@@ -30,7 +30,9 @@ const validTopLevelParameters = ['eventSourceName',
     'airbyteConfig',
     'airbyteHeartbeat',
     'hasTimestamps',
-    'airbyteReconciliation'
+    'airbyteReconciliation',
+    'enabledAirbyteLegacyMerge',
+    'airbyteLegacyMergeCutoff'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
     'description',
