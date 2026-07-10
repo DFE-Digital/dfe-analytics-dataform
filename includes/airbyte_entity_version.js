@@ -285,7 +285,7 @@ ${ctx.incremental() ? `
 
   live_records AS (
     SELECT *
-    FROM ${ctx.incremental() ? `combined_with_current_versions` : `source_data`}
+    FROM ${versionInput}
     WHERE deleted_at IS NULL
   )
     SELECT
