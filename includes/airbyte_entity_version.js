@@ -64,10 +64,9 @@ module.exports = (params) => {
         const versionCols = [
             primaryKey,
             ...keyList,
+            '_airbyte_extracted_at',
             'cdc_updated_at',
             'created_at',
-            '_airbyte_extracted_at',
-
             ...(hasTimestamps ? ['updated_at'] : []),
             'deleted_at',
             '_airbyte_raw_id'
@@ -177,6 +176,7 @@ WITH
     SELECT
       CAST(${primaryKey} AS STRING) AS ${primaryKey},
       ${airbyteKeyCastList}
+      _airbyte_extracted_at,
       TIMESTAMP(LEFT(_ab_cdc_updated_at, 26)) AS cdc_updated_at,
       ${hasTimestamps
         ? `TIMESTAMP(created_at) AS created_at, TIMESTAMP(updated_at) AS updated_at,`
@@ -200,13 +200,12 @@ ${injectLegacy ? `
     SELECT
         CAST(id AS STRING) AS ${primaryKey},
         ${legacyKeyProjection},
+        CAST(NULL AS TIMESTAMP) AS _airbyte_extracted_at,
         valid_from AS cdc_updated_at,
         ${hasTimestamps
             ? `created_at,
         COALESCE(updated_at, valid_from) AS updated_at,`
             : `CAST(NULL AS TIMESTAMP) AS created_at,`}
-        CAST(NULL AS TIMESTAMP) AS _airbyte_extracted_at,
-
         CAST(NULL AS TIMESTAMP) AS deleted_at,
         CAST(NULL AS STRING) AS _airbyte_raw_id
     FROM ${ctx.ref(legacyModel)}
@@ -218,12 +217,12 @@ ${injectLegacy ? `
             SELECT
                 CAST(${primaryKey} AS STRING) AS ${primaryKey},
                 ${legacyKeyProjection},
+                CAST(NULL AS TIMESTAMP) AS _airbyte_extracted_at,
                 valid_to AS cdc_updated_at,
                 ${hasTimestamps
                     ? `created_at,
             valid_to AS updated_at,`
                     : `CAST(NULL AS TIMESTAMP) AS created_at,`}
-                CAST(NULL AS TIMESTAMP) AS _airbyte_extracted_at,
                 valid_to AS deleted_at,
                 CAST(NULL AS STRING) AS _airbyte_raw_id
             FROM ${ctx.ref(legacyModel)}
