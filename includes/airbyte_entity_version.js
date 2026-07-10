@@ -205,7 +205,8 @@ ${injectLegacy ? `
             ? `created_at,
         COALESCE(updated_at, valid_from) AS updated_at,`
             : `CAST(NULL AS TIMESTAMP) AS created_at,`}
-        CAST(NULL AS TIMESTAMP) AS _airbyte_extracted_at,
+        CAST(NULL AS TIMESTAMP) AS _airbyte_extracted_at,
+
         CAST(NULL AS TIMESTAMP) AS deleted_at,
         CAST(NULL AS STRING) AS _airbyte_raw_id
     FROM ${ctx.ref(legacyModel)}
@@ -222,6 +223,7 @@ ${injectLegacy ? `
                     ? `created_at,
             valid_to AS updated_at,`
                     : `CAST(NULL AS TIMESTAMP) AS created_at,`}
+                CAST(NULL AS TIMESTAMP) AS _airbyte_extracted_at,
                 valid_to AS deleted_at,
                 CAST(NULL AS STRING) AS _airbyte_raw_id
             FROM ${ctx.ref(legacyModel)}
