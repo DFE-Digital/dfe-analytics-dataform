@@ -47,7 +47,8 @@ module.exports = (params) => {
         const legacyCutoff = params.airbyteLegacyMergeCutoff;
         const legacyModel = entitySchema.entityTableName + "_version_" + params.eventSourceName;
         if (legacyEnabled && !legacyCutoff) {
-            throw new Error(`enabledAirbyteLegacyMerge is true but airbyteLegacyMergeCutoff was not provided (entity: ${entitySchema.entityTableName}).`);
+            throw new Error(`enabledAirbyteLegacyMerge is true but airbyteLegacyMergeCutoff was not provided (entity: ${entitySchema.entityTableName}).`);
+
         }
 
         /* Column that carries the version-ordering timestamp (matches the Airbyte model's). */
@@ -204,6 +205,7 @@ ${injectLegacy ? `
             ? `created_at,
         COALESCE(updated_at, valid_from) AS updated_at,`
             : `CAST(NULL AS TIMESTAMP) AS created_at,`}
+        CAST(NULL AS TIMESTAMP) AS _airbyte_extracted_at,
         CAST(NULL AS TIMESTAMP) AS deleted_at,
         CAST(NULL AS STRING) AS _airbyte_raw_id
     FROM ${ctx.ref(legacyModel)}
