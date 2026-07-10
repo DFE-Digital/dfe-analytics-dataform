@@ -16,8 +16,10 @@
    - other columns vary per entity (defined in dataSchema keys)
   
    Legacy merge:
-   Optionally seeds pre-cutoff version history from the legacy {entityTableName}_version_{eventSourceName}
-   model (from the event-stream / dfe-analytics pipeline via flattened_entity_version).
+   Optionally seeds pre-cutoff version history from the legacy {entityTableName}_version_{eventSourceName}
+
+   model (from the event-stream / dfe-analytics pipeline via flattened_entity_version).
+
    column and injected BEFORE the window functions, so valid_to / is_current /
    version_number recompute across the cutoff seam. Applied on full-refresh only; on incremental
    runs the checkpoint is past the cutoff and legacy is never touched.
@@ -63,6 +65,7 @@ module.exports = (params) => {
             ...keyList,
             'cdc_updated_at',
             'created_at',
+            '_airbyte_extracted_at',
             ...(hasTimestamps ? ['updated_at'] : []),
             'deleted_at',
             '_airbyte_raw_id'
