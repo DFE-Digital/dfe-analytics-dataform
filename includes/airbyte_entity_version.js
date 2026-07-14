@@ -215,7 +215,7 @@ ${injectLegacy ? `
     legacy_deletion_markers AS (
         SELECT * FROM (
             SELECT
-                CAST(${primaryKey} AS STRING) AS ${primaryKey},
+                CAST(id AS STRING) AS ${primaryKey},
                 ${legacyKeyProjection},
                 CAST(NULL AS TIMESTAMP) AS _airbyte_extracted_at,
                 valid_to AS cdc_updated_at,
