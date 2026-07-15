@@ -1,6 +1,6 @@
 /* Generates {entity}_version_{source}{suffix} tables from Airbyte Change Data Capture (CDC) data. 
 
-  Source table format (from Airbyte CDC, partitioned by _airbyte_extracted_at):
+   Source table format (from Airbyte CDC, partitioned by _airbyte_extracted_at):
    - One row per change event (insert/update/delete) captured by Change Data Capture
    - Each row contains the full entity state at the time of the change
    - Airbyte sync mode is incremental + append, so it only adds new entries when there are changes
@@ -14,7 +14,17 @@
        _ab_cdc_deleted_at     - Non-null only for deletion events
        _ab_cdc_lsn            - CDC log sequence number
    - other columns vary per entity (defined in dataSchema keys)
+  
+   Legacy merge:
+   Optionally seeds pre-cutoff version history from the legacy {entityTableName}_version_{eventSourceName}
+
+   model (from the event-stream / dfe-analytics pipeline via flattened_entity_version).
+
+   column and injected BEFORE the window functions, so valid_to / is_current /
+   version_number recompute across the cutoff seam. Applied on full-refresh only; on incremental
+   runs the checkpoint is past the cutoff and legacy is never touched.
 */
+
 
 const data_functions = require("./data_functions");
 const parameterFunctions = require("./parameter_functions");
@@ -32,7 +42,67 @@ module.exports = (params) => {
 
         const fieldAssertionDependencies = params.airbyteEnableAssertions ?
             params.dataSchema.map(schema => schema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName) : [];
+        
+        const legacyEnabled = params.enabledAirbyteLegacyMerge === true;
+        const legacyCutoff = params.airbyteLegacyMergeCutoff;
+        const legacyModel = entitySchema.entityTableName + "_version_" + params.eventSourceName;
+        if (legacyEnabled && !legacyCutoff) {
+            throw new Error(`enabledAirbyteLegacyMerge is true but airbyteLegacyMergeCutoff was not provided (entity: ${entitySchema.entityTableName}).`);
 
+        }
+
+        /* Column that carries the version-ordering timestamp (matches the Airbyte model's). */
+        const orderCol = hasTimestamps ? 'updated_at' : 'cdc_updated_at';
+
+        /* Native entity columns == configured key names */
+        const outName = k => k.alias || k.keyName;
+        const mergeKeys = (entitySchema.keys || []).filter(k => outName(k) !== primaryKey);
+        const keyList = mergeKeys.map(outName);
+
+        /* Explicit, fixed column order used on BOTH sides of the UNION so alignment is positional-safe
+           regardless of the Airbyte table's physical column order. */
+        const versionCols = [
+            primaryKey,
+            ...keyList,
+            '_airbyte_extracted_at',
+            'cdc_updated_at',
+            'created_at',
+            ...(hasTimestamps ? ['updated_at'] : []),
+            'deleted_at',
+            '_airbyte_raw_id'
+        ];
+        const versionColsSql = versionCols.join(', ');
+
+        /* Cast raw columns to match the data type in dataSchema.*/
+        function airbyteKeyCast(key) {
+            if ((key.isArray || key.dataType === 'integer_array') && legacyEnabled) {
+                throw new Error(`airbyteKeyCast: array-typed key "${key.keyName}" (entity: ${entitySchema.entityTableName}) is not supported by the legacy merge yet.`);
+            }
+            if (key.historic) {
+                const bqType = { boolean: 'BOOL', integer: 'INT64', float: 'FLOAT64', timestamp: 'TIMESTAMP', date: 'DATE', json: 'JSON' }[key.dataType] || 'STRING';
+                return `CAST(NULL AS ${bqType})`;
+            }
+            const raw = '`' + key.keyName + '`';
+            const s = `CAST(${raw} AS STRING)`;
+            switch (key.dataType) {
+                case 'boolean':   return `SAFE_CAST(${s} AS BOOL)`;
+                case 'integer':   return `SAFE_CAST(${s} AS INT64)`;
+                case 'float':     return `SAFE_CAST(${s} AS FLOAT64)`;
+                case 'timestamp': return data_functions.stringToTimestamp(s);
+                case 'date':      return data_functions.stringToDate(s);
+                case 'json':      return `SAFE.PARSE_JSON(${s})`;
+                default:          return s; // string / undefined
+            }
+        }
+
+        const airbyteKeyCastList = mergeKeys.map(k =>
+            `${airbyteKeyCast(k)} AS \`${outName(k)}\`,`
+        ).join('\n        ');
+        
+        const legacyKeyProjection = mergeKeys.map(k =>
+            `\`${outName(k)}\``
+        ).join(',\n        ');
+        
         return publish(tableName, {
                 type: "incremental",
                 protected: false,
@@ -85,7 +155,18 @@ module.exports = (params) => {
             .preOps(ctx => `DECLARE extracted_at_checkpoint DEFAULT (
         ${ctx.when(ctx.incremental(), `SELECT MAX(_airbyte_extracted_at) FROM ${ctx.self()} WHERE valid_to IS NULL`, `SELECT TIMESTAMP("2026-01-01")`)}
         )`)
-            .query(ctx => `
+            .query(ctx => {
+
+            /* Legacy is seeded only on the full historical build. 
+               On incremental runs the checkpoint is past the cutoff, so legacy is neither scanned nor referenced. */
+            const injectLegacy = !ctx.incremental() && legacyEnabled;
+
+            /* What feeds the deletions / live_records split and the window functions. */
+            const versionInput = ctx.incremental()
+                ? `combined_with_current_versions`
+                : (injectLegacy ? `merged_full_history` : `source_data`);
+
+            return `
         
 WITH
   source_data AS (
@@ -94,16 +175,8 @@ WITH
      sync and a CDC event for the same entity both land in the same incremental run). */
     SELECT
       CAST(${primaryKey} AS STRING) AS ${primaryKey},
-      * EXCEPT (
-          ${primaryKey},
-          ${hasTimestamps ? 'created_at, updated_at,' : ''}
-          _airbyte_raw_id,
-          _airbyte_meta,
-          _airbyte_generation_id,
-          _ab_cdc_lsn,
-          _ab_cdc_updated_at,
-          _ab_cdc_deleted_at
-      ),
+      ${airbyteKeyCastList}
+      _airbyte_extracted_at,
       TIMESTAMP(LEFT(_ab_cdc_updated_at, 26)) AS cdc_updated_at,
       ${hasTimestamps
         ? `TIMESTAMP(created_at) AS created_at, TIMESTAMP(updated_at) AS updated_at,`
@@ -121,6 +194,60 @@ WITH
       ORDER BY _airbyte_extracted_at DESC
     ) = 1
   ),
+
+${injectLegacy ? `
+    legacy_live AS (
+    SELECT
+        CAST(id AS STRING) AS ${primaryKey},
+        ${legacyKeyProjection},
+        CAST(NULL AS TIMESTAMP) AS _airbyte_extracted_at,
+        valid_from AS cdc_updated_at,
+        ${hasTimestamps
+            ? `created_at,
+        COALESCE(updated_at, valid_from) AS updated_at,`
+            : `CAST(NULL AS TIMESTAMP) AS created_at,`}
+        CAST(NULL AS TIMESTAMP) AS deleted_at,
+        CAST(NULL AS STRING) AS _airbyte_raw_id
+    FROM ${ctx.ref(legacyModel)}
+    WHERE valid_from < TIMESTAMP("${legacyCutoff}")
+    ),
+
+    legacy_deletion_markers AS (
+        SELECT * FROM (
+            SELECT
+                CAST(id AS STRING) AS ${primaryKey},
+                ${legacyKeyProjection},
+                CAST(NULL AS TIMESTAMP) AS _airbyte_extracted_at,
+                valid_to AS cdc_updated_at,
+                ${hasTimestamps
+                    ? `created_at,
+            valid_to AS updated_at,`
+                    : `CAST(NULL AS TIMESTAMP) AS created_at,`}
+                valid_to AS deleted_at,
+                CAST(NULL AS STRING) AS _airbyte_raw_id
+            FROM ${ctx.ref(legacyModel)}
+            WHERE valid_from < TIMESTAMP("${legacyCutoff}")
+            QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY valid_from DESC) = 1
+        )
+        WHERE deleted_at IS NOT NULL
+            AND deleted_at < TIMESTAMP("${legacyCutoff}")
+    ),
+
+    merged_full_history AS (
+        SELECT ${versionColsSql}
+        FROM (
+            SELECT ${versionColsSql}, 0 AS _merge_priority FROM source_data
+            UNION ALL
+            SELECT ${versionColsSql}, 1 AS _merge_priority FROM legacy_live
+            UNION ALL
+            SELECT ${versionColsSql}, 1 AS _merge_priority FROM legacy_deletion_markers
+        )
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY ${primaryKey}, ${orderCol}
+            ORDER BY _merge_priority
+        ) = 1
+    ),
+    ` : ``}
 
 ${ctx.incremental() ? `
   combined_with_current_versions AS (
@@ -151,14 +278,14 @@ ${ctx.incremental() ? `
     SELECT
     ${primaryKey},
     MAX(deleted_at) AS deleted_at
-    FROM ${ctx.incremental() ? `combined_with_current_versions` : `source_data`}
+    FROM ${versionInput}
     WHERE deleted_at IS NOT NULL
     GROUP BY ${primaryKey}
     ),
 
   live_records AS (
     SELECT *
-    FROM ${ctx.incremental() ? `combined_with_current_versions` : `source_data`}
+    FROM ${versionInput}
     WHERE deleted_at IS NULL
   )
     SELECT
@@ -191,7 +318,7 @@ ${ctx.incremental() ? `
     LEFT JOIN deletions USING (${primaryKey})
 
 
-`)
+`})
             .postOps(ctx => `
       ${data_functions.setKeyConstraints(ctx, dataform, {
         primaryKey: primaryKey + ", valid_from"

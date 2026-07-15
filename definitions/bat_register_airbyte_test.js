@@ -10,7 +10,7 @@ dfeAnalyticsDataform({
     bqDatasetName: "register_events_production",
     bqEventsTableName: "events",
     urlRegex: "register-trainee-teachers.service.gov.uk",
-    transformEntityEvents: false,
+    transformEntityEvents: true,
     compareChecksums: false,
     enableSessionTables: false,
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
@@ -26,6 +26,9 @@ dfeAnalyticsDataform({
         tableSuffix: "_airbyte",
         primaryKeyField: "id"
     },
+
+    enabledAirbyteLegacyMerge: true,
+    airbyteLegacyMergeCutoff: '2026-03-01',
 
     airbyteHeartbeat: {
         datasetName: "rtt_airbyte_production",
@@ -129,7 +132,7 @@ dfeAnalyticsDataform({
                 description: "Message describing the error in detail."
             }]
         },
-        {
+            {
             entityTableName: "bulk_update_trainee_uploads",
             materialisation: "view",
             description: "This table contains information about the bulk upload update for trainees",
@@ -746,7 +749,7 @@ dfeAnalyticsDataform({
             keys: [{
                     keyName: "additional_dttp_data",
                     dataType: "string",
-                    description: "Additional dttp data shown where applicable",
+                    description: "Additional dttp data shown were applicable",
                     hidden: true
                 }, {
                     keyName: "additional_ethnic_background",
@@ -940,7 +943,7 @@ dfeAnalyticsDataform({
                     keyName: "middle_names",
                     dataType: "string",
                     description: "Middle name(s) of the trainee",
-                    hidden: true
+                    hidden: true  
                 }, {
                     keyName: "training_partner_id",
                     pastKeyNames: ["lead_partner_id"],
