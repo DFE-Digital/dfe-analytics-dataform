@@ -15,6 +15,8 @@
    - An entity's first version produces no rows (LAG yields NULL previous_data, and the inner
      JOIN on UNNEST drops it), matching the legacy behaviour where creations only appear once a
      prior version exists to diff against.
+   - key_updated reports the *output* (aliased) field name, matching the column names in the
+     version and flattened tables, not the raw source column name.
 */
 
 const data_functions = require("./data_functions");
@@ -34,22 +36,31 @@ module.exports = (params) => {
         const fieldAssertionDependencies = params.airbyteEnableAssertions ?
             params.dataSchema.map(schema => schema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName) : [];
 
+        /* The version table publishes each key under its alias when one is configured, falling
+           back to the raw source column name. Must match the version model's outName exactly. */
+        const outName = k => k.alias || k.keyName;
+
         /* Fields to diff between versions: configured keys, excluding
            - historic keys (no longer present as columns in the Airbyte source / version table)
            - the primary key itself (it can never change between versions of the same entity,
-             and for tables like sign_offs/disabilities it is only in keys to give it an alias) */
-        const trackedKeys = (tableSchema.keys || []).filter(k => !k.historic && k.keyName !== primaryKey);
+             and for tables like sign_offs/disabilities it is only in keys to give it an alias).
+             Compared on the output name, mirroring the version model's mergeKeys filter. */
+        const trackedKeys = (tableSchema.keys || []).filter(k => !k.historic && outName(k) !== primaryKey);
 
         /* Nothing to diff for this entity - don't publish a field updates relation at all. */
         if (trackedKeys.length === 0) return null;
 
-        /* Version table columns are the raw source column names (keyName), so reference those.
-           JSON-typed columns can't be CAST to STRING directly. */
+        /* Reference version table columns by their output (aliased) names - the raw keyName does
+           not exist as a column in the version table when an alias is configured.
+           JSON-typed columns can't be CAST to STRING directly.
+           The struct's key literal also uses the output name so that key_updated matches the
+           column names consumers see in the version and flattened tables. */
         const newDataStructSql = trackedKeys.map(k => {
+            const col = outName(k);
             const valueSql = k.dataType === 'json'
-                ? `TO_JSON_STRING(\`${k.keyName}\`)`
-                : `CAST(\`${k.keyName}\` AS STRING)`;
-            return `STRUCT('${k.keyName}' AS key, ${valueSql} AS value)`;
+                ? `TO_JSON_STRING(\`${col}\`)`
+                : `CAST(\`${col}\` AS STRING)`;
+            return `STRUCT('${col}' AS key, ${valueSql} AS value)`;
         }).join(',\n      ');
 
         return publish(tableName, {
@@ -85,7 +96,7 @@ module.exports = (params) => {
                     },
                     occurred_at: "Timestamp of the entity version that this field update was part of (valid_from in the version table).",
                     update_id: `UID for the collection of field updates that took place to this entity at this time. One-way hash of ${primaryKey} and occurred_at. Useful for COUNT DISTINCTs.`,
-                    key_updated: "The name of the field that was updated.",
+                    key_updated: "The name of the field that was updated, as it appears in the version table (i.e. the configured alias where one exists).",
                     new_value: {
                         description: "The value of this field after it was updated, cast to a string. Hidden because it may contain values of some fields which are configured to be hidden.",
                         bigqueryPolicyTags: params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
