@@ -94,8 +94,12 @@ module.exports = (params) => {
             datasetName: null, // name of the BigQuery dataset that Airbyte streams data into
             tablePrefix: '', // prefix for Airbyte table names (e.g., '_airbyte_raw_')
             tableSuffix: '_airbyte', // Suffix for Airbyte output tables (to distinguish from dfe-analytics)
-            defaultPrimaryKeyField: 'id' // Default primary key field name (can be overridden per entity via tableSchema.primaryKey)
+            defaultPrimaryKeyField: 'id', // Default primary key field name (can be overridden per entity via tableSchema.primaryKey)
+            
         },
+
+        enabledAirbyteLegacyMerge: false,
+        airbyteLegacyMergeCutoff: null,
 
         airbyteHeartbeat: {
                 freshnessHours: 12, // Number of hours to wait before triggering an assertion failure, if no new data has been received from Airbyte
