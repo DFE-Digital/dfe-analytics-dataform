@@ -1,8 +1,7 @@
 /* Generates {entity}_field_updates_{source}{suffix} tables from the Airbyte version tables.
-
    One row for each time a field was updated on an entity, giving the field name, its previous
    value and its new value. Derived from the {entity}_version_{source}{suffix} table by comparing
-   each version to the version immediately before it (LAG over valid_from).
+   each version to the version immediately before it (LAG over version_number).
 
    Differences vs the legacy {eventSourceName}_entity_field_updates model:
    - One output relation per entity (like the flattened field updates tables), keyed on the
@@ -20,6 +19,7 @@
 */
 
 const data_functions = require("./data_functions");
+const airbyteReconciliation = require("./airbyte_reconciliation");
 
 module.exports = (params) => {
     if (!params.enableAirbyteSource) return null;
@@ -32,9 +32,6 @@ module.exports = (params) => {
         const primaryKey = tableSchema.primaryKey || params.airbyteConfig.defaultPrimaryKeyField || 'id';
         const hasTimestamps = tableSchema.hasTimestamps;
         const materialisation = tableSchema.materialisation || 'table';
-
-        const fieldAssertionDependencies = params.airbyteEnableAssertions ?
-            params.dataSchema.map(schema => schema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName) : [];
 
         /* The version table publishes each key under its alias when one is configured, falling
            back to the raw source column name. Must match the version model's outName exactly. */
@@ -66,7 +63,14 @@ module.exports = (params) => {
         return publish(tableName, {
                 ...params.defaultConfig,
                 type: materialisation,
-                dependencies: fieldAssertionDependencies,
+                /* The schema assertions are already upstream of this table via the version table
+                   (ctx.ref below), so they don't need repeating here. The reconciliation apply
+                   operation is not in the ref graph, so it does. */
+                dependencies: [
+                    ...(params.airbyteReconciliation.enabled
+                        ? [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName]
+                        : [])
+                ],
                 ...(materialisation == 'table' ? {
                     assertions: {
                         uniqueKey: [
@@ -116,13 +120,13 @@ module.exports = (params) => {
 WITH versions_with_new_data AS (
   SELECT
     ${primaryKey},
+    version_number,
     valid_from AS occurred_at,
     ${hasTimestamps ? `created_at,` : ``}
     [${newDataStructSql}] AS new_data
   FROM
     ${ctx.ref(versionTableName)}
 ),
-
 versions_with_field_arrays AS (
   SELECT
     ${primaryKey},
@@ -135,10 +139,9 @@ versions_with_field_arrays AS (
     versions_with_new_data
   WINDOW versions_of_this_entity AS (
     PARTITION BY ${primaryKey}
-    ORDER BY occurred_at ASC
+    ORDER BY version_number ASC
   )
 )
-
 SELECT
   versions_with_field_arrays.${primaryKey},
   occurred_at,
