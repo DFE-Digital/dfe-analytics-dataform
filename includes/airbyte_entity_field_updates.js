@@ -29,7 +29,7 @@ module.exports = (params) => {
     return params.dataSchema.map(tableSchema => {
         const tableName = `${tableSchema.entityTableName}_field_updates_${params.eventSourceName}${suffix}`;
         const versionTableName = `${tableSchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
-        const primaryKey = tableSchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id';
+        const primaryKey = tableSchema.primaryKey || params.airbyteConfig.defaultPrimaryKeyField || 'id';
         const hasTimestamps = tableSchema.hasTimestamps;
         const materialisation = tableSchema.materialisation || 'table';
 
