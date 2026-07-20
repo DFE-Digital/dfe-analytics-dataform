@@ -37,11 +37,10 @@ module.exports = (params) => {
     return params.dataSchema.map(entitySchema => {
         const tableName = `${entitySchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
         const sourceTable = `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${entitySchema.entityTableName}\``;
-        const primaryKey = entitySchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id';
+        const primaryKey = entitySchema.primaryKey || params.airbyteConfig.defaultPrimaryKeyField || 'id';
         const hasTimestamps = entitySchema.hasTimestamps;
 
-        const fieldAssertionDependencies = params.airbyteEnableAssertions ?
-            params.dataSchema.map(schema => schema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName) : [];
+        const fieldAssertionDependencies = [entitySchema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName];
         
         const legacyEnabled = params.enabledAirbyteLegacyMerge === true;
         const legacyCutoff = params.airbyteLegacyMergeCutoff;
