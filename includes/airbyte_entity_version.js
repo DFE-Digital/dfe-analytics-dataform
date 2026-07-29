@@ -65,7 +65,7 @@ module.exports = (params) => {
             ...keyList,
             '_airbyte_extracted_at',
             'cdc_updated_at',
-            'created_at',
+            ...(hasTimestamps ? ['created_at'] : []),
             ...(hasTimestamps ? ['updated_at'] : []),
             'deleted_at',
             '_airbyte_raw_id'
@@ -152,7 +152,9 @@ module.exports = (params) => {
                 }
             })
             .preOps(ctx => `DECLARE extracted_at_checkpoint DEFAULT (
-        ${ctx.when(ctx.incremental(), `SELECT MAX(_airbyte_extracted_at) FROM ${ctx.self()} WHERE valid_to IS NULL`, `SELECT TIMESTAMP("2026-01-01")`)}
+        ${ctx.when(ctx.incremental(), 
+          `SELECT MAX(_airbyte_extracted_at) FROM ${ctx.self()} WHERE valid_to IS NULL`,
+          `SELECT TIMESTAMP("${legacyEnabled && legacyCutoff ? legacyCutoff : '2026-01-01'}")`)}
         )`)
             .query(ctx => {
 
@@ -173,7 +175,7 @@ WITH
      QUALIFY collapses same-(entity, updated_at) duplicates within this batch (e.g. if a full
      sync and a CDC event for the same entity both land in the same incremental run). */
     SELECT
-      CAST(${primaryKey} AS STRING) AS ${primaryKey},
+      CAST(${primaryKey} AS STRING) AS id,
       ${airbyteKeyCastList}
       _airbyte_extracted_at,
       TIMESTAMP(LEFT(_ab_cdc_updated_at, 26)) AS cdc_updated_at,
@@ -195,57 +197,32 @@ WITH
   ),
 
 ${injectLegacy ? `
-    legacy_live AS (
+    legacy_data AS (
     SELECT
-        CAST(id AS STRING) AS ${primaryKey},
+        id,
         ${legacyKeyProjection},
-        CAST(NULL AS TIMESTAMP) AS _airbyte_extracted_at,
-        valid_from AS cdc_updated_at,
-        ${hasTimestamps
-            ? `created_at,
-        COALESCE(updated_at, valid_from) AS updated_at,`
-            : `CAST(NULL AS TIMESTAMP) AS created_at,`}
+        CAST(NULL AS TIMESTAMP)  AS _airbyte_extracted_at,
+        updated_at AS cdc_updated_at,
+        created_at,
+        valid_from AS updated_at,
         CAST(NULL AS TIMESTAMP) AS deleted_at,
-        CAST(NULL AS STRING) AS _airbyte_raw_id
+        CAST(NULL AS STRING)     AS _airbyte_raw_id
     FROM ${ctx.ref(legacyModel)}
-    WHERE valid_from < TIMESTAMP("${legacyCutoff}")
-    ),
-
-    legacy_deletion_markers AS (
-        SELECT * FROM (
-            SELECT
-                CAST(id AS STRING) AS ${primaryKey},
-                ${legacyKeyProjection},
-                CAST(NULL AS TIMESTAMP) AS _airbyte_extracted_at,
-                valid_to AS cdc_updated_at,
-                ${hasTimestamps
-                    ? `created_at,
-            valid_to AS updated_at,`
-                    : `CAST(NULL AS TIMESTAMP) AS created_at,`}
-                valid_to AS deleted_at,
-                CAST(NULL AS STRING) AS _airbyte_raw_id
-            FROM ${ctx.ref(legacyModel)}
-            WHERE valid_from < TIMESTAMP("${legacyCutoff}")
-            QUALIFY ROW_NUMBER() OVER (PARTITION BY id ORDER BY valid_from DESC) = 1
-        )
-        WHERE deleted_at IS NOT NULL
-            AND deleted_at < TIMESTAMP("${legacyCutoff}")
+    WHERE valid_from <= TIMESTAMP("${legacyCutoff}")
     ),
 
     merged_full_history AS (
         SELECT ${versionColsSql}
         FROM (
-            SELECT ${versionColsSql}, 0 AS _merge_priority FROM source_data
-            UNION ALL
-            SELECT ${versionColsSql}, 1 AS _merge_priority FROM legacy_live
-            UNION ALL
-            SELECT ${versionColsSql}, 1 AS _merge_priority FROM legacy_deletion_markers
-        )
-        QUALIFY ROW_NUMBER() OVER (
-            PARTITION BY ${primaryKey}, ${orderCol}
-            ORDER BY _merge_priority
-        ) = 1
-    ),
+          SELECT ${versionColsSql}, 0 AS _merge_priority FROM source_data 
+          UNION ALL
+          SELECT ${versionColsSql}, 1 AS _merge_priority FROM legacy_data
+    )
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY id, ${orderCol}
+        ORDER BY _merge_priority
+    ) = 1
+),
     ` : ``}
 
 ${ctx.incremental() ? `
