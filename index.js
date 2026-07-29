@@ -41,6 +41,7 @@ const airbyteEntityVersion = require("./includes/airbyte_entity_version");
 const airbyteEntityDataNotFresh = require("./includes/airbyte_entity_data_not_fresh");
 const airbyteReconciliation = require("./includes/airbyte_reconciliation");
 const airbyteEntityFieldUpdates = require("./includes/airbyte_entity_field_updates");
+const airbyteEnumMappingAssertions = require("../includes/airbyte_enum_mapping_assertions");
 
 module.exports = (params) => {
     // Set default values of parameters if parameters with the same name have not been passed to dfeAnalyticsDataform()
@@ -203,7 +204,8 @@ module.exports = (params) => {
             airbyteGlobalDataFreshness: airbyteGlobalDataFreshness(params),
             airbyteSchemaAssertions: airbyteSchemaAssertions(params),
             airbyteReconciliation: airbyteReconciliation(params),
-            airbyteEntityFieldUpdates: airbyteEntityFieldUpdates(params)
+            airbyteEntityFieldUpdates: airbyteEntityFieldUpdates(params),
+            airbyteEnumMappingAssertions(params)
         });
     }
 

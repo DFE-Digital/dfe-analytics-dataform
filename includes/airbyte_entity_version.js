@@ -83,6 +83,17 @@ module.exports = (params) => {
             }
             const raw = '`' + key.keyName + '`';
             const s = `CAST(${raw} AS STRING)`;
+
+            // If valueMappings is configured, apply a CASE expression.
+            // Unknown values fall through to the raw string value (never NULL).
+            // Type cast is skipped — valueMappings always produces STRING, enforced at config validation.
+            if (key.valueMappings) {
+                const whenClauses = Object.entries(key.valueMappings)
+                    .map(([from, to]) => `WHEN ${s} = '${from.replace(/'/g, "\\'")}' THEN '${to.replace(/'/g, "\\'")}'`)
+                    .join('\n                ');
+                return `CASE\n                ${whenClauses}\n                ELSE ${s}\n            END`;
+            }
+            
             switch (key.dataType) {
                 case 'boolean':   return `SAFE_CAST(${s} AS BOOL)`;
                 case 'integer':   return `SAFE_CAST(${s} AS INT64)`;
