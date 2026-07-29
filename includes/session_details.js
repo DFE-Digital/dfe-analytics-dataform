@@ -54,6 +54,7 @@ module.exports = (params) => {
           utm_source: "Identifies the specific source of the traffic (e.g., marketing campaign, newsletter) as part of the UTM tag used for campaign tracking.",
           utm_medium: "Indicates the marketing channel or medium through which the traffic originated (e.g., email, social) using a UTM tag.",
           utm_campaign: "Specifies the name or identifier of the marketing campaign driving the traffic (e.g. marketing_campaign_summer_2024), tracked via a UTM tag.",
+          utm_content: "Further identifier of source of traffic, often a subset of utm_campaign or utm_source. May indicate the specific link clicked within an email, variant of an email or a part of a utm_campaign.",
           medium: "Categorises where the traffic came from outside the site. NULL for traffic that was not newly arrived traffic. Possible values are PPC, Social, Email, Referral, Organic, or 'Direct or unknown'.",
           exit_page: "The page URL of the last page visited in the session",
           session_start_timestamp: "Timestamp of the first page visit in the session",
@@ -467,6 +468,7 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     utm_source,
     utm_medium,
     utm_campaign,
+    utm_content,
     medium,
     request_referer_domain,
     previous_page_path,
@@ -484,6 +486,7 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     utm_source,
     utm_medium,
     utm_campaign,
+    utm_content,
     medium,
     request_referer_domain,
     previous_page_path,
@@ -502,6 +505,7 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     utm_source,
     utm_medium,
     utm_campaign,
+    utm_content,
     medium,
     request_referer_domain,
     previous_page_path,
@@ -537,6 +541,7 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
             utm_source,
             utm_medium,
             utm_campaign,
+            utm_content,
             medium
         )
         ORDER BY page_entry_time
@@ -561,6 +566,7 @@ The events_with_users_estimated CTE uses COALESCE function to create the the est
     session_level_metrics[0].utm_source AS utm_source,
     session_level_metrics[0].utm_medium AS utm_medium,
     session_level_metrics[0].utm_campaign AS utm_campaign,
+    session_level_metrics[0].utm_content AS utm_content,
     session_level_metrics[0].medium AS medium,
     -- set start_page to the first page in the pages_visited_details array for a single session
    ARRAY_REVERSE(pages_visited_details)[0].page AS exit_page,

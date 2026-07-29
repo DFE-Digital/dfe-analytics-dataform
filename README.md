@@ -142,6 +142,13 @@ In addition to step 13 of the setup instructions, the following Airbyte-related 
 - ```tableName``` - name of the Airbyte heartbeat table. Defaults to ```'airbyte_heartbeat'``` if not specified.
 - ```disableFreshnessCheckDuringRange``` - ```true``` or ```false```. If set to ```true```, disables the heartbeat freshness check assertion when today's date falls within one of the date ranges specified in ```assertionDisableDuringDateRanges```. Defaults to ```false``` if not specified.
 
+```airbyteReconciliation``` - optional configuration block to enable reconciliation of CDC deletion events missed during Airbyte outages. When enabled, detects completed Airbyte full-refresh snapshots by their LSN signature, infers which entities were absent from the snapshot, and soft-deletes them in the version table. Disabled by default. Contains the following parameters:
+- ```enabled``` - ```true``` or ```false```. Defaults to ```false```. Set to ```true``` to enable the reconciliation pipeline for all entities in ```dataSchema```.
+- ```minLiveFraction``` - number between 0 and 1. Defaults to ```0.8```. A snapshot must contain at least this fraction of live rows to qualify as a full refresh. Prevents partial syncs from being misclassified as full refreshes.
+- ```maxDeleteFraction``` - number between 0 and 1. Defaults to ```0.2```. The circuit breaker trips if inferred deletions exceed this fraction of live rows, blocking the apply step. Prevents bulk transactions from being misclassified as full refreshes and causing mass deletions.
+- ```minSnapshotAgeMinutes``` - integer number of minutes. Defaults to ```60```. Snapshots more recent than this are ignored as potentially still in-flight (resumable snapshots can span multiple syncs).
+- ```detectionWindowDays``` - integer number of days. Defaults to ```7```. The lookback window used when scanning the Airbyte raw table for full-refresh signatures. Also used as a partition pruning hint to reduce scan cost.
+- ```forceReconcileSnapshotLsn``` - string or null. Defaults to ```null```. One-shot circuit breaker override: set this to the LSN of a known legitimate large deletion, run the pipeline once, then remove it. The circuit breaker will not block apply for that specific snapshot.
 
 ## Updating to a new version
 Users are notified through internal channels when a new version of ```dfe-analytics-dataform``` is released. To update:
@@ -364,6 +371,17 @@ When ```enableAirbyteSource: true``` is set, the following additional tables and
 - An assertion called ```foo_airbyte_global_data_not_fresh``` which fails if the Airbyte heartbeat table has not been updated within the configured ```freshnessHours```.
 
 Both `dfe-analytics` and Airbyte tables coexist in the same Dataform project. Airbyte output tables are distinguished by the ```_airbyte``` suffix (or the value of ```tableSuffix```) and tagged with ```'airbyte'``` in Dataform.
+
+When ```airbyteReconciliation.enabled: true``` is set, the following additional actions are created for each entity ```bar``` with source ```foo```:
+
+- A table called ```bar_airbyte_full_refreshes_foo```, which detects completed Airbyte full-refresh snapshots for the ```bar``` entity by their LSN signature (a full refresh emits the entire table under a single LSN with zero deletes).
+- An incremental table called ```bar_airbyte_reconciliation_deletes_foo```, an append-only audit log of ```bar``` entities inferred as deleted because they were absent from the latest full refresh. This table is ```protected``` — it survives a version table full refresh, so reconciled deletions are not accidentally resurrected.
+- An assertion called ```bar_airbyte_reconciliation_exceeds_safe_delete_volume_foo```, a circuit breaker that blocks the apply step if pending inferred deletions exceed ```airbyteReconciliation.maxDeleteFraction``` of live rows. This prevents bulk transactions that mimic a full-refresh signature from causing mass deletions.
+- An operation called ```bar_airbyte_reconciliation_apply_foo```, which applies the inferred deletions to the version table by closing the last live version of each deleted entity (sets ```valid_to```, ```deleted_at```, ```is_current = FALSE```, ```is_deleted = TRUE```). This step only runs if the circuit breaker assertion passes. The ```bar_latest_foo_airbyte``` table depends on this operation when reconciliation is enabled, so it always reads fully reconciled data.
+
+**On first enable**, ```bar_airbyte_full_refreshes_foo``` will be empty until a full refresh is detected within ```detectionWindowDays```. No deletions will be applied during this window — verify the table is populating before relying on reconciled data.
+
+**If the circuit breaker trips** on a known legitimate large deletion, set ```forceReconcileSnapshotLsn``` to the relevant LSN, run the pipeline once, then remove it.
 
 ## Test framework
 Tests with the jest framework are filed in the `tests` folder

@@ -1,6 +1,7 @@
 /* Generates {entity}_latest_{source}{suffix} tables from Airbyte raw data; Contains the most recent version of each entity. */
 
 const parameterFunctions = require("./parameter_functions");
+const airbyteReconciliation = require("./airbyte_reconciliation");
 
 module.exports = (params) => {
     if (!params.enableAirbyteSource) return null;
@@ -9,17 +10,16 @@ module.exports = (params) => {
 
     return params.dataSchema.map(tableSchema => {
         const versionTableName = `${tableSchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
-        const primaryKey = tableSchema.primaryKey || params.airbyteConfig.primaryKeyField || 'id';
-        
-        const fieldAssertionDependencies = params.airbyteEnableAssertions
-            ? params.dataSchema.map(schema =>
-                schema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName
-                )
-            : [];
+        const primaryKey = tableSchema.primaryKey || params.airbyteConfig.defaultPrimaryKeyField || 'id';
+        const hasTimestamps = tableSchema.hasTimestamps; 
 
         publish(tableSchema.entityTableName + "_latest_" + params.eventSourceName + suffix, {
             ...params.defaultConfig,
-            dependencies: fieldAssertionDependencies, 
+            dependencies: [
+                ...(params.airbyteReconciliation.enabled
+                    ? [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName]
+                    : [])
+            ],
             type: tableSchema.materialisation || 'table',
             ...((tableSchema.materialisation || 'table') == "table" ? {
                 assertions: {
@@ -34,8 +34,10 @@ module.exports = (params) => {
                     entitytabletype: "latest"
                 },
                 ...((tableSchema.materialisation || 'table') == "table" ? {
-                    partitionBy: "DATE(created_at)"
-                } : {})
+                    partitionBy: hasTimestamps 
+                        ? "DATE(created_at)" 
+                        : "DATE(last_streamed_event_occurred_at)" 
+                    } : {})
             },
             tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'latest'],
             description: "[AIRBYTE] Latest version of " + tableSchema.entityTableName + ". Sourced from the Airbyte version table in the " + params.airbyteConfig.datasetName + " dataset. " + (tableSchema.description || ''),
@@ -45,8 +47,12 @@ module.exports = (params) => {
                     description: `Primary key of the ${tableSchema.entityTableName} entity.`,
                     bigqueryPolicyTags: tableSchema.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
                 },
-                created_at: "Timestamp this entity was first saved in the database.",
-                updated_at: "Timestamp this entity was last updated in the database.",
+                ...(hasTimestamps ? {
+                        created_at: "Timestamp this entity was first saved in the database.",
+                        updated_at: "Timestamp this entity was last updated in the database.",
+                    } : {
+                        created_at: "Always NULL. This entity does not have a created_at column in the source database (non-Rails service).",
+                    }),
             }, ...parameterFunctions.getKeyColumns(tableSchema.keys))
         }).query(ctx => `
 SELECT
