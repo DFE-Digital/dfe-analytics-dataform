@@ -50,7 +50,7 @@ module.exports = (params) => {
                     `Update the valueMappings config for the field(s) shown in the results.`
             }
         )
-        .tags([params.eventSourceName.toLowerCase(), 'airbyte', 'airbyte_enum'])
+        .tags([params.eventSourceName.toLowerCase(), 'airbyte'])
         .query(() => unionBranches.join('\n    UNION ALL\n') );
     });
 };
