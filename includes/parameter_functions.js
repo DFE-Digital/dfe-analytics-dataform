@@ -63,7 +63,8 @@ const validDataSchemaKeyParameters = ['keyName',
     'foreignKeyName',
     'foreignKeyTable',
     'hidden',
-    'hiddenPolicyTagLocation'
+    'hiddenPolicyTagLocation',
+    'valueMappings'
 ];
 const validCustomEventSchemaKeyParameters = ['keyName',
     'dataType',
