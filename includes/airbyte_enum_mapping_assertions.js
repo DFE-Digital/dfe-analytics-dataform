@@ -34,7 +34,7 @@ module.exports = (params) => {
     FROM ${sourceTable}
     WHERE CAST(\`${key.keyName}\` AS STRING) IS NOT NULL
       AND CAST(\`${key.keyName}\` AS STRING) NOT IN (${knownValues})
-    GROUP BY unmapped_raw_value`;
+    GROUP BY 1, 2`;
         });
 
         return assert(
