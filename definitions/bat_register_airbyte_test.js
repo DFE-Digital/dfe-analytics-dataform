@@ -957,12 +957,12 @@ dfeAnalyticsDataform({
                     description: "Broad demographic ethnic classification category specified by the trainee",
                     hidden: true,
                     valueMappings: {
-                        "0": "asian",
-                        "1": "black",
-                        "2": "mixed",
-                        "3": "white",
-                        "4": "other",
-                        "5": "not_provided"
+                        "0": "asian_ethnic_group",
+                        "1": "black_ethnic_group",
+                        "2": "mixed_ethnic_group",
+                        "3": "white_ethnic_group",
+                        "4": "other_ethnic_group",
+                        "5": "not_provided_ethnic_group"
                     }
                 }, {
                     keyName: "first_names",
