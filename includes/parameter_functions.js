@@ -43,8 +43,7 @@ const validDataSchemaTableParameters = ['entityTableName',
     'dataFreshnessDisableDuringRange',
     'materialisation',
     'expirationDays',
-    'hasTimestamps',
-    'valueMappings'
+    'hasTimestamps'
 ];
 const validCustomEventSchemaEventParameters = ['eventType',
     'description',
