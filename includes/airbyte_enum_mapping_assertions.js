@@ -30,7 +30,6 @@ module.exports = (params) => {
     SELECT
         '${tableSchema.entityTableName}' AS entity_table_name,
         '${key.keyName}' AS field_name,
-        CAST(\`${key.keyName}\` AS STRING) AS unmapped_raw_value,
         COUNT(*) AS row_count
     FROM ${sourceTable}
     WHERE CAST(\`${key.keyName}\` AS STRING) IS NOT NULL
