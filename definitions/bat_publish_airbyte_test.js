@@ -500,12 +500,17 @@ dfeAnalyticsDataform({
                 keyName: "year_code",
                 dataType: "string",
                 description: ""
-            }, {
+            }
+            /* AIRBYTE TEST ONLY: array-typed keys are rejected by airbyteKeyCast under the
+               legacy merge. Excluded here so the dual-run compiles; still present in the
+               production Publish definitions file and unaffected there. */
+            /*, {
                 keyName: "synonyms",
                 dataType: "string",
                 isArray: true,
                 description: "Comma-separated list of alternative names by which this provider is known."
-            }]
+            }*/
+            ]
         },
         {
             entityTableName: "recruitment_cycle",
@@ -650,12 +655,15 @@ dfeAnalyticsDataform({
         {
             entityTableName: "subject",
             description: "",
-            keys: [{
+            keys: [
+            /* AIRBYTE TEST ONLY: array-typed key excluded, see note on provider.synonyms above. */
+            /*{
                 keyName: "match_synonyms",
                 dataType: "string",
                 isArray: true,
                 description: "Comma-separated list used to match a list of aliases for a subject - the aliases could be abbreviation, other names, even codes or any significant value that was heavily searched on Find - for any given subject. Some subjects might have empty others many values."
-            }, {
+            }, */
+            {
                 keyName: "type",
                 dataType: "string",
                 description: ""
