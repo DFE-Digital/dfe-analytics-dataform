@@ -28,8 +28,9 @@ dfeAnalyticsDataform({
 
     airbyteConfig: {
         datasetName: "ptt_airbyte_production",
+        tablePrefix: "",
         tableSuffix: "_airbyte",
-        primaryKeyField: "id"
+        defaultPrimaryKeyField: "id"
     },
 
     enabledAirbyteLegacyMerge: true,
@@ -38,7 +39,8 @@ dfeAnalyticsDataform({
     airbyteHeartbeat: {
         datasetName: "ptt_airbyte_production",
         freshnessHours: 12,
-        tableName: 'airbyte_heartbeat'
+        tableName: 'airbyte_heartbeat',
+        disableFreshnessCheckDuringRange: false
     },
 
     airbyteReconciliation: {
@@ -132,6 +134,10 @@ dfeAnalyticsDataform({
                 keyName: "application_status",
                 dataType: "string",
                 description: "Status of whether the course is open or closed. Note that this does not necessarily mean that the course is appliable - an appliable course must have an 'open' application status, be findable on Find (has been published and is not withdrawn), and has an applications_open_from date that has been met.",
+                valueMappings: {
+                    "0": "closed",
+                    "1": "open"
+                }
             }, {
                 keyName: "changed_at",
                 dataType: "timestamp",
@@ -148,7 +154,13 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "degree_grade",
                 dataType: "string",
-                description: ""
+                description: "",
+                valueMappings: {
+                    "0": "two_one",
+                    "1": "two_two",
+                    "2": "third_class",
+                    "9": "not_required"
+                }
             }, {
                 keyName: "degree_subject_requirements",
                 dataType: "string",
@@ -160,7 +172,13 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "english",
                 dataType: "string",
-                description: ""
+                description: "",
+                valueMappings: {
+                    "1": "must_have_qualification_at_application_time",
+                    "2": "expect_to_achieve_before_training_begins",
+                    "3": "equivalence_test",
+                    "9": "not_required"
+                }
             }, {
                 keyName: "funding",
                 dataType: "string",
@@ -176,7 +194,13 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "maths",
                 dataType: "string",
-                description: ""
+                description: "",
+                valueMappings: {
+                    "1": "must_have_qualification_at_application_time",
+                    "2": "expect_to_achieve_before_training_begins",
+                    "3": "equivalence_test",
+                    "9": "not_required"
+                }
             }, {
                 keyName: "name",
                 dataType: "string",
@@ -201,11 +225,25 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "qualification",
                 dataType: "string",
-                description: ""
+                description: "",
+                valueMappings: {
+                    "0": "qts",
+                    "1": "pgce_with_qts",
+                    "2": "pgde_with_qts",
+                    "3": "pgce",
+                    "4": "pgde",
+                    "5": "undergraduate_degree_with_qts"
+                }
             }, {
                 keyName: "science",
                 dataType: "string",
-                description: ""
+                description: "",
+                valueMappings: {
+                    "1": "must_have_qualification_at_application_time",
+                    "2": "expect_to_achieve_before_training_begins",
+                    "3": "equivalence_test",
+                    "9": "not_required"
+                }
             }, {
                 keyName: "start_date",
                 dataType: "date",
@@ -261,7 +299,13 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "status",
                 dataType: "string",
-                description: ""
+                description: "",
+                valueMappings: {
+                    "0": "draft",
+                    "1": "published",
+                    "2": "rolled_over",
+                    "3": "withdrawn"
+                }
             }, {
                 keyName: "updated_by_user_id",
                 dataType: "string",
@@ -467,7 +511,21 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "region_code",
                 dataType: "string",
-                description: ""
+                description: "",
+                valueMappings: {
+                    "0": "no_region",
+                    "1": "london",
+                    "2": "south_east",
+                    "3": "south_west",
+                    "4": "wales",
+                    "5": "west_midlands",
+                    "6": "east_midlands",
+                    "7": "eastern",
+                    "8": "north_west",
+                    "9": "yorkshire_and_the_humber",
+                    "10": "north_east",
+                    "11": "scotland"
+                }
             }, {
                 keyName: "selectable_school",
                 dataType: "boolean",
@@ -595,7 +653,21 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "region_code",
                 dataType: "string",
-                description: ""
+                description: "",
+                valueMappings: {
+                    "0": "no_region",
+                    "1": "london",
+                    "2": "south_east",
+                    "3": "south_west",
+                    "4": "wales",
+                    "5": "west_midlands",
+                    "6": "east_midlands",
+                    "7": "eastern",
+                    "8": "north_west",
+                    "9": "yorkshire_and_the_humber",
+                    "10": "north_east",
+                    "11": "scotland"
+                }
             }, {
                 keyName: "town",
                 dataType: "string",
@@ -607,7 +679,11 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "site_type",
                 dataType: "string",
-                description: ""
+                description: "",
+                valueMappings: {
+                    "0": "school",
+                    "1": "study_site"
+                }
             }]
         },
         {
@@ -948,8 +1024,13 @@ dfeAnalyticsDataform({
                 alias: "authentication_id"
             }, {
                 keyName: "provider",
-                dataType: "integer",
-                description: "Authentication provider used"
+                dataType: "string",
+                description: "Authentication provider used",
+                valueMappings: {
+                    "0": "developer",
+                    "1": "govuk_one_login",
+                    "2": "dfe_signin"
+                }
             }, {
                 keyName: "subject_key",
                 dataType: "string",
