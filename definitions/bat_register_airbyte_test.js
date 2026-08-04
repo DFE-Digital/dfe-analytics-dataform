@@ -201,7 +201,11 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "level",
                 dataType: "string",
-                description: "level of the course"
+                description: "level of the course",
+                valueMappings: {
+                    "0": "primary",
+                    "1": "secondary"
+                }
             }, {
                 keyName: "min_age",
                 dataType: "integer",
@@ -213,7 +217,15 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "qualification",
                 dataType: "string",
-                description: "qualification aim of the course"
+                description: "qualification aim of the course",
+                valueMappings: {
+                    "0": "qts",
+                    "1": "pgce_with_qts",
+                    "2": "pgde_with_qts",
+                    "3": "pgce",
+                    "4": "pgde",
+                    "5": "qts_with_undergraduate_degree"
+                }
             }, {
                 keyName: "name",
                 dataType: "string",
@@ -225,7 +237,15 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "route",
                 dataType: "string",
-                description: "ITT route"
+                description: "ITT route",
+                valueMappings: {
+                    "1": "provider_led_postgrad",
+                    "3": "school_direct_tuition_fee",
+                    "4": "school_direct_salaried",
+                    "5": "pg_teaching_apprenticeship",
+                    "9": "provider_led_undergrad",
+                    "14": "teacher_degree_apprenticeship"
+                }
             }, {
                 keyName: "full_time_start_date",
                 dataType: "date",
@@ -254,7 +274,12 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "study_mode",
                 dataType: "string",
-                description: "study mode, e.g. full-time or part-time"
+                description: "study mode, e.g. full-time or part-time",
+                valueMappings: {
+                        "0": "part_time",
+                        "1": "full_time",
+                        "2": "full_time_or_part_time"
+                    }
             }, {
                 keyName: "summary",
                 dataType: "string",
@@ -300,7 +325,11 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "locale_code",
                 dataType: "string",
-                description: ""
+                description: "",
+                valueMappings: {
+                    "0": "uk",
+                    "1": "non_uk"
+                }
             }, {
                 keyName: "non_uk_degree",
                 dataType: "string",
@@ -440,7 +469,12 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "funding_type",
                 dataType: "string",
-                description: "type of funding"
+                description: "type of funding",
+                valueMappings: {
+                    "0": "bursary",
+                    "1": "scholarship",
+                    "2": "grant"
+                }
             }, {
                 keyName: "academic_cycle_id",
                 dataType: "string",
@@ -786,11 +820,21 @@ dfeAnalyticsDataform({
                 }, {
                     keyName: "bursary_tier",
                     dataType: "string",
-                    description: "Bursary tier. Only available for years where bursaries were paid on a tiered basis"
+                    description: "Bursary tier. Only available for years where bursaries were paid on a tiered basis",
+                    valueMappings: {
+                        "1": "tier_one",
+                        "2": "tier_two",
+                        "3": "tier_three"
+                    }
                 }, {
                     keyName: "commencement_status",
                     dataType: "string",
-                    description: "Indicates if trainee started on time (0), late (1), or have not started yet (2)"
+                    description: "Indicates if trainee started on time (0), late (1), or have not started yet (2)",
+                    valueMappings: {
+                        "0": "itt_started_on_time",
+                        "1": "itt_started_later",
+                        "2": "itt_not_yet_started"
+                    }
                 }, {
                     keyName: "trainee_start_date",
                     dataType: "date",
@@ -803,7 +847,12 @@ dfeAnalyticsDataform({
                 }, {
                     keyName: "course_education_phase",
                     dataType: "string",
-                    description: "Indicates if a course is primary (0) or secondary (1)"
+                    description: "Indicates if a course is primary (0) or secondary (1)",
+                    valueMappings: {
+                        "0": "primary",
+                        "1": "secondary",
+                        "2": "early_years"
+                    }
                 }, {
                     keyName: "course_min_age",
                     dataType: "string",
@@ -828,14 +877,12 @@ dfeAnalyticsDataform({
                     keyName: "course_uuid",
                     dataType: "string",
                     description: "Foreign key to courses entity uuid, register_courses.uuid"
-                },
-                {
+                }, {
                     keyName: "date_of_birth",
                     dataType: "string",
                     description: "Date of birth of trainee",
                     hidden: true
-                },
-                {
+                }, {
                     keyName: "defer_date",
                     dataType: "date",
                     description: "Date trainee was deferred"
@@ -846,7 +893,12 @@ dfeAnalyticsDataform({
                 }, {
                     keyName: "disability_disclosure",
                     dataType: "string",
-                    description: ""
+                    description: "",
+                    valueMappings: {
+                        "0": "disabled",
+                        "1": "no_disability",
+                        "2": "disability_not_provided"
+                    }
                 }, {
                     keyName: "discarded_at",
                     dataType: "timestamp",
@@ -854,7 +906,11 @@ dfeAnalyticsDataform({
                 }, {
                     keyName: "diversity_disclosure",
                     dataType: "string",
-                    description: ""
+                    description: "",
+                    valueMappings: {
+                        "0": "diversity_disclosed",
+                        "1": "diversity_not_disclosed"
+                    }
                 }, {
                     keyName: "dormancy_dttp_id",
                     dataType: "string",
@@ -899,7 +955,15 @@ dfeAnalyticsDataform({
                     keyName: "ethnic_group",
                     dataType: "string",
                     description: "Broad demographic ethnic classification category specified by the trainee",
-                    hidden: true
+                    hidden: true,
+                    valueMappings: {
+                        "0": "asian_ethnic_group",
+                        "1": "black_ethnic_group",
+                        "2": "mixed_ethnic_group",
+                        "3": "white_ethnic_group",
+                        "4": "other_ethnic_group",
+                        "5": "not_provided_ethnic_group"
+                    }
                 }, {
                     keyName: "first_names",
                     dataType: "string",
@@ -967,6 +1031,10 @@ dfeAnalyticsDataform({
                     keyName: "placement_detail",
                     dataType: "string",
                     description: "",
+                    valueMappings: {
+                        "0": "has_placement_detail",
+                        "1": "no_placement_detail"
+                    }
                 }, {
                     keyName: "progress",
                     dataType: "string",
@@ -1014,15 +1082,35 @@ dfeAnalyticsDataform({
                 }, {
                     keyName: "sex",
                     dataType: "string",
-                    description: "Trainee sex"
+                    description: "Trainee sex",
+                    valueMappings: {
+                        "0": "male",
+                        "1": "female",
+                        "2": "other",
+                        "3": "sex_not_provided",
+                        "4": "prefer_not_to_say"
+                    }
                 }, {
                     keyName: "state",
                     dataType: "string",
-                    description: "Current status of trainee - draft(0), submitted_for_trn (1), trn_received (2), recommended_for_award (3), withdrawn (4), deferred (5), awarded(6)"
+                    description: "Current status of trainee - draft(0), submitted_for_trn (1), trn_received (2), recommended_for_award (3), withdrawn (4), deferred (5), awarded(6)",
+                    valueMappings: {
+                        "0": "draft",
+                        "1": "submitted_for_trn",
+                        "2": "trn_received",
+                        "3": "recommended_for_award",
+                        "4": "withdrawn",
+                        "5": "deferred",
+                        "6": "awarded"
+                    }
                 }, {
                     keyName: "study_mode",
                     dataType: "string",
-                    description: ""
+                    description: "",
+                    valueMappings: {
+                        "0": "part_time",
+                        "1": "full_time"
+                    }
                 }, {
                     keyName: "submission_ready",
                     dataType: "boolean",
@@ -1034,11 +1122,41 @@ dfeAnalyticsDataform({
                 }, {
                     keyName: "training_initiative",
                     dataType: "string",
-                    description: ""
+                    description: "",
+                    valueMappings: {
+                        "0": "future_teaching_scholars",
+                        "1": "maths_physics_chairs_programme_researchers_in_schools",
+                        "2": "now_teach",
+                        "3": "transition_to_teach",
+                        "4": "no_initiative",
+                        "5": "troops_to_teachers",
+                        "6": "veterans_teaching_undergraduate_bursary",
+                        "7": "international_relocation_payment",
+                        "8": "abridged_itt_course",
+                        "9": "primary_mathematics_specialist",
+                        "10": "additional_itt_place_for_pe_with_a_priority_subject"
+                    }
+
                 }, {
                     keyName: "training_route",
                     dataType: "string",
-                    description: "training route - assessment_only (0),provider_led_postgrad (1), early_years_undergrad (2), school_direct_tuition_fee (3),school_direct_salaried (4), pg_teaching_apprenticeship (5), early_years_assessment_only (6), early_years_salaried (7), early_years_postgrad (8), provider_led_undergrad (9), opt_in_undergrad (10), hpitt_postgrad (11), iqts (12)"
+                    description: "training route - assessment_only (0),provider_led_postgrad (1), early_years_undergrad (2), school_direct_tuition_fee (3),school_direct_salaried (4), pg_teaching_apprenticeship (5), early_years_assessment_only (6), early_years_salaried (7), early_years_postgrad (8), provider_led_undergrad (9), opt_in_undergrad (10), hpitt_postgrad (11), iqts (12)",
+                    valueMappings: {
+                        "0": "assessment_only",
+                        "1": "provider_led_postgrad",
+                        "2": "early_years_undergrad",
+                        "3": "school_direct_tuition_fee",
+                        "4": "school_direct_salaried",
+                        "5": "pg_teaching_apprenticeship",
+                        "6": "early_years_assessment_only",
+                        "7": "early_years_salaried",
+                        "8": "early_years_postgrad",
+                        "9": "provider_led_undergrad",
+                        "10": "opt_in_undergrad",
+                        "11": "hpitt_postgrad",
+                        "12": "iqts",
+                        "14": "teacher_degree_apprenticeship"
+                    }
                 }, {
                     keyName: "trn",
                     dataType: "string",

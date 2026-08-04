@@ -40,7 +40,10 @@ module.exports = (params) => {
         const primaryKey = entitySchema.primaryKey || params.airbyteConfig.defaultPrimaryKeyField || 'id';
         const hasTimestamps = entitySchema.hasTimestamps;
 
-        const fieldAssertionDependencies = [entitySchema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName];
+        const hasMappedKeys = (entitySchema.keys || []).some(k => k.valueMappings && !k.historic);
+        const fieldAssertionDependencies = [entitySchema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName,
+            ...(hasMappedKeys ? [entitySchema.entityTableName + "_airbyte_schema_fields_missing_from_source_" + params.eventSourceName] : [])
+        ];
         
         const legacyEnabled = params.enabledAirbyteLegacyMerge === true;
         const legacyCutoff = params.airbyteLegacyMergeCutoff;
@@ -83,6 +86,17 @@ module.exports = (params) => {
             }
             const raw = '`' + key.keyName + '`';
             const s = `CAST(${raw} AS STRING)`;
+
+            // If valueMappings is configured, apply a CASE expression.
+            // Unknown values fall through to the raw string value. NULL in gives NULL out via the ELSE.
+            // Type cast is skipped — valueMappings always produces STRING, enforced at config validation.
+            if (key.valueMappings) {
+                const whenClauses = Object.entries(key.valueMappings)
+                    .map(([from, to]) => `WHEN ${s} = '${from.replace(/'/g, "\\'")}' THEN '${to.replace(/'/g, "\\'")}'`)
+                    .join('\n                ');
+                return `CASE\n ${whenClauses}\n ELSE ${s}\n END`;
+            }
+            
             switch (key.dataType) {
                 case 'boolean':   return `SAFE_CAST(${s} AS BOOL)`;
                 case 'integer':   return `SAFE_CAST(${s} AS INT64)`;

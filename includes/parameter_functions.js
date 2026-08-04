@@ -62,7 +62,8 @@ const validDataSchemaKeyParameters = ['keyName',
     'foreignKeyName',
     'foreignKeyTable',
     'hidden',
-    'hiddenPolicyTagLocation'
+    'hiddenPolicyTagLocation',
+    'valueMappings'
 ];
 const validCustomEventSchemaKeyParameters = ['keyName',
     'dataType',
@@ -150,6 +151,23 @@ function validateParams(params) {
             }
             if ((key.keyName == tableSchema.primaryKey) && (key.hidden === true || key.hidden === false)) {
                 throw new Error(`The ${key.keyName} field in the ${tableSchema.entityTableName} table has 'hidden' parameter set at field level even though it is the primary key. Set the 'hidePrimaryKey' parameter at table level for this table instead.`);
+            }
+            if (key.valueMappings !== undefined) {
+                if (typeof key.valueMappings !== 'object' || Array.isArray(key.valueMappings) || key.valueMappings === null) {
+                    throw new Error(`valueMappings for the ${key.keyName} field in the ${tableSchema.entityTableName} table must be a plain object (e.g. { "0": "draft", "1": "submitted" }).`);
+                }
+                if (Object.keys(key.valueMappings).length === 0) {
+                    throw new Error(`valueMappings for the ${key.keyName} field in the ${tableSchema.entityTableName} table is empty. Either add mappings or remove the valueMappings attribute.`);
+                }
+                const resolvedDataType = key.dataType || 'string';
+                if (resolvedDataType !== 'string') {
+                    throw new Error(`valueMappings for the ${key.keyName} field in the ${tableSchema.entityTableName} table requires dataType to be 'string' (or omitted), but got '${resolvedDataType}'. The output of a valueMappings translation is always a string.`);
+                }
+                Object.entries(key.valueMappings).forEach(([k, v]) => {
+                    if (typeof v !== 'string') {
+                        throw new Error(`valueMappings for the ${key.keyName} field in the ${tableSchema.entityTableName} table: all values must be strings, but the mapping for key "${k}" is ${typeof v}.`);
+                    }
+                });
             }
         })
     });
