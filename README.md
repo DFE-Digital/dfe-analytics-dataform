@@ -152,6 +152,7 @@ In addition to step 13 of the setup instructions, the following Airbyte-related 
 - ```forceReconcileSnapshotLsn``` - string or null. Defaults to ```null```. One-shot circuit breaker override: set this to the LSN of a known legitimate large deletion, run the pipeline once, then remove it. The circuit breaker will not block apply for that specific snapshot.
 
 ```enabledAirbyteLegacyMerge``` - `true` or `false`. Defaults to `false`. When set to `true`, seeds the Airbyte version table with pre-cutoff version history from the legacy `{entity}_version_{source}` dfe-analytics event-stream table. Useful when migrating from the dfe-analytics event-stream pipeline to Airbyte CDC and you want to preserve historic version history. Note: array-typed keys are not supported with legacy merge and will raise a compile-time error.
+
 ```airbyteLegacyMergeCutoff``` - date string (`'YYY-MM-DD'`). Only legacy rows with `valid_from` on or before this date are included in the merge. Required when `enabledAirbyteLegacyMerge` is `true`. Run as a full refresh the first time to seed the legacy data.
 
 ## Updating to a new version
