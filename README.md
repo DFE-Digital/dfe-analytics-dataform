@@ -135,6 +135,7 @@ In addition to step 13 of the setup instructions, the following Airbyte-related 
 - ```datasetName``` - name of the BigQuery dataset that Airbyte streams data into. Required when ```enableAirbyteSource``` is ```true```.
 - ```tableSuffix``` - suffix appended to output table names to distinguish Airbyte tables from ```dfe-analytics``` tables. For example, if set to ```'_airbyte'``` and your entity is ```users```, the output tables will be named ```users_version_{eventSourceName}_airbyte``` and ```users_latest_{eventSourceName}_airbyte```. Defaults to ```'_airbyte'``` if not specified.
 - ```defaultPrimaryKeyField``` - the default primary key field name used for all entities when reading from Airbyte source tables. Can be overridden on a per-entity basis by setting ```primaryKey``` in ```dataSchema```. Defaults to ```'id'``` if not specified.
+- ```hasTimestamps``` - boolean. Defaults to `true`. Set to `false` if your Airbyte source tables do not have `updated_at` and `created_at` timestamp columns (e.g. for non-Rails services). When `false`, the version table is built without timestamp-based ordering.
 
 ```airbyteHeartbeat``` - configuration block for Airbyte heartbeat freshness monitoring. Contains the following parameters:
 - ```freshnessHours``` - number of hours to wait before triggering an assertion failure, if no new data has been received from Airbyte. For example, if set to ```12```, the ```{eventSourceName}_airbyte_global_data_not_fresh``` assertion will fail if the heartbeat table has not been updated in the last 12 hours. Defaults to ```12``` if not specified.
@@ -149,6 +150,10 @@ In addition to step 13 of the setup instructions, the following Airbyte-related 
 - ```minSnapshotAgeMinutes``` - integer number of minutes. Defaults to ```60```. Snapshots more recent than this are ignored as potentially still in-flight (resumable snapshots can span multiple syncs).
 - ```detectionWindowDays``` - integer number of days. Defaults to ```7```. The lookback window used when scanning the Airbyte raw table for full-refresh signatures. Also used as a partition pruning hint to reduce scan cost.
 - ```forceReconcileSnapshotLsn``` - string or null. Defaults to ```null```. One-shot circuit breaker override: set this to the LSN of a known legitimate large deletion, run the pipeline once, then remove it. The circuit breaker will not block apply for that specific snapshot.
+
+```enabledAirbyteLegacyMerge``` - `true` or `false`. Defaults to `false`. When set to `true`, seeds the Airbyte version table with pre-cutoff version history from the legacy `bar_version_foo` dfe-analytics event-stream table. Useful when migrating from the dfe-analytics event-stream pipeline to Airbyte CDC and you want to preserve historic version history. Note: array-typed keys are not supported with legacy merge and will raise a compile-time error.
+
+```airbyteLegacyMergeCutoff``` - date string (`'YYY-MM-DD'`). Only legacy rows with `valid_from` on or before this date are included in the merge. Required when `enabledAirbyteLegacyMerge` is `true`. Run as a full refresh the first time to seed the legacy data.
 
 ## Updating to a new version
 Users are notified through internal channels when a new version of ```dfe-analytics-dataform``` is released. To update:
@@ -195,6 +200,7 @@ Each object within each table's set of ```keys``` determines how ```dfe-analytic
 - ```historic``` - a boolean, see section "Retaining access to historic fields" below
 - ```foreignKeyName``` - a string, see section "Primary and foreign key constraints" below
 - ```foreignKeyTable``` - a string, see section "Primary and foreign key constraints" below
+- ```valueMappings``` - an object mapping raw integer enum codes to string labels, e.g. `{ 0: 'draft', 1: 'published', 2: 'archived' }`. Only valid when `dataType` is `'string'`. When configured, a `CASE` expression is applied at transformation time; unknown values fall through to the raw string value. A non-blocking assertion `bar_airbyte_enum_mapping_assertions_foo` is generated to check all source values are covered. Only applies to Airbyte pipelines.
 
 An example of a ```dataSchema``` is included in the installation instructions above and in [example.js](https://github.com/DFE-Digital/dfe-analytics-dataform/blob/master/definitions/example.js).
 
@@ -369,6 +375,10 @@ When ```enableAirbyteSource: true``` is set, the following additional tables and
 - An assertion called ```bar_airbyte_schema_fields_missing_from_source_foo``` which fails (but does **not** block the pipeline) if fields configured in ```dataSchema``` are missing from the Airbyte source table. This alerts you to schema drift.
 - If you have configured an entity-level ```dataFreshnessDays``` parameter, an assertion called ```bar_airbyte_data_not_fresh_foo``` which fails if no data has been received for this entity within the configured number of days.
 - An assertion called ```foo_airbyte_global_data_not_fresh``` which fails if the Airbyte heartbeat table has not been updated within the configured ```freshnessHours```.
+- A table called `bar_field_updates_foo_airbyte`, which contains one row for each time a field was updated on a `bar` entity in the Airbyte pipeline, giving the field name (`key_updated`), its previous value and its new value. Derived from the `bar_version_foo_airbyte` table by comparing each version to the one immediately before it. 
+> Note: CDC data carries no web request context, so `event_type`, `request_*`, `response_*`, device/browser and `anonymised_user_agent_and_ip` columns are not included. Generated automatically for all Airbyte pipelines - no configuration changes needed. 
+> If an entity has no trackable keys (i.e. all keys are `historic` or only the primary key is configured), no table is published for that entity.
+- An assertion called `bar_airbyte_enum_mapping_assertions_foo` which checks that all raw integer enum values in the Airbyte source table are covered by the `valueMappings` configured for that key in `dataSchema`. This assertion is non-blocking.
 
 Both `dfe-analytics` and Airbyte tables coexist in the same Dataform project. Airbyte output tables are distinguished by the ```_airbyte``` suffix (or the value of ```tableSuffix```) and tagged with ```'airbyte'``` in Dataform.
 

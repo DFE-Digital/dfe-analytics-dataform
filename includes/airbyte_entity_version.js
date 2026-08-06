@@ -129,7 +129,7 @@ module.exports = (params) => {
                             "Timestamp from which this version was valid (CDC event timestamp from Airbyte, used as a substitute because this entity does not have an updated_at column in the source database).",
                         valid_to: "Timestamp until which this version was valid. NULL if this is the current version.",
                         is_current: "TRUE if this is the most recent non-deleted version of the entity.",
-                        is_deleted: "TRUE if this entity has been soft-deleted via a CDC deletion event or Airbyte full-refresh reconciliation.",
+                        is_deleted: "TRUE if this entity has been soft-deleted via a CDC deletion event, Airbyte full-refresh reconciliation, or for pre-cutoff history (closure of its final version in the legacy event-stream model).",
                         version_number: "Sequential version number for this entity, starting at 1 (oldest).",
                         ...(hasTimestamps ? {
                             created_at: "Timestamp this entity was first saved in the source database.",
@@ -225,6 +225,18 @@ ${injectLegacy ? `
     WHERE valid_from <= TIMESTAMP("${legacyCutoff}")
     ),
 
+    legacy_deletions AS (
+    /* The legacy model has no deleted_at. 
+       An entity deleted in the legacy has every version closed (no open version anywhere in the model), and MAX(valid_to) is the deletion timestamp. */
+        SELECT
+            id,
+            MAX(valid_to) AS deleted_at
+        FROM ${ctx.ref(legacyModel)}
+        GROUP BY 1
+        HAVING COUNTIF(valid_to IS NULL) = 0
+           AND MAX(valid_to) <= TIMESTAMP("${legacyCutoff}")
+    ),
+
     merged_full_history AS (
         SELECT ${versionColsSql}
         FROM (
@@ -236,7 +248,8 @@ ${injectLegacy ? `
         PARTITION BY id, ${orderCol}
         ORDER BY _merge_priority
     ) = 1
-),
+    ),
+    
     ` : ``}
 
 ${ctx.incremental() ? `
@@ -264,12 +277,22 @@ ${ctx.incremental() ? `
 ` : ``}
 
   deletions AS (
-    /* Filter out deletion rows, they signal that the previous version ended. Keep them in a separate CTE. */
+    /* Filter out deletion rows, they signal that the previous version ended. Keep them in a separate CTE.
+       On the full-refresh legacy build, legacy_deletions is unioned in here so pre-cutoff deletions use the same channel.*/
     SELECT
     ${primaryKey},
     MAX(deleted_at) AS deleted_at
-    FROM ${versionInput}
-    WHERE deleted_at IS NOT NULL
+    FROM (
+        SELECT ${primaryKey}, deleted_at
+        FROM ${versionInput}
+        WHERE deleted_at IS NOT NULL
+        ${injectLegacy ? `
+        UNION ALL
+
+        SELECT ${primaryKey}, deleted_at
+        FROM legacy_deletions
+        ` : ``}
+        )
     GROUP BY ${primaryKey}
     ),
 
