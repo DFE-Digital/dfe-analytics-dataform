@@ -273,6 +273,18 @@ dfeAnalyticsDataform({
                 pastKeyNames: ["first_published_date", "first_published_datetime"],
                 dataType: "timestamp",
                 description: "The timestamp that the course was first published at."
+            }, {
+                keyName: "school_experience_required",
+                dataType: "string",
+                description: "TRUE if school experience is required for this course"
+            }, {
+                keyName: "school_experience_required_content",
+                dataType: "string",
+                description: "Details of the school experience required for this course."
+            }, {
+                keyName: "publish_without_schools_allowed",
+                dataType: "boolean",
+                description: "TRUE if course can be published without schools allowed"
             }]
         },
         {
@@ -944,6 +956,10 @@ dfeAnalyticsDataform({
                 description: "See https://www.get-information-schools.service.gov.uk/glossary"
             }, {
                 keyName: "website",
+                dataType: "string",
+                description: "See https://www.get-information-schools.service.gov.uk/glossary"
+            }, {
+                keyName: "region_code",
                 dataType: "string",
                 description: "See https://www.get-information-schools.service.gov.uk/glossary"
             }]
