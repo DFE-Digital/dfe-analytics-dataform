@@ -273,18 +273,6 @@ dfeAnalyticsDataform({
                 pastKeyNames: ["first_published_date", "first_published_datetime"],
                 dataType: "timestamp",
                 description: "The timestamp that the course was first published at."
-            }, {
-                keyName: "school_experience_required",
-                dataType: "string",
-                description: "TRUE if school experience is required for this course"
-            }, {
-                keyName: "school_experience_required_content",
-                dataType: "string",
-                description: "Details of the school experience required for this course."
-            }, {
-                keyName: "publish_without_schools_allowed",
-                dataType: "boolean",
-                description: "TRUE if course can be published without schools allowed"
             }]
         },
         {
@@ -389,9 +377,21 @@ dfeAnalyticsDataform({
                 dataType: "integer",
                 description: ""
             }, {
+                keyName: "displayed",
+                dataType: "boolean",
+                description: "TRUE if this financial incentive is shown to candidates on Find."
+            }, {
                 keyName: "early_career_payments",
                 dataType: "string",
                 description: ""
+            }, {
+                keyName: "non_uk_bursary_eligible",
+                dataType: "boolean",
+                description: "TRUE if candidates without UK residency are eligible for the bursary on this subject."
+            }, {
+                keyName: "non_uk_scholarship_eligible",
+                dataType: "boolean",
+                description: "TRUE if candidates without UK residency are eligible for the scholarship on this subject."
             }, {
                 keyName: "scholarship",
                 dataType: "integer",
@@ -400,6 +400,10 @@ dfeAnalyticsDataform({
                 keyName: "subject_knowledge_enhancement_course_available",
                 dataType: "boolean",
                 description: ""
+            }, {
+                keyName: "year",
+                dataType: "integer",
+                description: "Recruitment cycle year that this financial incentive applies to e.g. 2025 for ITT2025-26."
             }]
         },
         {
@@ -956,10 +960,6 @@ dfeAnalyticsDataform({
                 description: "See https://www.get-information-schools.service.gov.uk/glossary"
             }, {
                 keyName: "website",
-                dataType: "string",
-                description: "See https://www.get-information-schools.service.gov.uk/glossary"
-            }, {
-                keyName: "region_code",
                 dataType: "string",
                 description: "See https://www.get-information-schools.service.gov.uk/glossary"
             }]
