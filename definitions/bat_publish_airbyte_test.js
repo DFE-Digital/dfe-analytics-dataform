@@ -553,6 +553,7 @@ dfeAnalyticsDataform({
                 keyName: "synonyms",
                 dataType: "string",
                 isArray: true,
+                arraySource: "json",
                 description: "Comma-separated list of alternative names by which this provider is known."
             }
             ]
@@ -723,6 +724,7 @@ dfeAnalyticsDataform({
                 keyName: "match_synonyms",
                 dataType: "string",
                 isArray: true,
+                arraySource: "json",
                 description: "Comma-separated list used to match a list of aliases for a subject - the aliases could be abbreviation, other names, even codes or any significant value that was heavily searched on Find - for any given subject. Some subjects might have empty others many values."
             },
             {
