@@ -153,7 +153,7 @@ module.exports = (params) => {
                 /* Airbyte lands arrays either as a native repeated column or as a JSON string,
                    depending on the source connector and destination normalisation. */
                 const elements = key.arraySource === 'json'
-                    ? arrayElements(`JSON_VALUE_ARRAY(SAFE.PARSE_JSON(CAST(${raw} AS STRING)))`, elemType)
+                    ? arrayElements(`JSON_VALUE_ARRAY(SAFE.PARSE_JSON(TO_JSON_STRING(${raw})))`, elemType)
                     : arrayElements(raw, elemType);
                 return canonicalArray(elements, key.preserveArrayOrder === true);
             }
