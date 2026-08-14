@@ -274,7 +274,7 @@ WITH
      QUALIFY collapses same-(entity, updated_at) duplicates within this batch (e.g. if a full
      sync and a CDC event for the same entity both land in the same incremental run). */
     SELECT
-      CAST(${primaryKey} AS STRING) AS id,
+      CAST(${primaryKey} AS STRING) AS \`${primaryKey}\`,
       ${airbyteKeyCastList}
       _airbyte_extracted_at,
       TIMESTAMP(LEFT(_ab_cdc_updated_at, 26)) AS cdc_updated_at,
@@ -298,7 +298,7 @@ WITH
 ${injectLegacy ? `
     legacy_data AS (
     SELECT
-        id,
+        \`${primaryKey}\`,
         ${legacyKeyProjection},
         CAST(NULL AS TIMESTAMP)  AS _airbyte_extracted_at,
         updated_at AS cdc_updated_at,
@@ -314,7 +314,7 @@ ${injectLegacy ? `
     /* The legacy model has no deleted_at. 
        An entity deleted in the legacy has every version closed (no open version anywhere in the model), and MAX(valid_to) is the deletion timestamp. */
         SELECT
-            id,
+            \`${primaryKey}\`,
             MAX(valid_to) AS deleted_at
         FROM ${ctx.ref(legacyModel)}
         GROUP BY 1
@@ -330,7 +330,7 @@ ${injectLegacy ? `
           SELECT ${versionColsSql}, 1 AS _merge_priority FROM legacy_data
     )
     QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY id, ${orderCol}
+        PARTITION BY \`${primaryKey}\`, ${orderCol}
         ORDER BY _merge_priority
     ) = 1
     ),
