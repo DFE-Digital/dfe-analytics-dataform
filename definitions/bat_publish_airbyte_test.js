@@ -219,6 +219,18 @@ dfeAnalyticsDataform({
                 description: "",
                 foreignKeyTable: "provider"
             }, {
+                keyName: "publish_without_schools_allowed",
+                dataType: "boolean",
+                description: "TRUE if support has approved this course to be published without any schools attached, on the basis that candidates arrange their own placement. Only ever applies to salaried or apprenticeship courses, never fee-paying ones."
+            }, {
+                keyName: "school_experience_required",
+                dataType: "boolean",
+                description: "TRUE if the course requires the candidate to have prior school experience. Can only be set for salaried or apprenticeship courses, and is only surfaced to candidates from the 2027 recruitment cycle onwards."
+            }, {
+                keyName: "school_experience_required_content",
+                dataType: "string",
+                description: "Free text set by the provider describing the school experience the candidate needs. Must be present when school_experience_required is TRUE, and must be blank when it is FALSE."
+            }, {
                 keyName: "schools_validated",
                 dataType: "boolean",
                 description: "TRUE if the provider has validated the attached schools for the course (rolled-over period only)"
@@ -273,6 +285,7 @@ dfeAnalyticsDataform({
                 pastKeyNames: ["first_published_date", "first_published_datetime"],
                 dataType: "timestamp",
                 description: "The timestamp that the course was first published at."
+            
             }]
         },
         {
@@ -407,44 +420,6 @@ dfeAnalyticsDataform({
             }]
         },
         {
-            entityTableName: "interrupt_page_acknowledgement",
-            description: "",
-            materialisation: "view",
-            keys: [{
-                keyName: "page",
-                dataType: "string",
-                description: ""
-            }, {
-                keyName: "recruitment_cycle_id",
-                dataType: "string",
-                description: "",
-                foreignKeyTable: "recruitment_cycle"
-            }, {
-                keyName: "user_id",
-                dataType: "string",
-                description: "",
-                foreignKeyTable: "user"
-            }]
-        },
-        {
-            entityTableName: "nctl_organisation",
-            description: "",
-            materialisation: "view",
-            keys: [{
-                keyName: "name",
-                dataType: "string",
-                description: ""
-            }, {
-                keyName: "nctl_id",
-                dataType: "string",
-                description: ""
-            }, {
-                keyName: "organisation_id",
-                dataType: "string",
-                description: ""
-            }]
-        },
-        {
             entityTableName: "provider",
             description: "",
             keys: [{
@@ -574,16 +549,12 @@ dfeAnalyticsDataform({
                 keyName: "year_code",
                 dataType: "string",
                 description: ""
-            }
-            /* AIRBYTE TEST ONLY: array-typed keys are rejected by airbyteKeyCast under the
-               legacy merge. Excluded here so the dual-run compiles; still present in the
-               production Publish definitions file and unaffected there. */
-            /*, {
+            }, {
                 keyName: "synonyms",
                 dataType: "string",
                 isArray: true,
                 description: "Comma-separated list of alternative names by which this provider is known."
-            }*/
+            }
             ]
         },
         {
@@ -748,13 +719,12 @@ dfeAnalyticsDataform({
             entityTableName: "subject",
             description: "",
             keys: [
-            /* AIRBYTE TEST ONLY: array-typed key excluded, see note on provider.synonyms above. */
-            /*{
+            {
                 keyName: "match_synonyms",
                 dataType: "string",
                 isArray: true,
                 description: "Comma-separated list used to match a list of aliases for a subject - the aliases could be abbreviation, other names, even codes or any significant value that was heavily searched on Find - for any given subject. Some subjects might have empty others many values."
-            }, */
+            },
             {
                 keyName: "type",
                 dataType: "string",
@@ -962,6 +932,10 @@ dfeAnalyticsDataform({
                 keyName: "website",
                 dataType: "string",
                 description: "See https://www.get-information-schools.service.gov.uk/glossary"
+            }, {
+                keyName: "region_code",
+                dataType: "string",
+                description: "",
             }]
         },
         {
