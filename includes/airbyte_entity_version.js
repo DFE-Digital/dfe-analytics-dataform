@@ -23,11 +23,33 @@
    column and injected BEFORE the window functions, so valid_to / is_current /
    version_number recompute across the cutoff seam. Applied on full-refresh only; on incremental
    runs the checkpoint is past the cutoff and legacy is never touched.
+
+   Array-typed keys (isArray / integer_array):
+   Stored as a canonical ARRAY: element-typed, NULL elements removed, sorted ascending.
+   - Sorted rather than source-ordered because element order is not preserved through the legacy
+     event-stream flattening (data/hidden_data arrive as ARRAY<STRUCT<key, value ARRAY<STRING>>>
+     and UNNEST does not guarantee ordering without WITH OFFSET). Sorting is therefore the only
+     representation that is stable on both sides of the cutoff seam, and it makes
+     TO_JSON_STRING() comparison meaningful for downstream change detection.
+   - A NULL array cannot be stored in BigQuery (it reads back as []), so absent and empty both
+     normalise to []. Set preserveArrayOrder on a key to keep source order; this is only
+     supportable when the legacy merge is disabled.
 */
 
 
 const data_functions = require("./data_functions");
 const parameterFunctions = require("./parameter_functions");
+
+/* dataSchema dataType -> BigQuery type, for scalar columns and array elements alike. */
+const BQ_TYPES = {
+    boolean: 'BOOL',
+    integer: 'INT64',
+    float: 'FLOAT64',
+    timestamp: 'TIMESTAMP',
+    date: 'DATE',
+    json: 'JSON',
+    string: 'STRING'
+};
 
 module.exports = (params) => {
     if (!params.enableAirbyteSource) return null;
@@ -75,11 +97,67 @@ module.exports = (params) => {
         ];
         const versionColsSql = versionCols.join(', ');
 
+        /* ---------- Array key helpers ---------- */
+
+        const isArrayKey = key => key.isArray === true || key.dataType === 'integer_array';
+
+        /* Resolve and validate the BigQuery element type of an array key. */
+        function arrayElementType(key) {
+            const declared = key.elementDataType || (key.dataType === 'integer_array' ? 'integer' : 'string');
+            const bqType = BQ_TYPES[declared];
+            if (!bqType) {
+                throw new Error(`arrayElementType: unknown elementDataType "${declared}" for key "${key.keyName}" (entity: ${entitySchema.entityTableName}).`);
+            }
+            if (bqType === 'JSON') {
+                /* JSON is not orderable or groupable in BigQuery, so it cannot be canonicalised. */
+                throw new Error(`arrayElementType: JSON elements are not supported in array-typed key "${key.keyName}" (entity: ${entitySchema.entityTableName}). Store the array as a single JSON column instead.`);
+            }
+            return bqType;
+        }
+
+        /* Cast every element of an array expression to the target element type. */
+        const arrayElements = (rawSql, elemType) =>
+            `ARRAY(SELECT SAFE_CAST(v AS ${elemType}) FROM UNNEST(${rawSql}) AS v)`;
+
+        /* Canonical form: NULL elements dropped (BigQuery cannot store them), deterministically
+           ordered so both sides of the legacy UNION and successive versions are comparable. */
+        function canonicalArray(elementsSql, preserveOrder) {
+            if (preserveOrder) {
+                return `ARRAY(SELECT x FROM UNNEST(${elementsSql}) AS x WITH OFFSET o WHERE x IS NOT NULL ORDER BY o)`;
+            }
+            return `ARRAY(SELECT x FROM UNNEST(${elementsSql}) AS x WHERE x IS NOT NULL ORDER BY x)`;
+        }
+
+        /* Fail loudly on array configurations that cannot be honoured, rather than producing a
+           table whose contents silently disagree either side of the cutoff. */
+        mergeKeys.filter(isArrayKey).forEach(key => {
+            if (key.preserveArrayOrder && legacyEnabled) {
+                throw new Error(`preserveArrayOrder is not supportable across the legacy merge for key "${key.keyName}" (entity: ${entitySchema.entityTableName}): element order is not preserved through flattened_entity_version. Remove preserveArrayOrder or disable enabledAirbyteLegacyMerge.`);
+            }
+            if (key.valueMappings) {
+                throw new Error(`valueMappings is not supported on array-typed key "${key.keyName}" (entity: ${entitySchema.entityTableName}).`);
+            }
+        });
+
         /* Cast raw columns to match the data type in dataSchema.*/
         function airbyteKeyCast(key) {
-            if ((key.isArray || key.dataType === 'integer_array') && legacyEnabled) {
-                throw new Error(`airbyteKeyCast: array-typed key "${key.keyName}" (entity: ${entitySchema.entityTableName}) is not supported by the legacy merge yet.`);
+            /* Arrays are handled first: the scalar historic/valueMappings branches below would
+               emit a non-array expression and break positional alignment in the UNION. */
+            if (isArrayKey(key)) {
+                const elemType = arrayElementType(key);
+                if (key.historic) {
+                    /* Typed empty array. NULL arrays are not storable in BigQuery. */
+                    return `ARRAY<${elemType}>[]`;
+                }
+                const raw = '`' + key.keyName + '`';
+                /* Airbyte lands arrays either as a native repeated column or as a JSON string,
+                   depending on the source connector and destination normalisation. */
+                const elements = key.arraySource === 'json'
+                    ? arrayElements(`JSON_VALUE_ARRAY(SAFE.PARSE_JSON(CAST(${raw} AS STRING)))`, elemType)
+                    : arrayElements(raw, elemType);
+                return canonicalArray(elements, key.preserveArrayOrder === true);
             }
+
             if (key.historic) {
                 const bqType = { boolean: 'BOOL', integer: 'INT64', float: 'FLOAT64', timestamp: 'TIMESTAMP', date: 'DATE', json: 'JSON' }[key.dataType] || 'STRING';
                 return `CAST(NULL AS ${bqType})`;
@@ -112,9 +190,16 @@ module.exports = (params) => {
             `${airbyteKeyCast(k)} AS \`${outName(k)}\`,`
         ).join('\n        ');
         
-        const legacyKeyProjection = mergeKeys.map(k =>
-            `\`${outName(k)}\``
-        ).join(',\n        ');
+        /* Array keys are re-cast and canonicalised on the legacy side too. The legacy element type
+           is STRING at the event-stream layer whatever flattened_entity_version presents, so the
+           element type is re-asserted here rather than inherited — otherwise the UNION ALL either
+           fails on type mismatch or the two sides disagree on element ordering at the seam. */
+        const legacyKeyProjection = mergeKeys.map(k => {
+            if (!isArrayKey(k)) return `\`${outName(k)}\``;
+            const elemType = arrayElementType(k);
+            const elements = arrayElements('`' + outName(k) + '`', elemType);
+            return `${canonicalArray(elements, k.preserveArrayOrder === true)} AS \`${outName(k)}\``;
+        }).join(',\n        ');
         
         return publish(tableName, {
                 type: "incremental",
