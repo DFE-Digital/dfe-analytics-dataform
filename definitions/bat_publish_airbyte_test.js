@@ -333,6 +333,7 @@ dfeAnalyticsDataform({
         {
             entityTableName: "course_site",
             description: "",
+            hasTimestamps: false,
             keys: [{
                 keyName: "course_id",
                 dataType: "string",
@@ -719,6 +720,7 @@ dfeAnalyticsDataform({
         {
             entityTableName: "subject",
             description: "",
+            hasTimestamps:false,
             keys: [
             {
                 keyName: "match_synonyms",
@@ -796,6 +798,7 @@ dfeAnalyticsDataform({
         {
             entityTableName: "user",
             description: "",
+            hasTimestamps: false,
             keys: [{
                 keyName: "accept_terms_date_utc",
                 dataType: "timestamp",
@@ -1077,6 +1080,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "subjects",
                 dataType: "string",
+                isArray: true,
+                arraySource: "json",
                 description: "Subjects the candidate has selected to receive alerts for."
             }, {
                 keyName: "longitude",
