@@ -65,6 +65,8 @@ const validDataSchemaKeyParameters = ['keyName',
     'hidden',
     'hiddenPolicyTagLocation',
     'valueMappings',
+    'elementDataType',
+    'preserveArrayOrder'
 ];
 const validCustomEventSchemaKeyParameters = ['keyName',
     'dataType',
