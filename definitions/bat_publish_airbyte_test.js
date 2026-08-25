@@ -34,7 +34,7 @@ dfeAnalyticsDataform({
     },
 
     enabledAirbyteLegacyMerge: true,
-    airbyteLegacyMergeCutoff: '2026-07-01',
+    airbyteLegacyMergeCutoff: '2026-07-21T16:20:01.164Z',
 
     airbyteHeartbeat: {
         datasetName: "ptt_airbyte_production",
