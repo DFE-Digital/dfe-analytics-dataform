@@ -11,7 +11,9 @@ module.exports = (params) => {
     return params.dataSchema.map(tableSchema => {
         const versionTableName = `${tableSchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
         const primaryKey = tableSchema.primaryKey || params.airbyteConfig.defaultPrimaryKeyField || 'id';
-        const hasTimestamps = tableSchema.hasTimestamps; 
+        const hasTimestamps = tableSchema.hasTimestamps === undefined
+            ? params.hasTimestamps === true
+            : tableSchema.hasTimestamps === true;
 
         publish(tableSchema.entityTableName + "_latest_" + params.eventSourceName + suffix, {
             ...params.defaultConfig,
