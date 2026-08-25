@@ -183,14 +183,7 @@ module.exports = (params) => {
             }
 
             if (key.historic) {
-                const bqType = {
-                    boolean: 'BOOL',
-                    integer: 'INT64',
-                    float: 'FLOAT64',
-                    timestamp: 'TIMESTAMP',
-                    date: 'DATE',
-                    json: 'JSON'
-                } [key.dataType] || 'STRING';
+                const bqType = BQ_TYPES[key.dataType] || 'STRING';
                 return `CAST(NULL AS ${bqType})`;
             }
             const raw = '`' + key.keyName + '`';
