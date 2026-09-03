@@ -4,7 +4,7 @@
     "@dataform/core": "^3.0.65"
   },
   "devDependencies": {
-    "jest": "^30.4.2"
+    "jest": "^30.5.0"
   },
   "scripts": {
     "test": "jest"
