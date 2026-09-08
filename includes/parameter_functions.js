@@ -55,6 +55,7 @@ const validCustomEventSchemaEventParameters = ['eventType',
 const validDataSchemaKeyParameters = ['keyName',
     'dataType',
     'isArray',
+    'arraySource',
     'description',
     'alias',
     'pastKeyNames',
@@ -63,7 +64,9 @@ const validDataSchemaKeyParameters = ['keyName',
     'foreignKeyTable',
     'hidden',
     'hiddenPolicyTagLocation',
-    'valueMappings'
+    'valueMappings',
+    'elementDataType',
+    'preserveArrayOrder'
 ];
 const validCustomEventSchemaKeyParameters = ['keyName',
     'dataType',
@@ -169,6 +172,16 @@ function validateParams(params) {
                     }
                 });
             }
+
+            // preserveArrayOrder is read as `=== true`, so a quoted value would silently do nothing
+            if (key.preserveArrayOrder !== undefined && typeof key.preserveArrayOrder !== 'boolean') {
+                throw new Error(`preserveArrayOrder for the ${key.keyName} field in the ${tableSchema.entityTableName} table is not a boolean value. Ensure it is set to true or false, and that it is not in quotes.`);
+            }
+            // 'json' is excluded: JSON is not orderable or groupable in BigQuery, so an array of it
+            // cannot be stored in a canonical order
+            if (key.elementDataType && !['boolean', 'timestamp', 'date', 'integer', 'float', 'string'].includes(key.elementDataType)) {
+                throw new Error(`Unrecognised elementDataType '${key.elementDataType}' for the ${key.keyName} field in the ${tableSchema.entityTableName} table. elementDataType should be set to boolean, timestamp, date, integer, float or string, or not set.`);
+            }
         })
     });
     // Loop through customEventSchema to handle errors
@@ -247,6 +260,11 @@ function validateParams(params) {
         if (params.airbyteReconciliation.enabled !== undefined && typeof params.airbyteReconciliation.enabled !== 'boolean') {
             throw new Error(`airbyteReconciliation.enabled must be a boolean, not "${params.airbyteReconciliation.enabled}".`);
         }
+    }
+
+    // Read as `=== true` in the Airbyte version model, so a non-boolean would silently disable the merge
+    if (params.enabledAirbyteLegacyMerge !== undefined && typeof params.enabledAirbyteLegacyMerge !== 'boolean') {
+        throw new Error(`enabledAirbyteLegacyMerge must be a boolean value (true or false), not "${params.enabledAirbyteLegacyMerge}".`);
     }
 
     return params;

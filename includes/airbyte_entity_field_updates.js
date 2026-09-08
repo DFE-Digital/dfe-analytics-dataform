@@ -54,7 +54,7 @@ module.exports = (params) => {
            column names consumers see in the version and flattened tables. */
         const newDataStructSql = trackedKeys.map(k => {
             const col = outName(k);
-            const valueSql = k.dataType === 'json'
+            const valueSql = (k.dataType === 'json' || k.isArray)
                 ? `TO_JSON_STRING(\`${col}\`)`
                 : `CAST(\`${col}\` AS STRING)`;
             return `STRUCT('${col}' AS key, ${valueSql} AS value)`;
