@@ -25,6 +25,7 @@ const validTopLevelParameters = ['eventSourceName',
     'hiddenPolicyTagLocation',
     'expirationDays',
     'webRequestEventExpirationDays',
+    'includeEventTags',
     // Airbyte parameters
     'enableAirbyteSource',
     'airbyteConfig',
@@ -253,6 +254,11 @@ function validateParams(params) {
         });
     }
 
+    // Read as `=== true` in the events model, so a non-boolean would silently disable the feature
+    if (params.includeEventTags !== undefined && typeof params.includeEventTags !== 'boolean') {
+        throw new Error(`includeEventTags must be a boolean value (true or false), not "${params.includeEventTags}".`);
+    }
+    
     if (params.airbyteReconciliation !== undefined) {
         if (typeof params.airbyteReconciliation !== 'object' || params.airbyteReconciliation === null) {
             throw new Error(`airbyteReconciliation must be an object, not "${params.airbyteReconciliation}".`);
