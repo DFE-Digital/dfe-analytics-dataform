@@ -128,6 +128,7 @@ You may in addition to step 8 of the setup instructions wish to configure the fo
 - ```searchEngineRefererDomainRegex``` - [re2](https://github.com/google/re2/wiki/Syntax)-formatted regular expression to use to work out whether an HTTP referer's domain name is a search engine (regardless of whether paid or organic). Defaults to ```'(?i)(google|bing|yahoo|aol|ask.co|baidu|duckduckgo|dogpile|ecosia|entireweb|exalead|gigablast|hotbot|info.com|lycos|metacrawler|mojeek|qwant|searx|startpage|swisscows|webcrawler|yandex|yippy)'``` if not specified.
 - ```disabled``` - ```true``` or ```false```. Defaults to ```false```. If set to ```true``` then calling the package will not do anything.
 - ```webRequestEventExpirationDays``` - integer number of days after which ```dfe-analytics-dataform``` will delete web request events from your events tables, pageview table and sessions table
+- - ```includeEventTags``` - whether to include the ```event_tags``` field in the ```events``` table. This field contains metadata tags associated with events. Boolean (```true``` or ```false```, without quotes). Defaults to ```false``` if not specified.
 
 In addition to step 13 of the setup instructions, the following Airbyte-related options can be added to the JSON passed to the ```dfeAnalyticsDataform()``` JavaScript function:
 
