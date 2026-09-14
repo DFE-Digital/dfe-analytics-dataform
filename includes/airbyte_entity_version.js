@@ -119,7 +119,7 @@ module.exports = (params) => {
             'deleted_at',
             '_airbyte_raw_id'
         ];
-        const versionColsSql = versionCols.join(', ');
+        const versionColsSql = versionCols.map(c => '`' + c + '`').join(', ');
 
         /* ---------- Array key helpers ---------- */
 
