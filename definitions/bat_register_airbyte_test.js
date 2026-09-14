@@ -15,6 +15,7 @@ dfeAnalyticsDataform({
     enableSessionTables: false,
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     expirationDays: false,
+    includeEventTags: true,
     enableMonitoring: false,
 
     // NEW: Enable Airbyte

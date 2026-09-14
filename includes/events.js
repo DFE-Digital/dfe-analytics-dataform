@@ -58,7 +58,10 @@ module.exports = (params) => {
             browser_version: "The version of the browser used to cause this event.",
             operating_system_name: "The name of the operating system used to cause this event.",
             operating_system_vendor: "The vendor of the operating system used to cause this event.",
-            operating_system_version: "The version of the operating system used to cause this event."
+            operating_system_version: "The version of the operating system used to cause this event.",
+            ...(params.includeEventTags ? {
+                event_tags: "ARRAY of STRUCTs, each with metadata tags associated with this event. For example, event_tags[0] may contain an import_id for entity import events. Only included if includeEventTags parameter is enabled."
+            } : {})   
         }
     }).query(ctx => `WITH
   earliest_web_request_event_for_request AS (
@@ -94,6 +97,7 @@ event_with_web_request_data AS (
     event.namespace,
     event.data,
     event.hidden_data,
+    event.event_tags, 
     event.entity_table_name,
     COALESCE(event.request_path,earliest_web_request_event_for_request.request_path) AS request_path,
     COALESCE(event.user_id,earliest_web_request_event_for_request.request_user_id) AS request_user_id,
@@ -149,6 +153,7 @@ SELECT
   events_with_path_and_query.response_status,
   events_with_path_and_query.response_content_type,
   events_with_path_and_query.anonymised_user_agent_and_ip,
+  ${params.includeEventTags ? `events_with_path_and_query.event_tags,` : ''}
   IF(REGEXP_CONTAINS(request_user_agent, '(?i)(bot|http|python|scan|check|spider|curl|trend|ruby|bash|batch|verification|qwantify|nuclei|ai|crawler|perl|java|test|scoop|fetch|adreview|cortex|nessus|bitdiscovery|postplanner|faraday|restsharp|hootsuite|mattermost|shortlink|retriever|auto|scrper|alyzer|dispatch|traackr|fiddler|crowsnest|gigablast|wakelet|installatron|intently|openurl|anthill|curb|trello|inject|ahc|sleep|sysdate|=|cloudinary|statuscake|cloudfront|archive|sleuth|bingpreview|facebookexternalhit|newspaper|econtext|postmanruntime|probe)'),"bot",
   CASE parseUserAgent(request_user_agent).category
     WHEN "smartphone" THEN "mobile"
