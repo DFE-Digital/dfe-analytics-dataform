@@ -207,9 +207,16 @@ module.exports = (params) => {
                 case 'float':
                     return `SAFE_CAST(${s} AS FLOAT64)`;
                 case 'timestamp':
-                    return data_functions.stringToTimestamp(s);
+                    return `COALESCE(
+                      SAFE_CAST(${raw} AS TIMESTAMP),
+                      ${data_functions.stringToTimestamp(s)}
+                    )`;
                 case 'date':
-                    return data_functions.stringToDate(s);
+                    return `COALESCE(
+                      SAFE_CAST(${raw} AS DATE),
+                      DATE(SAFE_CAST(${raw} AS TIMESTAMP)),
+                      ${data_functions.stringToDate(s)}
+                    )`;
                 case 'json':
                     return `SAFE.PARSE_JSON(${s})`;
                 default:
