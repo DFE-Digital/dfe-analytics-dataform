@@ -285,7 +285,7 @@ dfeAnalyticsDataform({
                 pastKeyNames: ["first_published_date", "first_published_datetime"],
                 dataType: "timestamp",
                 description: "The timestamp that the course was first published at."
-            
+
             }]
         },
         {
@@ -556,8 +556,7 @@ dfeAnalyticsDataform({
                 isArray: true,
                 arraySource: "json",
                 description: "Comma-separated list of alternative names by which this provider is known."
-            }
-            ]
+            }]
         },
         {
             entityTableName: "recruitment_cycle",
@@ -720,33 +719,33 @@ dfeAnalyticsDataform({
         {
             entityTableName: "subject",
             description: "",
-            hasTimestamps:false,
-            keys: [
-            {
-                keyName: "match_synonyms",
-                dataType: "string",
-                isArray: true,
-                arraySource: "json",
-                description: "Comma-separated list used to match a list of aliases for a subject - the aliases could be abbreviation, other names, even codes or any significant value that was heavily searched on Find - for any given subject. Some subjects might have empty others many values."
-            },
-            {
-                keyName: "type",
-                dataType: "string",
-                description: ""
-            }, {
-                keyName: "subject_code",
-                dataType: "string",
-                description: ""
-            }, {
-                keyName: "subject_name",
-                dataType: "string",
-                description: ""
-            }, {
-                keyName: "subject_group_id",
-                dataType: "string",
-                description: "UID of the subject group for this subject",
-                foreignKeyTable: "subject_group"
-            }]
+            hasTimestamps: false,
+            keys: [{
+                    keyName: "match_synonyms",
+                    dataType: "string",
+                    isArray: true,
+                    arraySource: "json",
+                    description: "Comma-separated list used to match a list of aliases for a subject - the aliases could be abbreviation, other names, even codes or any significant value that was heavily searched on Find - for any given subject. Some subjects might have empty others many values."
+                },
+                {
+                    keyName: "type",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "subject_code",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "subject_name",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "subject_group_id",
+                    dataType: "string",
+                    description: "UID of the subject group for this subject",
+                    foreignKeyTable: "subject_group"
+                }
+            ]
         },
         {
             entityTableName: "subject_group",

@@ -1,0 +1,86 @@
+config {
+  type: "operations",
+  tags: ["weekly"],
+  dependencies: ["events_publish"],
+  description: "Marks Find crawler traffic as device_category = 'bot' in events_publish. Groups each closed week's /results searches by URL shape (parameter names kept, values stripped) and flags large groups where the URLs keep changing and nearly every view came from a new visitor id or had no referring page. Visitor-weeks showing signed-in activity are never flagged. Every event from a flagged visitor in that week is marked, including course pages and apply clicks. Runs weekly over the last 2 complete weeks."
+}
+
+UPDATE ${ref("events_publish")} AS e
+SET device_category = "bot"
+FROM (
+  WITH searches AS (
+    SELECT
+      DATE_TRUNC(DATE(occurred_at), WEEK(MONDAY))   AS week,
+      anonymised_user_agent_and_ip                  AS visitor,
+      request_path_and_query                        AS url,
+      request_referer IS NULL                       AS no_referer,
+      /* The URL shape: parameter names kept, values stripped, names sorted and
+         de-duplicated, so /results?subjects[]=11&subjects[]=15 and
+         /results?subjects[]=C1 both become /results?subjects[]=. Parameters the
+         server adds (order, sortby) or that only tag a campaign (utm_*,
+         previous_location_category) are dropped first, so they cannot split a
+         group. Same logic as the COMPASS query (02). */
+      ARRAY_TO_STRING(ARRAY(
+        SELECT DISTINCT part
+        FROM UNNEST(SPLIT(
+          REGEXP_REPLACE(
+            REGEXP_REPLACE(
+              REGEXP_REPLACE(request_path_and_query,
+                r'[?&](order|sortby|utm_[a-z_]+|previous_location_category)=[^&]*', ''),
+              r'^/results&', '/results?'),
+            r'=[^&]*', '='),
+          '&')) AS part
+        ORDER BY part
+      ), '&')                                       AS shape
+    FROM ${ref("events_publish")}
+    WHERE event_type = "web_request"
+      AND request_method = "GET"
+      AND request_path = "/results"
+      AND response_status LIKE "2%"
+      AND namespace = "find"
+      AND device_category != "bot"
+      /* The last 2 COMPLETE weeks: one to score, one as slack for late-arriving
+         events and for a missed run. A week's result never changes once it has
+         closed, so re-scoring older weeks costs money and changes nothing. */
+      AND DATE(occurred_at) >= DATE_SUB(DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY)), INTERVAL 2 WEEK)
+      AND DATE(occurred_at) <  DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY))
+  ),
+  crawler_groups AS (
+    SELECT week, shape
+    FROM searches
+    GROUP BY week, shape
+    HAVING COUNT(*) >= 1000                             -- big enough to judge
+       AND COUNT(DISTINCT url) / COUNT(*) >= 0.5        -- URLs keep changing
+       AND (COUNT(DISTINCT visitor) / COUNT(*) >= 0.9   -- a new id nearly every view
+            OR COUNTIF(no_referer) / COUNT(*) >= 0.9)   -- or no referring page
+  ),
+  /* Never flag a visitor-week that shows signed-in activity: crawlers do not
+     have accounts, so these are real people, caught either as collateral in a
+     flagged group or because their anonymised id (user agent + IP) collides
+     with a crawler's on a shared network. Measured over Dec 2025 - Aug 2026:
+     3,111 of 5.53m flagged visitor-weeks (0.06%), 30,460 of 6.61m results
+     views (0.46%). Those ids average 9.8 searches in their week against 1.2
+     for the ids that stay flagged - the profile of people, not machines. */
+  signed_in_visitor_weeks AS (
+    SELECT DISTINCT
+      DATE_TRUNC(DATE(occurred_at), WEEK(MONDAY))   AS week,
+      anonymised_user_agent_and_ip                  AS visitor
+    FROM ${ref("events_publish")}
+    WHERE anonymised_user_agent_and_ip IS NOT NULL
+      AND (request_user_id IS NOT NULL
+           OR event_type IN ("candidate_applies", "saved_course", "removed_saved_course",
+                             "candidate_note_created", "candidate_note_updated"))
+      AND DATE(occurred_at) >= DATE_SUB(DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY)), INTERVAL 2 WEEK)
+      AND DATE(occurred_at) <  DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY))
+  )
+  SELECT DISTINCT s.week, s.visitor
+  FROM searches s
+  JOIN crawler_groups g USING (week, shape)
+  LEFT JOIN signed_in_visitor_weeks i USING (week, visitor)
+  WHERE i.visitor IS NULL
+) AS crawler
+WHERE crawler.visitor = e.anonymised_user_agent_and_ip
+  AND crawler.week    = DATE_TRUNC(DATE(e.occurred_at), WEEK(MONDAY))
+  AND e.device_category != "bot"
+  AND DATE(e.occurred_at) >= DATE_SUB(DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY)), INTERVAL 2 WEEK)
+  AND DATE(e.occurred_at) <  DATE_TRUNC(CURRENT_DATE(), WEEK(MONDAY))

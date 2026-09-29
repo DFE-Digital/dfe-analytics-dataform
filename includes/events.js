@@ -1,69 +1,73 @@
-const {decodeUriComponent} = require('./data_functions');
-const {standardisePathQuery} = require('./data_functions');
+const {
+    decodeUriComponent
+} = require('./data_functions');
+const {
+    standardisePathQuery
+} = require('./data_functions');
 
 module.exports = (params) => {
     return publish("events_" + params.eventSourceName, {
-        ...params.defaultConfig,
-        type: "incremental",
-        protected: false,
-        bigquery: {
-            partitionBy: "DATE(occurred_at)",
-            clusterBy: ["event_type", "request_uuid"],
-            labels: {
-                eventsource: params.eventSourceName.toLowerCase(),
-                sourcedataset: params.bqDatasetName.toLowerCase()
-            }
-        },
-        tags: [params.eventSourceName.toLowerCase()],
-        description: "Initial transformation of the events table streamed from " + params.eventSourceName + " into the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project.",
-        dependencies: params.dependencies,
-        columns: {
-            occurred_at: "The timestamp at which the event occurred in the application.",
-            event_type: "The type of the event, for example web_request. This determines the schema of the data which will be included in the data field.",
-            environment: "The application environment that the event was streamed from.",
-            namespace: "The namespace of the instance of dfe-analytics that streamed this event. For example this might identify the name of the service that streamed the event.",
-            request_user_id: "If a user was logged in when they sent a web request event that is, or caused, this event, then this is the UID of this user.",
-            request_uuid: "UUID of the web request that either is this event, or that caused this event.",
-            request_method: "Whether the web request that either is this event, or caused this event, was a GET or a POST request.",
-            request_path: "The path, starting with a / and excluding any query parameters, of the web request that either is this event, or caused this event.",
-            request_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters that were sent to the application as part of the web request that was this event or caused this event.",
-            request_path_and_query: "This is a string containing both the request path and request query. The request query is ordered alphabetically to ensure consistency between the request_path_and_query and referer_request_path_and_query fields.",
-            request_user_agent: "The user agent of the web request that either is this event or caused this event. Allows a user's browser and operating system to be identified.",
-            request_referer: "The URL of any page the user was viewing when they initiated the web request that either is this event or caused this event. This is the full URL, including protocol (https://) and any query parameters, if the browser shared these with our application as part of the web request. It is very common for this referer to be truncated for referrals from external sites.",
-            request_referer_domain: "This is a string containing the domain extracted from the request referer URL.",
-            request_referer_path_and_query: "This is a string containing both the referer request path and referer request query extracted from the request referer URL. The request query is ordered alphabetically to ensure consistency between the referer_request_path_and_query and request_path_and_query fields.",
-            response_content_type: "Content type of any data that was returned to the browser following the web request that either was this event or caused this event. For example, 'text/html; charset=utf-8'. Image views, for example, may have a non-text/html content type.",
-            response_status: "HTTP response code returned by the application in response to the web request that either was this event or caused this event. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status.",
-            data: {
-                description: "ARRAY of STRUCTs, each with a key and a value. Contains a set of data points appropriate to the event_type of this event. For example, if this event was an entity create, update, delete or import event, data will contain the values of each field in the database after this event took place - according to the settings in the analytics.yml configured for this instance of dfe-analytics. Value be anonymised as a one way hash, depending on configuration settings.",
-                columns: {
-                    key: "Name of the field in the entity_table_name table in the database after it was created or updated, or just before it was imported or destroyed.",
-                    value: "Contents of the field in the database after it was created or updated, or just before it was imported or destroyed."
+            ...params.defaultConfig,
+            type: "incremental",
+            protected: false,
+            bigquery: {
+                partitionBy: "DATE(occurred_at)",
+                clusterBy: ["event_type", "request_uuid"],
+                labels: {
+                    eventsource: params.eventSourceName.toLowerCase(),
+                    sourcedataset: params.bqDatasetName.toLowerCase()
                 }
             },
-            hidden_data: {
-                description: "The same as 'data', except dfe-analytics-dataform will attach a policy tag to this field and fields in other tables generated by it to allow it to be - depending on GCP policy tag configuration - either masked or hidden from users without permission to access it.",
-                columns: {
-                    key: "Name of the field in the entity_table_name table in the database after it was created or updated, or just before it was imported or destroyed.",
-                    value: {
-                        description: "Contents of the field in the database after it was created or updated, or just before it was imported or destroyed.",
-                        bigqueryPolicyTags: params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+            tags: [params.eventSourceName.toLowerCase()],
+            description: "Initial transformation of the events table streamed from " + params.eventSourceName + " into the " + params.bqDatasetName + " dataset in the " + params.bqProjectName + " BigQuery project.",
+            dependencies: params.dependencies,
+            columns: {
+                occurred_at: "The timestamp at which the event occurred in the application.",
+                event_type: "The type of the event, for example web_request. This determines the schema of the data which will be included in the data field.",
+                environment: "The application environment that the event was streamed from.",
+                namespace: "The namespace of the instance of dfe-analytics that streamed this event. For example this might identify the name of the service that streamed the event.",
+                request_user_id: "If a user was logged in when they sent a web request event that is, or caused, this event, then this is the UID of this user.",
+                request_uuid: "UUID of the web request that either is this event, or that caused this event.",
+                request_method: "Whether the web request that either is this event, or caused this event, was a GET or a POST request.",
+                request_path: "The path, starting with a / and excluding any query parameters, of the web request that either is this event, or caused this event.",
+                request_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters that were sent to the application as part of the web request that was this event or caused this event.",
+                request_path_and_query: "This is a string containing both the request path and request query. The request query is ordered alphabetically to ensure consistency between the request_path_and_query and referer_request_path_and_query fields.",
+                request_user_agent: "The user agent of the web request that either is this event or caused this event. Allows a user's browser and operating system to be identified.",
+                request_referer: "The URL of any page the user was viewing when they initiated the web request that either is this event or caused this event. This is the full URL, including protocol (https://) and any query parameters, if the browser shared these with our application as part of the web request. It is very common for this referer to be truncated for referrals from external sites.",
+                request_referer_domain: "This is a string containing the domain extracted from the request referer URL.",
+                request_referer_path_and_query: "This is a string containing both the referer request path and referer request query extracted from the request referer URL. The request query is ordered alphabetically to ensure consistency between the referer_request_path_and_query and request_path_and_query fields.",
+                response_content_type: "Content type of any data that was returned to the browser following the web request that either was this event or caused this event. For example, 'text/html; charset=utf-8'. Image views, for example, may have a non-text/html content type.",
+                response_status: "HTTP response code returned by the application in response to the web request that either was this event or caused this event. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status.",
+                data: {
+                    description: "ARRAY of STRUCTs, each with a key and a value. Contains a set of data points appropriate to the event_type of this event. For example, if this event was an entity create, update, delete or import event, data will contain the values of each field in the database after this event took place - according to the settings in the analytics.yml configured for this instance of dfe-analytics. Value be anonymised as a one way hash, depending on configuration settings.",
+                    columns: {
+                        key: "Name of the field in the entity_table_name table in the database after it was created or updated, or just before it was imported or destroyed.",
+                        value: "Contents of the field in the database after it was created or updated, or just before it was imported or destroyed."
                     }
-                }
-            },
-            entity_table_name: "If event_type was an entity create, update, delete or import event, the name of the table in the database that this entity is stored in. NULL otherwise.",
-            anonymised_user_agent_and_ip: "One way hash of a combination of the user's IP address and user agent. Can be used to identify the user anonymously, even when user_id is not set. Cannot be used to identify the user over a time period of longer than about a month, because of IP address changes and browser updates.",
-            device_category: "The category of device used to cause this event - desktop, mobile, bot or unknown.",
-            browser_name: "The name of the browser used to cause this event.",
-            browser_version: "The version of the browser used to cause this event.",
-            operating_system_name: "The name of the operating system used to cause this event.",
-            operating_system_vendor: "The vendor of the operating system used to cause this event.",
-            operating_system_version: "The version of the operating system used to cause this event.",
-            ...(params.includeEventTags ? {
-                event_tags: "ARRAY of STRUCTs, each with metadata tags associated with this event. For example, event_tags[0] may contain an import_id for entity import events. Only included if includeEventTags parameter is enabled."
-            } : {})   
-        }
-    }).query(ctx => `WITH
+                },
+                hidden_data: {
+                    description: "The same as 'data', except dfe-analytics-dataform will attach a policy tag to this field and fields in other tables generated by it to allow it to be - depending on GCP policy tag configuration - either masked or hidden from users without permission to access it.",
+                    columns: {
+                        key: "Name of the field in the entity_table_name table in the database after it was created or updated, or just before it was imported or destroyed.",
+                        value: {
+                            description: "Contents of the field in the database after it was created or updated, or just before it was imported or destroyed.",
+                            bigqueryPolicyTags: params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+                        }
+                    }
+                },
+                entity_table_name: "If event_type was an entity create, update, delete or import event, the name of the table in the database that this entity is stored in. NULL otherwise.",
+                anonymised_user_agent_and_ip: "One way hash of a combination of the user's IP address and user agent. Can be used to identify the user anonymously, even when user_id is not set. Cannot be used to identify the user over a time period of longer than about a month, because of IP address changes and browser updates.",
+                device_category: "The category of device used to cause this event - desktop, mobile, bot or unknown.",
+                browser_name: "The name of the browser used to cause this event.",
+                browser_version: "The version of the browser used to cause this event.",
+                operating_system_name: "The name of the operating system used to cause this event.",
+                operating_system_vendor: "The vendor of the operating system used to cause this event.",
+                operating_system_version: "The version of the operating system used to cause this event.",
+                ...(params.includeEventTags ? {
+                    event_tags: "ARRAY of STRUCTs, each with metadata tags associated with this event. For example, event_tags[0] may contain an import_id for entity import events. Only included if includeEventTags parameter is enabled."
+                } : {})
+            }
+        }).query(ctx => `WITH
   earliest_web_request_event_for_request AS (
   SELECT DISTINCT
     occurred_at,
@@ -230,7 +234,7 @@ FROM
       LANGUAGE js
       AS "return {category:woothee.parse(user_agent).category,name:woothee.parse(user_agent).name,version:woothee.parse(user_agent).version,os:woothee.parse(user_agent).os,vendor:woothee.parse(user_agent).vendor,os_version:woothee.parse(user_agent).os_version};"
       OPTIONS(library = 'https://storage.googleapis.com/public-dfe-analytics-dataform-scripts-cross-service/woothee.js')`)
-  .postOps(ctx => `
+        .postOps(ctx => `
     ALTER TABLE ${ctx.self()}
       SET OPTIONS (partition_expiration_days = ${params.expirationDays || `NULL`});
     `)
