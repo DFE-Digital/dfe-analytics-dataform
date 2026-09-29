@@ -21,22 +21,18 @@ dfeAnalyticsDataform({
     // NEW: Enable Airbyte
     enableAirbyteSource: true,
     hasTimestamps: true,
-
     airbyteConfig: {
-        datasetName: "rtt_airbyte_production",
-        tableSuffix: "_airbyte",
-        primaryKeyField: "id"
+        datasetName: "rtt_airbyte_production",                    
+        outputSuffix: "_airbyte",               
+        defaultPrimaryKeyField: "id"
     },
-
     enabledAirbyteLegacyMerge: true,
-    airbyteLegacyMergeCutoff: '2026-07-01',
-
+    airbyteLegacyMergeCutoff: '2026-08-21',
     airbyteHeartbeat: {
         datasetName: "rtt_airbyte_production",
         freshnessHours: 12,
         tableName: 'airbyte_heartbeat'
     },
-
     airbyteReconciliation: {
         enabled: true,
         minLiveFraction: 0.8,
@@ -44,7 +40,6 @@ dfeAnalyticsDataform({
         minSnapshotAgeMinutes: 60,
         detectionWindowDays: 60
     },
-
     dataSchema: [{
             entityTableName: "academic_cycles",
             description: "",
@@ -280,7 +275,7 @@ dfeAnalyticsDataform({
                         "0": "part_time",
                         "1": "full_time",
                         "2": "full_time_or_part_time"
-                    }
+                }
             }, {
                 keyName: "summary",
                 dataType: "string",
@@ -786,12 +781,12 @@ dfeAnalyticsDataform({
                     dataType: "string",
                     description: "Additional dttp data shown were applicable",
                     hidden: true
-                }, {
+                },  {
                     keyName: "additional_ethnic_background",
                     dataType: "string",
                     description: "Additional ethnicity detail recorded in Register",
                     hidden: true
-                }, {
+                },  {
                     keyName: "apply_application_id",
                     dataType: "string",
                     description: "Foreign key to apply_applications identifier register_apply_applications .id",
@@ -878,12 +873,14 @@ dfeAnalyticsDataform({
                     keyName: "course_uuid",
                     dataType: "string",
                     description: "Foreign key to courses entity uuid, register_courses.uuid"
-                }, {
+                },
+                {
                     keyName: "date_of_birth",
                     dataType: "string",
                     description: "Date of birth of trainee",
                     hidden: true
-                }, {
+                },
+                {
                     keyName: "defer_date",
                     dataType: "date",
                     description: "Date trainee was deferred"
@@ -936,12 +933,24 @@ dfeAnalyticsDataform({
                 }, {
                     keyName: "employing_school_id",
                     dataType: "string",
-                    description: "Employing school urn",
+                    description: "Employing school UUID",
                     foreignKeyTable: "schools"
+                }, {
+                    keyName: "employing_school_name",
+                    dataType: "string",
+                    description: "Employing school name"                                   
                 }, {
                     keyName: "employing_school_not_applicable",
                     dataType: "boolean",
                     description: "Employing school not applicable, true or false"
+                }, {
+                    keyName: "employing_school_postcode",
+                    dataType: "string",
+                    description: "Employing school postcode"
+                }, {
+                    keyName: "employing_school_urn",
+                    dataType: "string",
+                    description: "Employing school urn"
                 }, {
                     keyName: "end_academic_cycle_id",
                     dataType: "string",
@@ -1137,7 +1146,6 @@ dfeAnalyticsDataform({
                         "9": "primary_mathematics_specialist",
                         "10": "additional_itt_place_for_pe_with_a_priority_subject"
                     }
-
                 }, {
                     keyName: "training_route",
                     dataType: "string",
