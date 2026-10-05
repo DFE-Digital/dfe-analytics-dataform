@@ -1,4 +1,5 @@
 module.exports = (params) => {
+  if (params.disableLegacyEntityDataFreshness) return;
   return params.dataSchema
     // Only generate assertions for tables which have dataFreshnessDays configured
     .filter(tableSchema => tableSchema.dataFreshnessDays)

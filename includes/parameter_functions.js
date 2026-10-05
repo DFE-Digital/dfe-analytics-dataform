@@ -33,7 +33,8 @@ const validTopLevelParameters = ['eventSourceName',
     'hasTimestamps',
     'airbyteReconciliation',
     'enabledAirbyteLegacyMerge',
-    'airbyteLegacyMergeCutoff'
+    'airbyteLegacyMergeCutoff',
+    'disableLegacyEntityDataFreshness'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
     'description',
@@ -272,6 +273,12 @@ function validateParams(params) {
     if (params.enabledAirbyteLegacyMerge !== undefined && typeof params.enabledAirbyteLegacyMerge !== 'boolean') {
         throw new Error(`enabledAirbyteLegacyMerge must be a boolean value (true or false), not "${params.enabledAirbyteLegacyMerge}".`);
     }
+
+    // A quoted "false" would be truthy and silently disable the legacy freshness assertions
+    if (params.disableLegacyEntityDataFreshness !== undefined && typeof params.disableLegacyEntityDataFreshness !== 'boolean') {
+        throw new Error(`disableLegacyEntityDataFreshness must be a boolean value (true or false), not "${params.disableLegacyEntityDataFreshness}".`);
+    }
+
 
     return params;
 }

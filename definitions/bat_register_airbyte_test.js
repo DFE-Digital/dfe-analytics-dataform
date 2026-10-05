@@ -23,11 +23,12 @@ dfeAnalyticsDataform({
     hasTimestamps: true,
     airbyteConfig: {
         datasetName: "rtt_airbyte_production",                    
-        outputSuffix: "_airbyte",               
+        tableSuffix: "_airbyte",               
         defaultPrimaryKeyField: "id"
     },
     enabledAirbyteLegacyMerge: true,
     airbyteLegacyMergeCutoff: '2026-08-21',
+    disableLegacyEntityDataFreshness: true,
     airbyteHeartbeat: {
         datasetName: "rtt_airbyte_production",
         freshnessHours: 12,

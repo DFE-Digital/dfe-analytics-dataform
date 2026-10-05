@@ -101,6 +101,7 @@ module.exports = (params) => {
 
         enabledAirbyteLegacyMerge: false,
         airbyteLegacyMergeCutoff: null,
+        disableLegacyEntityDataFreshness: false, // if true, skips <entity>_data_not_fresh_<source> assertions, e.g. once the dfe-analytics entity event feed has been retired in favour of Airbyte
 
         airbyteHeartbeat: {
                 freshnessHours: 12, // Number of hours to wait before triggering an assertion failure, if no new data has been received from Airbyte
