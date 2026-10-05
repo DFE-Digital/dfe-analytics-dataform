@@ -89,4 +89,18 @@ describe('entities_data_not_fresh', () => {
 
     expect(mockAssert).not.toHaveBeenCalled();
   });
+
+  it('generates no assertions when disableLegacyEntityDataFreshness is true', () => {
+    const params = {
+      eventSourceName: 'TestService',
+      disableLegacyEntityDataFreshness: true,
+      dataSchema: [
+        { entityTableName: 'schools', dataFreshnessDays: 5 }
+      ]
+    };
+
+    generateAssertions(params);
+
+    expect(mockAssert).not.toHaveBeenCalled();
+  });
 });

@@ -1,4 +1,4 @@
-const version = "2.5.6";
+const version = "2.5.8";
 
 const parameterFunctions = require("./includes/parameter_functions");
 
