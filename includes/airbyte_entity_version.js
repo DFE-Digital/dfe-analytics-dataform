@@ -109,7 +109,10 @@ module.exports = (params) => {
             ...(hasMappedKeys ? [entitySchema.entityTableName + "_airbyte_schema_fields_missing_from_source_" + params.eventSourceName] : [])
         ];
 
-        const legacyEnabled = params.enabledAirbyteLegacyMerge === true;
+        /* Per-entity opt-out (dataSchema airbyteLegacyMerge: false) for entities with no legacy history,
+        e.g. ones added after the dfe-analytics entity event feed was retired. When off, the legacy table
+        is never referenced and the Airbyte source is read from the default checkpoint rather than the cutoff. */
+        const legacyEnabled = parameterFunctions.airbyteLegacyMergeEnabledFor(params, entitySchema);
         const legacyCutoff = params.airbyteLegacyMergeCutoff;
         const legacyModel = entitySchema.entityTableName + "_version_" + params.eventSourceName;
         if (legacyEnabled && !legacyCutoff) {
