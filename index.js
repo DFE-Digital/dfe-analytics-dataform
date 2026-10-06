@@ -90,6 +90,7 @@ module.exports = (params) => {
 
         enableAirbyteSource: false, // Master switch for Airbyte processing
         hasTimestamps: true,       // global default; set to false for non-Rails services without created_at/updated_at
+        versionOrderBy: null,      // 'updated_at' or 'cdc'; null uses updated_at for entities with timestamps, cdc otherwise
 
         airbyteConfig: {
             datasetName: null, // name of the BigQuery dataset that Airbyte streams data into

@@ -33,7 +33,8 @@ const validTopLevelParameters = ['eventSourceName',
     'hasTimestamps',
     'airbyteReconciliation',
     'enabledAirbyteLegacyMerge',
-    'airbyteLegacyMergeCutoff'
+    'airbyteLegacyMergeCutoff',
+    'versionOrderBy'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
     'description',
@@ -44,7 +45,8 @@ const validDataSchemaTableParameters = ['entityTableName',
     'dataFreshnessDisableDuringRange',
     'materialisation',
     'expirationDays',
-    'hasTimestamps'
+    'hasTimestamps',
+    'versionOrderBy'
 ];
 const validCustomEventSchemaEventParameters = ['eventType',
     'description',
@@ -240,6 +242,11 @@ function validateParams(params) {
             throw new Error(`hasTimestamps must be a boolean value (true or false), not "${params.hasTimestamps}".`);
         }
 
+        // null is the index.js default and means "use the per-entity default"
+        if (params.versionOrderBy != null && !['updated_at', 'cdc'].includes(params.versionOrderBy)) {
+            throw new Error(`versionOrderBy must be 'updated_at' or 'cdc', not "${params.versionOrderBy}".`);
+        }
+
         // Validate dataSchema has required fields for Airbyte
         params.dataSchema.forEach(entity => {
             if (!entity.entityTableName) {
@@ -249,7 +256,12 @@ function validateParams(params) {
                 throw new Error(`Entity '${entity.entityTableName}' must have 'keys' defined for Airbyte processing`);
             }
             if (entity.hasTimestamps !== undefined && typeof entity.hasTimestamps !== 'boolean') {
-        throw new Error(`hasTimestamps for entity '${entity.entityTableName}' must be a boolean value (true or false), not "${entity.hasTimestamps}".`);
+                throw new Error(`hasTimestamps for entity '${entity.entityTableName}' must be a boolean value (true or false), not "${entity.hasTimestamps}".`);
+            }
+            // The 'updated_at' requires hasTimestamps check lives in airbyte_entity_version.js,
+            // because hasTimestamps isn't resolved per entity until setDefaultSchemaParameters runs
+            if (entity.versionOrderBy !== undefined && !['updated_at', 'cdc'].includes(entity.versionOrderBy)) {
+                throw new Error(`versionOrderBy for entity '${entity.entityTableName}' must be 'updated_at' or 'cdc', not "${entity.versionOrderBy}".`);
             }
         });
     }
