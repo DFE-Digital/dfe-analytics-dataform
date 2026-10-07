@@ -34,6 +34,7 @@ const validTopLevelParameters = ['eventSourceName',
     'airbyteReconciliation',
     'enabledAirbyteLegacyMerge',
     'airbyteLegacyMergeCutoff',
+    'airbyteAudit',
     'versionOrderBy'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
@@ -282,6 +283,32 @@ function validateParams(params) {
         }
         if (params.airbyteReconciliation.enabled !== undefined && typeof params.airbyteReconciliation.enabled !== 'boolean') {
             throw new Error(`airbyteReconciliation.enabled must be a boolean, not "${params.airbyteReconciliation.enabled}".`);
+        }
+    }
+
+    if (params.airbyteAudit !== undefined) {
+        if (typeof params.airbyteAudit !== 'object' || params.airbyteAudit === null) {
+            throw new Error(`airbyteAudit must be an object, not "${params.airbyteAudit}".`);
+        }
+        if (params.airbyteAudit.enabled !== undefined && typeof params.airbyteAudit.enabled !== 'boolean') {
+            throw new Error(`airbyteAudit.enabled must be a boolean, not "${params.airbyteAudit.enabled}".`);
+        }
+        if (params.airbyteAudit.enabled) {
+            if (!params.enableAirbyteSource) {
+                throw new Error(`airbyteAudit.enabled is true but enableAirbyteSource is false.`);
+            }
+            if (params.airbyteAudit.webRequestEventExpirationDays !== null &&
+                params.airbyteAudit.webRequestEventExpirationDays !== undefined &&
+                !(Number.isInteger(params.airbyteAudit.webRequestEventExpirationDays) && params.airbyteAudit.webRequestEventExpirationDays > 0)) {
+                throw new Error(`airbyteAudit.webRequestEventExpirationDays is not a positive integer.`);
+            }
+            if (params.airbyteAudit.matchToleranceSeconds !== undefined &&
+                !(Number.isInteger(params.airbyteAudit.matchToleranceSeconds) && params.airbyteAudit.matchToleranceSeconds > 0)) {
+                throw new Error(`airbyteAudit.matchToleranceSeconds must be a positive integer.`);
+            }
+            if (params.airbyteAudit.backfillFromDate && !(params.airbyteAudit.backfillFromDate instanceof Date)) {
+                throw new Error(`airbyteAudit.backfillFromDate must be a Date object.`);
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-const version = "2.5.8";
+const version = "2.5.9";
 
 const parameterFunctions = require("./includes/parameter_functions");
 
@@ -42,6 +42,8 @@ const airbyteEntityDataNotFresh = require("./includes/airbyte_entity_data_not_fr
 const airbyteReconciliation = require("./includes/airbyte_reconciliation");
 const airbyteEntityFieldUpdates = require("./includes/airbyte_entity_field_updates");
 const airbyteEnumMappingAssertions = require("./includes/airbyte_enum_mapping_assertions");
+const airbyteAudits = require("./includes/airbyte_audits");
+const auditedWebRequests = require("./includes/audited_web_requests");
 const airbyteLegacyEntityVersionDeclarations = require("./includes/airbyte_legacy_entity_version_declarations");
 
 module.exports = (params) => {
@@ -120,6 +122,14 @@ module.exports = (params) => {
                 forceReconcileSnapshotLsn: null       // one-shot guard override; set, run, remove
         },
 
+        airbyteAudit: {
+                enabled: false,                    // opt-in
+                auditsTableName: 'audit',           // name of the raw Airbyte-synced audits table (falls back to 'audits' if not set — see airbyte_audits.js)
+                matchToleranceSeconds: 5,           // max distance between version.valid_from and audit.created_at to count as a match
+                webRequestEventExpirationDays: null, // retention for audited_web_requests_{source}_airbyte
+                backfillFromDate: null              // one-shot backfill start date for pre-enable history
+        },
+
         ...params
     };
 
@@ -131,6 +141,15 @@ module.exports = (params) => {
         detectionWindowDays: 7,
         forceReconcileSnapshotLsn: null,
         ...(params.airbyteReconciliation)
+    };
+
+    params.airbyteAudit = {
+        enabled: false,
+        auditsTableName: 'audit',
+        matchToleranceSeconds: 5,
+        webRequestEventExpirationDays: null,
+        backfillFromDate: null,
+        ...(params.airbyteAudit)
     };
 
     // If disabled is true, stop right here, return no action definitions, and don't try to validate parameters
@@ -208,6 +227,8 @@ module.exports = (params) => {
             airbyteReconciliation: airbyteReconciliation(params),
             airbyteEntityFieldUpdates: airbyteEntityFieldUpdates(params),
             airbyteEnumMappingAssertions: airbyteEnumMappingAssertions(params),
+            airbyteAudits: airbyteAudits(params),
+            auditedWebRequests: auditedWebRequests(params),
             airbyteLegacyEntityVersionDeclarations: airbyteLegacyEntityVersionDeclarations(params)
         });
     }
