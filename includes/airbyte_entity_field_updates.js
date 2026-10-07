@@ -20,6 +20,8 @@
 
 const data_functions = require("./data_functions");
 const airbyteReconciliation = require("./airbyte_reconciliation");
+const airbyteAudits = require("./airbyte_audits");
+
 
 module.exports = (params) => {
     if (!params.enableAirbyteSource) return null;
@@ -69,6 +71,9 @@ module.exports = (params) => {
                 dependencies: [
                     ...(params.airbyteReconciliation.enabled
                         ? [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName]
+                        : []),
+                    ...(params.airbyteAudit && params.airbyteAudit.enabled
+                        ? [airbyteAudits.auditNames(params, tableSchema).applyOperationName]
                         : [])
                 ],
                 ...(materialisation == 'table' ? {

@@ -19,7 +19,7 @@ dfeAnalyticsDataform({
     enableMonitoring: false,
 
     // NEW: Enable Airbyte
-    enableAirbyteSource: true,
+    enableAirbyteSource: false,
     hasTimestamps: true,
 
     airbyteConfig: {
