@@ -6,7 +6,7 @@
 const parameterFunctions = require("./parameter_functions");
 
 module.exports = (params) => {
-    if (params.transformEntityEvents !== false || !params.enableAirbyteSource || params.enabledAirbyteLegacyMerge !== true) {
+    if (params.transformEntityEvents !== false || !params.enableAirbyteSource) {
         return [];
     }
 
