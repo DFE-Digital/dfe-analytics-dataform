@@ -47,7 +47,7 @@ const validDataSchemaTableParameters = ['entityTableName',
     'expirationDays',
     'hasTimestamps',
     'versionOrderBy',
-    'airbyteLegacyMerge'
+    'includeLegacyHistory'
 ];
 const validCustomEventSchemaEventParameters = ['eventType',
     'description',
@@ -136,8 +136,8 @@ function validateParams(params) {
             throw new Error(`${tableSchema.expirationDays} day data retention schedule set in expirationDays for the ${tableSchema.entityTableName} table would result in a longer data retention schedule than the top level expirationDays parameter (${params.expirationDays} days), so would do nothing. Set it to a shorter time period, or do not set it all.`)
         }
         // Read as `!== false` when deciding whether to merge legacy history, so a quoted "false" would silently keep the merge on
-        if (tableSchema.airbyteLegacyMerge !== undefined && typeof tableSchema.airbyteLegacyMerge !== 'boolean') {
-            throw new Error(`airbyteLegacyMerge for the ${tableSchema.entityTableName} table must be a boolean value (true or false), not "${tableSchema.airbyteLegacyMerge}".`);
+        if (tableSchema.includeLegacyHistory !== undefined && typeof tableSchema.includeLegacyHistory !== 'boolean') {
+            throw new Error(`includeLegacyHistory for the ${tableSchema.entityTableName} table must be a boolean value (true or false), not "${tableSchema.includeLegacyHistory}".`);
         }
         tableSchema.keys.forEach(key => {
             Object.keys(key).forEach(param => {
@@ -295,7 +295,7 @@ function validateParams(params) {
 
 // Whether pre-cutoff history from the legacy <entity>_version_<source> table should be merged into this entity's Airbyte version table
 function airbyteLegacyMergeEnabledFor(params, tableSchema) {
-    return params.enabledAirbyteLegacyMerge === true && tableSchema.airbyteLegacyMerge !== false;
+    return params.enabledAirbyteLegacyMerge === true && tableSchema.includeLegacyHistory !== false;
 }
 
 function setDefaultSchemaParameters(params) {

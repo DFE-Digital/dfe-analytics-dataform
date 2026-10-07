@@ -1,6 +1,6 @@
 /* With transformEntityEvents: false the legacy <entity>_version_<source> tables are no longer published,
    but the Airbyte legacy merge still ref()s them on full refresh. They still exist in BigQuery, frozen at
-   their last build, so declare them. Entities with airbyteLegacyMerge: false are never referenced, so skipped.
+   their last build, so declare them. Entities with includeLegacyHistory: false are never referenced, so skipped.
    Declarations aren't suffixed, so dev workspaces read the frozen production tables. */
 
 const parameterFunctions = require("./parameter_functions");
