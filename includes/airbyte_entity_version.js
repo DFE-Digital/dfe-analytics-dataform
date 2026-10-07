@@ -96,6 +96,8 @@ module.exports = (params) => {
            default only applies where the entity has timestamps, so it can't break entities without them. */
         const versionOrderBy = entitySchema.versionOrderBy ||
             (hasTimestamps ? (params.versionOrderBy || 'updated_at') : 'cdc');
+        // The 'updated_at'/'cdc' value check is mirrored in parameter_functions.js; keep them in sync.
+        // The 'updated_at' requires hasTimestamps check lives here, as hasTimestamps is only resolved per entity at this point.
         if (!['updated_at', 'cdc'].includes(versionOrderBy)) {
             throw new Error(`versionOrderBy must be 'updated_at' or 'cdc', got "${versionOrderBy}" (entity: ${entitySchema.entityTableName}).`);
         }
