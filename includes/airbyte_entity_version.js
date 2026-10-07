@@ -24,14 +24,24 @@
    runs the checkpoint is past the cutoff and legacy is never touched.
 
    hasTimestamps:
-   Resolved per entity, falling back to the source-level params.hasTimestamps. When an entity has no
-   created_at / updated_at in the source database, cdc_updated_at takes the role of updated_at as the
-   version-ordering column, and:
+   Resolved per entity, falling back to the source-level params.hasTimestamps. Controls only whether
+   the source's created_at / updated_at columns are carried through. Version ordering is controlled
+   separately by versionOrderBy (below).
+
+   versionOrderBy:
+   Which timestamp orders versions and becomes valid_from. Resolved per entity; the source-level
+   params.versionOrderBy only applies to entities with hasTimestamps, so a source-level 'updated_at'
+   can never be inherited by an entity that has no updated_at.
+   - 'updated_at' (default when hasTimestamps): the source database's updated_at.
+   - 'cdc' (default when not hasTimestamps): the CDC event timestamp. Use this with hasTimestamps
+     when the source's updated_at is not bumped on every change to the row. For example, in Publish
+     changed_at is bumped when related records change while the parent's updated_at stays the same,
+     so ordering by updated_at would give two versions the same valid_from.
+   When ordering by CDC time:
    - Post-seam (Airbyte side), cdc_updated_at is the CDC event timestamp.
    - Pre-seam (legacy side), the legacy model's own valid_from is projected into cdc_updated_at, so
-     legacy versions keep their original valid_from verbatim. The legacy created_at / updated_at
-     columns are NULL for these entities and cannot be used for ordering; valid_from is derived from
-     the event occurred_at and so is populated regardless of the source table's columns.
+     legacy versions keep their original valid_from verbatim. valid_from is derived from the event
+     occurred_at and so is populated regardless of the source table's columns.
    valid_to / is_current / version_number are always recomputed rather than copied from legacy: the
    final legacy version is open (valid_to IS NULL) and must be closed by the first post-cutoff CDC
    event, otherwise the entity would carry two open versions across the seam. Because the legacy
@@ -82,12 +92,29 @@ module.exports = (params) => {
             params.hasTimestamps === true :
             entitySchema.hasTimestamps === true;
 
+        /* Which column orders versions and becomes valid_from. Entity-level wins; the source-level
+           default only applies where the entity has timestamps, so it can't break entities without them. */
+        const versionOrderBy = entitySchema.versionOrderBy ||
+            (hasTimestamps ? (params.versionOrderBy || 'updated_at') : 'cdc');
+        // The 'updated_at'/'cdc' value check is mirrored in parameter_functions.js; keep them in sync.
+        // The 'updated_at' requires hasTimestamps check lives here, as hasTimestamps is only resolved per entity at this point.
+        if (!['updated_at', 'cdc'].includes(versionOrderBy)) {
+            throw new Error(`versionOrderBy must be 'updated_at' or 'cdc', got "${versionOrderBy}" (entity: ${entitySchema.entityTableName}).`);
+        }
+        if (versionOrderBy === 'updated_at' && !hasTimestamps) {
+            throw new Error(`versionOrderBy 'updated_at' requires hasTimestamps (entity: ${entitySchema.entityTableName}).`);
+        }
+        const orderByUpdatedAt = versionOrderBy === 'updated_at';
+
         const hasMappedKeys = (entitySchema.keys || []).some(k => k.valueMappings && !k.historic);
         const fieldAssertionDependencies = [entitySchema.entityTableName + "_airbyte_fields_not_in_schema_" + params.eventSourceName,
             ...(hasMappedKeys ? [entitySchema.entityTableName + "_airbyte_schema_fields_missing_from_source_" + params.eventSourceName] : [])
         ];
 
-        const legacyEnabled = params.enabledAirbyteLegacyMerge === true;
+        /* Per-entity opt-out (dataSchema includeLegacyHistory: false) for entities with no legacy history,
+        e.g. ones added after the dfe-analytics entity event feed was retired. When off, the legacy table
+        is never referenced and the Airbyte source is read from the default checkpoint rather than the cutoff. */
+        const legacyEnabled = parameterFunctions.airbyteLegacyMergeEnabledFor(params, entitySchema);
         const legacyCutoff = params.airbyteLegacyMergeCutoff;
         const legacyModel = entitySchema.entityTableName + "_version_" + params.eventSourceName;
         if (legacyEnabled && !legacyCutoff) {
@@ -96,7 +123,11 @@ module.exports = (params) => {
         }
 
         /* Column that carries the version-ordering timestamp (matches the Airbyte model's). */
-        const orderCol = hasTimestamps ? 'updated_at' : 'cdc_updated_at';
+        const orderCol = orderByUpdatedAt ? 'updated_at' : 'cdc_updated_at';
+
+        /* Window orderings used throughout. cdc_updated_at is a tiebreaker when ordering by updated_at. */
+        const orderAsc = orderByUpdatedAt ? 'updated_at ASC, cdc_updated_at ASC' : 'cdc_updated_at ASC';
+        const orderDesc = orderByUpdatedAt ? 'updated_at DESC, cdc_updated_at DESC' : 'cdc_updated_at DESC';
 
         /* Native entity columns == configured key names */
         const outName = k => k.alias || k.keyName;
@@ -208,11 +239,15 @@ module.exports = (params) => {
                 case 'float':
                     return `SAFE_CAST(${s} AS FLOAT64)`;
                 case 'timestamp':
-                    return `COALESCE(
-                      SAFE_CAST(${raw} AS TIMESTAMP),
-                      ${data_functions.stringToTimestamp(s)}
-                    )`;
+                    /* Airbyte lands Postgres timestamp columns as DATETIME. CAST(DATETIME AS STRING)
+                       gives 'YYYY-MM-DD HH:MM:SS.ffffff', which stringToTimestamp rejects, so every
+                       value became NULL. Cast the raw column directly; string parsing is the fallback
+                       for connectors that land these columns as STRING. */
+                    return `COALESCE(SAFE_CAST(${raw} AS TIMESTAMP), ${data_functions.stringToTimestamp(s)})`;
                 case 'date':
+                    /* Raw DATE/DATETIME/TIMESTAMP columns cast directly. The TIMESTAMP step catches strings
+                      with a time component (e.g. '2026-02-11T10:30:45Z'), which a direct cast to DATE rejects.
+                      stringToDate is the final fallback for other string formats. */
                     return `COALESCE(
                       SAFE_CAST(${raw} AS DATE),
                       DATE(SAFE_CAST(${raw} AS TIMESTAMP)),
@@ -240,14 +275,15 @@ module.exports = (params) => {
             return `${canonicalArray(elements, k.preserveArrayOrder === true)} AS \`${outName(k)}\``;
         }).join(',\n        ');
 
-        /* Legacy timestamp projection, aligned positionally with source_data.
-           With timestamps: updated_at is the ordering column, and legacy valid_from is carried into
-           updated_at so version boundaries survive the seam.
-           Without timestamps: legacy created_at / updated_at are NULL and unusable for ordering, so
-           legacy valid_from becomes cdc_updated_at — which is what the final SELECT reads back out as
-           valid_from, preserving the legacy value exactly. created_at is passed through as-is (NULL
-           today) rather than overwritten, so it self-corrects if the legacy model ever populates it. */
-        const legacyTimestampProjection = hasTimestamps
+        /* Legacy timestamp projection. merged_full_history selects by name, so order here is cosmetic.
+           Ordering by updated_at: updated_at is the ordering column, and legacy valid_from is carried
+           into updated_at so version boundaries survive the seam.
+           Ordering by CDC time: legacy valid_from becomes cdc_updated_at, which is what the final SELECT
+           reads back out as valid_from, preserving the legacy value exactly. With timestamps, the legacy
+           updated_at is passed through untouched because it is data, not the ordering column.
+           Without timestamps: legacy updated_at doesn't exist in versionCols; created_at is passed
+           through as-is (NULL today) so it self-corrects if the legacy model ever populates it. */
+        const legacyTimestampProjection = orderByUpdatedAt
             /* COALESCE for the same per-row nullable updated_at as on the Airbyte side. valid_from is
                the right substitute here (it is already what updated_at becomes on the line below);
                on the Airbyte side there is no valid_from yet, so CDC time stands in instead. */
@@ -255,28 +291,48 @@ module.exports = (params) => {
             `COALESCE(updated_at, valid_from) AS cdc_updated_at,
         created_at,
         valid_from AS updated_at,` :
+            hasTimestamps ?
+            `valid_from AS cdc_updated_at,
+        created_at,
+        updated_at,` :
             `valid_from AS cdc_updated_at,
         created_at,`;
 
-        /* Full syncs re-append unchanged rows with a fresh _ab_cdc_updated_at. Where updated_at is
-           populated, the (id, updated_at) dedup in source_data absorbs that. Where it is NULL —
-           either because the entity has no timestamps at all, or because a subset of rows predates
-           the migration that added the columns (course_subject: ~40k rows, ids 1-40675, each
-           re-appended by every full sync) — the dedup key is the very value that changes on each
-           sync, so every sync would manufacture a spurious version per entity.
+        /* Collapse consecutive identical payloads: full syncs re-append unchanged rows, and where
+           updated_at is NULL (no timestamps, or rows predating the migration that added them) the
+           source_data dedup can't catch them. Runs after the deletion split so CDC deletes aren't
+           swallowed.
 
-           Note this cannot be gated on hasTimestamps: course_subject has 1.78M rows with real
-           timestamps and 643k without, so the condition is per row, not per entity. Nor can the
-           updated_at COALESCE below be applied without this: today the NULL updated_at is what
-           collapses those 16 copies (BigQuery groups NULLs into one partition), so restoring a
-           non-null ordering value without collapsing on payload first would inflate ~40k entities
-           into ~640k versions with fabricated valid_from at each sync boundary.
-
-           Collapse on payload instead, after the deletion split (CDC deletes carry the prior state,
-           so deduplicating before the split would swallow them). A version whose every field
-           matches its predecessor is not a version, so this is safe to apply unconditionally. */
-        const payloadCols = keyList.map(k => '`' + k + '`').join(', ');
+           Timestamp keys are compared at millisecond precision, because legacy stores milliseconds
+           and Airbyte microseconds. Stored values keep full precision. */
+        const timestampKeys = new Set(
+            mergeKeys
+            .filter(k => k.dataType === 'timestamp' && !k.valueMappings && !isArrayKey(k))
+            .map(outName)
+        );
+        const payloadCols = keyList.map(k =>
+            timestampKeys.has(k) ?
+            `TIMESTAMP_TRUNC(\`${k}\`, MILLISECOND) AS \`${k}\`` :
+            '`' + k + '`'
+        ).join(', ');
         const contentDedup = keyList.length > 0;
+
+        /* Column descriptions that depend on how versions are ordered. */
+        const validFromDescription = orderByUpdatedAt ?
+            "Timestamp from which this version was valid (updated_at from the source database)." :
+            hasTimestamps ?
+            "Timestamp from which this version was valid. For versions sourced from Airbyte this is the CDC event timestamp, used instead of updated_at because updated_at is not bumped on every change to this entity in the source database. For pre-cutoff versions seeded from the legacy event-stream model, this is that model's own valid_from, carried over unchanged." :
+            "Timestamp from which this version was valid. For versions sourced from Airbyte this is the CDC event timestamp, used as a substitute because this entity does not have an updated_at column in the source database. For pre-cutoff versions seeded from the legacy event-stream model, this is that model's own valid_from, carried over unchanged.";
+
+        const cdcUpdatedAtDescription = orderByUpdatedAt ?
+            "Timestamp of the CDC change event captured by Airbyte. Derived from _ab_cdc_updated_at." :
+            hasTimestamps ?
+            "Version-ordering timestamp. For Airbyte-sourced versions, the CDC change event timestamp derived from _ab_cdc_updated_at. For pre-cutoff versions seeded from the legacy event-stream model, that model's valid_from. Used as valid_from because updated_at is not bumped on every change to this entity in the source database." :
+            "Version-ordering timestamp. For Airbyte-sourced versions, the CDC change event timestamp derived from _ab_cdc_updated_at. For pre-cutoff versions seeded from the legacy event-stream model, that model's valid_from. Used as valid_from because this entity has no updated_at column in the source database.";
+
+        const updatedAtDescription = orderByUpdatedAt ?
+            "Timestamp this entity was last updated in the source database. Also used as valid_from to derive version history." :
+            "Timestamp this entity was last updated in the source database. Not used for version ordering, because it is not bumped on every change to this entity; see valid_from.";
 
         return publish(tableName, {
                 type: "incremental",
@@ -286,20 +342,18 @@ module.exports = (params) => {
                 description: `[AIRBYTE] Version history of ${entitySchema.entityTableName} entities. ${entitySchema.description || ''}`,
                 columns: Object.assign({
                         [primaryKey]: `Primary key of the ${entitySchema.entityTableName} entity.`,
-                        valid_from: hasTimestamps ?
-                            "Timestamp from which this version was valid (updated_at from the source database)." : "Timestamp from which this version was valid. For versions sourced from Airbyte this is the CDC event timestamp, used as a substitute because this entity does not have an updated_at column in the source database. For pre-cutoff versions seeded from the legacy event-stream model, this is that model's own valid_from, carried over unchanged.",
+                        valid_from: validFromDescription,
                         valid_to: "Timestamp until which this version was valid. NULL if this is the current version.",
                         is_current: "TRUE if this is the most recent non-deleted version of the entity.",
                         is_deleted: "TRUE if this entity has been soft-deleted via a CDC deletion event, Airbyte full-refresh reconciliation, or for pre-cutoff history (closure of its final version in the legacy event-stream model).",
                         version_number: "Sequential version number for this entity, starting at 1 (oldest).",
                         ...(hasTimestamps ? {
                             created_at: "Timestamp this entity was first saved in the source database.",
-                            updated_at: "Timestamp this entity was last updated in the source database. Also used as valid_from to derive version history.",
+                            updated_at: updatedAtDescription,
                         } : {
                             created_at: "Always NULL. This entity does not have a populated created_at column in the source database.",
                         }),
-                        cdc_updated_at: hasTimestamps ?
-                            "Timestamp of the CDC change event captured by Airbyte. Derived from _ab_cdc_updated_at." : "Version-ordering timestamp. For Airbyte-sourced versions, the CDC change event timestamp derived from _ab_cdc_updated_at. For pre-cutoff versions seeded from the legacy event-stream model, that model's valid_from. Used as valid_from because this entity has no updated_at column in the source database.",
+                        cdc_updated_at: cdcUpdatedAtDescription,
                         deleted_at: "Timestamp of the CDC deletion event at which this entity was deleted in the source database. NULL if the entity has not been deleted.",
                         _airbyte_raw_id: "Unique identifier assigned by Airbyte to each raw record ingested from the source. NULL for pre-cutoff versions seeded from the legacy event-stream model.",
                         _airbyte_extracted_at: "Timestamp when Airbyte extracted this record from the source database. NULL for pre-cutoff versions seeded from the legacy event-stream model.",
@@ -361,7 +415,7 @@ module.exports = (params) => {
 WITH
   source_data AS (
   /* Read new rows from the Airbyte source, filtered to only partitions after the checkpoint.
-     QUALIFY collapses same-(entity, updated_at) duplicates within this batch (e.g. if a full
+     QUALIFY collapses same-(entity, ordering timestamp) duplicates within this batch (e.g. if a full
      sync and a CDC event for the same entity both land in the same incremental run). */
     SELECT
       CAST(${primaryKey} AS STRING) AS \`${primaryKey}\`,
@@ -369,10 +423,14 @@ WITH
       _airbyte_extracted_at,
       TIMESTAMP(LEFT(_ab_cdc_updated_at, 26)) AS cdc_updated_at,
       ${hasTimestamps
-        /* updated_at is nullable per row on some entities (rows predating the migration that added
-           the column). cdc_updated_at is inlined rather than referenced: BigQuery does not allow a
-           SELECT list item to reference a sibling alias. */
-        ? `TIMESTAMP(created_at) AS created_at, COALESCE(TIMESTAMP(updated_at), TIMESTAMP(LEFT(_ab_cdc_updated_at, 26))) AS updated_at,`
+        ? (orderByUpdatedAt
+            /* updated_at is nullable per row on some entities (rows predating the migration that added
+               the column). As the ordering column it must not be NULL, so CDC time stands in.
+               cdc_updated_at is inlined rather than referenced: BigQuery does not allow a SELECT list
+               item to reference a sibling alias. */
+            ? `TIMESTAMP(created_at) AS created_at, COALESCE(TIMESTAMP(updated_at), TIMESTAMP(LEFT(_ab_cdc_updated_at, 26))) AS updated_at,`
+            /* Not the ordering column, so keep the source value as-is, NULLs included. */
+            : `TIMESTAMP(created_at) AS created_at, TIMESTAMP(updated_at) AS updated_at,`)
         : `CAST(NULL AS TIMESTAMP) AS created_at,`
         /* updated_at omitted entirely; cdc_updated_at takes its role */
         }
@@ -386,7 +444,7 @@ WITH
       ${primaryKey} IS NOT NULL
       AND _airbyte_extracted_at > extracted_at_checkpoint
     QUALIFY ROW_NUMBER() OVER (
-      PARTITION BY CAST(${primaryKey} AS STRING), ${hasTimestamps ? `COALESCE(TIMESTAMP(updated_at), TIMESTAMP(LEFT(_ab_cdc_updated_at, 26)))` : `cdc_updated_at`}
+      PARTITION BY CAST(${primaryKey} AS STRING), ${orderByUpdatedAt ? `COALESCE(TIMESTAMP(updated_at), TIMESTAMP(LEFT(_ab_cdc_updated_at, 26)))` : `cdc_updated_at`}
       ORDER BY _airbyte_extracted_at DESC
     ) = 1
   ),
@@ -437,7 +495,7 @@ ${injectLegacy ? `
 ${ctx.incremental() ? `
   combined_with_current_versions AS (
   /* Re-read current versions from self() (partition 0 only).
-     NOT EXISTS excludes any row whose (primaryKey, updated_at) already exists in source_data.
+     NOT EXISTS excludes any row whose (primaryKey, ordering timestamp) already exists in source_data.
      This handles full syncs that arrive days later: source_data's copy of the row wins, and the stale self() copy is dropped before any window functions run. 
      Without this,the QUALIFY in source_data would not help because it only deduplicates within the new batch, it cannot see rows already sitting in self(). */
     SELECT * FROM source_data
@@ -452,8 +510,8 @@ ${ctx.incremental() ? `
         SELECT 1
         FROM source_data s
         WHERE s.${primaryKey} = ${ctx.self()}.${primaryKey}
-          AND s.${hasTimestamps ? `updated_at` : `cdc_updated_at`} 
-            = ${ctx.self()}.${hasTimestamps ? `updated_at` : `cdc_updated_at`}
+          AND s.${orderCol} 
+            = ${ctx.self()}.${orderCol}
       )
   ),
 ` : ``}
@@ -479,18 +537,18 @@ ${ctx.incremental() ? `
     ),
 
   live_records AS (${contentDedup ? `
-    /* No updated_at on this entity, so consecutive identical payloads are full-sync artefacts
-       rather than real versions. Keep the earliest occurrence of each distinct payload: that is the
-       correct valid_from. On incremental runs LAG sees the re-read current version from self(), so
-       a new row is compared against the version it would supersede; on the full-refresh build it
-       spans the seam, collapsing a final legacy version and an identical first Airbyte row into one. */
+    /* Consecutive identical payloads are full-sync artefacts rather than real versions. Keep the
+       earliest occurrence of each distinct payload: that is the correct valid_from. On incremental
+       runs LAG sees the re-read current version from self(), so a new row is compared against the
+       version it would supersede; on the full-refresh build it spans the seam, collapsing a final
+       legacy version and an identical first Airbyte row into one. */
     SELECT * EXCEPT (_payload, _prev_payload)
     FROM (
       SELECT
         *,
         LAG(_payload) OVER (
           PARTITION BY ${primaryKey}
-          ORDER BY ${hasTimestamps ? `updated_at ASC, ` : ``}cdc_updated_at ASC
+          ORDER BY ${orderAsc}
         ) AS _prev_payload
       FROM (
         SELECT
@@ -507,29 +565,29 @@ ${ctx.incremental() ? `
   )
     SELECT
       live_records.*,
-      ${hasTimestamps ? `updated_at` : `cdc_updated_at`} AS valid_from,
-      /* valid_to is either the next version's updated_at, or if no next version exists, the deletion timestamp (if deleted) */
+      ${orderCol} AS valid_from,
+      /* valid_to is either the next version's ordering timestamp, or if no next version exists, the deletion timestamp (if deleted) */
       COALESCE(
-        LEAD(${hasTimestamps ? `updated_at` : `cdc_updated_at`}) OVER (
+        LEAD(${orderCol}) OVER (
             PARTITION BY live_records.${primaryKey}
-            ORDER BY ${hasTimestamps ? `updated_at ASC, ` : ``} cdc_updated_at ASC
+            ORDER BY ${orderAsc}
         ),
         IF(deletions.deleted_at > cdc_updated_at, deletions.deleted_at, NULL)
       ) AS valid_to,
       deletions.deleted_at IS NOT NULL
-        AND deletions.deleted_at > ${hasTimestamps ? `updated_at` : `cdc_updated_at`} 
-        AND LEAD(${hasTimestamps ? `updated_at` : `cdc_updated_at`}) OVER (
+        AND deletions.deleted_at > ${orderCol} 
+        AND LEAD(${orderCol}) OVER (
           PARTITION BY live_records.${primaryKey}
-          ORDER BY ${hasTimestamps ? `updated_at ASC, ` : ``}cdc_updated_at ASC
+          ORDER BY ${orderAsc}
         ) IS NULL AS is_deleted,
       ROW_NUMBER() OVER (
         PARTITION BY live_records.${primaryKey}
-        ORDER BY ${hasTimestamps ? `updated_at DESC, ` : ``}cdc_updated_at DESC
+        ORDER BY ${orderDesc}
       ) = 1
         AND (deletions.deleted_at IS NULL OR deletions.deleted_at <= cdc_updated_at) AS is_current,
       ROW_NUMBER() OVER (
         PARTITION BY live_records.${primaryKey}
-        ORDER BY ${hasTimestamps ? `updated_at ASC, ` : ``}cdc_updated_at ASC
+        ORDER BY ${orderAsc}
       ) AS version_number
     FROM live_records
     LEFT JOIN deletions USING (${primaryKey})

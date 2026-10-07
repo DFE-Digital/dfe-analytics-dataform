@@ -1,4 +1,4 @@
-const version = "2.5.6";
+const version = "2.5.9";
 
 const parameterFunctions = require("./includes/parameter_functions");
 
@@ -44,6 +44,7 @@ const airbyteEntityFieldUpdates = require("./includes/airbyte_entity_field_updat
 const airbyteEnumMappingAssertions = require("./includes/airbyte_enum_mapping_assertions");
 const airbyteAudits = require("./includes/airbyte_audits");
 const auditedWebRequests = require("./includes/audited_web_requests");
+const airbyteLegacyEntityVersionDeclarations = require("./includes/airbyte_legacy_entity_version_declarations");
 
 module.exports = (params) => {
     // Set default values of parameters if parameters with the same name have not been passed to dfeAnalyticsDataform()
@@ -92,6 +93,7 @@ module.exports = (params) => {
 
         enableAirbyteSource: false, // Master switch for Airbyte processing
         hasTimestamps: true,       // global default; set to false for non-Rails services without created_at/updated_at
+        versionOrderBy: null,      // 'updated_at' or 'cdc'; null uses updated_at for entities with timestamps, cdc otherwise
 
         airbyteConfig: {
             datasetName: null, // name of the BigQuery dataset that Airbyte streams data into
@@ -226,7 +228,8 @@ module.exports = (params) => {
             airbyteEntityFieldUpdates: airbyteEntityFieldUpdates(params),
             airbyteEnumMappingAssertions: airbyteEnumMappingAssertions(params),
             airbyteAudits: airbyteAudits(params),
-            auditedWebRequests: auditedWebRequests(params)
+            auditedWebRequests: auditedWebRequests(params),
+            airbyteLegacyEntityVersionDeclarations: airbyteLegacyEntityVersionDeclarations(params)
         });
     }
 

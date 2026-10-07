@@ -34,7 +34,8 @@ const validTopLevelParameters = ['eventSourceName',
     'airbyteReconciliation',
     'enabledAirbyteLegacyMerge',
     'airbyteLegacyMergeCutoff',
-    'airbyteAudit'
+    'airbyteAudit',
+    'versionOrderBy'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
     'description',
@@ -45,7 +46,9 @@ const validDataSchemaTableParameters = ['entityTableName',
     'dataFreshnessDisableDuringRange',
     'materialisation',
     'expirationDays',
-    'hasTimestamps'
+    'hasTimestamps',
+    'versionOrderBy',
+    'includeLegacyHistory'
 ];
 const validCustomEventSchemaEventParameters = ['eventType',
     'description',
@@ -132,6 +135,10 @@ function validateParams(params) {
         }
         if (tableSchema.expirationDays > params.expirationDays) {
             throw new Error(`${tableSchema.expirationDays} day data retention schedule set in expirationDays for the ${tableSchema.entityTableName} table would result in a longer data retention schedule than the top level expirationDays parameter (${params.expirationDays} days), so would do nothing. Set it to a shorter time period, or do not set it all.`)
+        }
+        // Read as `!== false` when deciding whether to merge legacy history, so a quoted "false" would silently keep the merge on
+        if (tableSchema.includeLegacyHistory !== undefined && typeof tableSchema.includeLegacyHistory !== 'boolean') {
+            throw new Error(`includeLegacyHistory for the ${tableSchema.entityTableName} table must be a boolean value (true or false), not "${tableSchema.includeLegacyHistory}".`);
         }
         tableSchema.keys.forEach(key => {
             Object.keys(key).forEach(param => {
@@ -241,6 +248,11 @@ function validateParams(params) {
             throw new Error(`hasTimestamps must be a boolean value (true or false), not "${params.hasTimestamps}".`);
         }
 
+        // null is the index.js default and means "use the per-entity default"
+        if (params.versionOrderBy != null && !['updated_at', 'cdc'].includes(params.versionOrderBy)) {
+            throw new Error(`versionOrderBy must be 'updated_at' or 'cdc', not "${params.versionOrderBy}".`);
+        }
+
         // Validate dataSchema has required fields for Airbyte
         params.dataSchema.forEach(entity => {
             if (!entity.entityTableName) {
@@ -250,7 +262,12 @@ function validateParams(params) {
                 throw new Error(`Entity '${entity.entityTableName}' must have 'keys' defined for Airbyte processing`);
             }
             if (entity.hasTimestamps !== undefined && typeof entity.hasTimestamps !== 'boolean') {
-        throw new Error(`hasTimestamps for entity '${entity.entityTableName}' must be a boolean value (true or false), not "${entity.hasTimestamps}".`);
+                throw new Error(`hasTimestamps for entity '${entity.entityTableName}' must be a boolean value (true or false), not "${entity.hasTimestamps}".`);
+            }
+            // The 'updated_at' requires hasTimestamps check lives in airbyte_entity_version.js,
+            // because hasTimestamps isn't resolved per entity until setDefaultSchemaParameters runs
+            if (entity.versionOrderBy !== undefined && !['updated_at', 'cdc'].includes(entity.versionOrderBy)) {
+                throw new Error(`versionOrderBy for entity '${entity.entityTableName}' must be 'updated_at' or 'cdc', not "${entity.versionOrderBy}".`);
             }
         });
     }
@@ -301,6 +318,11 @@ function validateParams(params) {
     }
 
     return params;
+}
+
+// Whether pre-cutoff history from the legacy <entity>_version_<source> table should be merged into this entity's Airbyte version table
+function airbyteLegacyMergeEnabledFor(params, tableSchema) {
+    return params.enabledAirbyteLegacyMerge === true && tableSchema.includeLegacyHistory !== false;
 }
 
 function setDefaultSchemaParameters(params) {
@@ -407,5 +429,6 @@ module.exports = {
     dateRangesToDisableAssertionsNow,
     attributionParamFields,
     attributionParamFieldMetadata,
-    getKeyColumns
+    getKeyColumns,
+    airbyteLegacyMergeEnabledFor
 }
