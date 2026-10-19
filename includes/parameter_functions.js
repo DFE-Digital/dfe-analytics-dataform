@@ -48,7 +48,8 @@ const validDataSchemaTableParameters = ['entityTableName',
     'expirationDays',
     'hasTimestamps',
     'versionOrderBy',
-    'includeLegacyHistory'
+    'includeLegacyHistory',
+    'auditableType'
 ];
 const validCustomEventSchemaEventParameters = ['eventType',
     'description',
@@ -308,6 +309,22 @@ function validateParams(params) {
             }
             if (params.airbyteAudit.backfillFromDate && !(params.airbyteAudit.backfillFromDate instanceof Date)) {
                 throw new Error(`airbyteAudit.backfillFromDate must be a Date object.`);
+            }
+
+            const railsClassName = /^[A-Z][A-Za-z0-9]*(::[A-Z][A-Za-z0-9]*)*$/;
+            params.dataSchema.forEach(entitySchema => {
+                const t = entitySchema.auditableType;
+                if (t === undefined || t === null) return; // entity not opted in
+                if (typeof t !== 'string' || !railsClassName.test(t)) {
+                throw new Error(
+                    `auditableType for ${entitySchema.entityTableName} must be a Rails class name ` +
+                    `(e.g. "ApplicationChoice" or "Admin::User"), not "${t}".`
+                );
+                }
+            });
+
+            if (!params.dataSchema.some(e => e.auditableType)) {
+                throw new Error(`airbyteAudit.enabled is true but no dataSchema entity sets auditableType, so no audit linkage would be generated.`);
             }
         }
     }

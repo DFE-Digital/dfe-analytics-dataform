@@ -5,20 +5,30 @@
    - {entity}_audit_link_apply_{source}        (operation: UPDATE) - fills request_uuid/audit_id/web columns
      onto {entity}_version_{source}_airbyte by nearest-time match.
 
-   Design mirrors airbyte_reconciliation.js: detect/log once, then apply via an idempotent UPDATE
-   so the versioning logic in airbyte_entity_version.js is untouched.
+   Detect/log once, then apply via an idempotent UPDATE so the versioning logic in airbyte_entity_version.js is untouched.
 */
 
-/* Shared naming/reference helper, mirroring reconciliationNames() in airbyte_reconciliation.js */
+/* Shared naming/reference helper */
 function auditNames(params, entitySchema) {
   const suffix = params.airbyteConfig.tableSuffix || '_airbyte';
   return {
     primaryKey: entitySchema.primaryKey || params.airbyteConfig.defaultPrimaryKeyField || 'id',
     versionTableName: `${entitySchema.entityTableName}_version_${params.eventSourceName}${suffix}`,
-    auditsTableName: `audit`,
+    sourceAuditsTableName: params.airbyteAudit.auditsTableName,
     auditedWebRequestsTableName: `audited_web_requests_${params.eventSourceName}${suffix}`,
     applyOperationName: `${entitySchema.entityTableName}_audit_link_apply_${params.eventSourceName}`,
   };
+}
+
+/* Audit linkage is opt-in per entity: an entity participates only if the feature is enabled
+   AND it declares the Rails class name its audits are recorded under (auditable_type). */
+function isAuditLinkEnabled(params, entitySchema) {
+  return Boolean(
+    params.enableAirbyteSource &&
+    params.airbyteAudit &&
+    params.airbyteAudit.enabled &&
+    entitySchema.auditableType
+  );
 }
 
 /* Step 1: keys-only projection of the raw Airbyte-synced audits table, scoped to this entity.
@@ -86,12 +96,14 @@ WHERE
 module.exports = (params) => {
   if (!params.enableAirbyteSource || !params.airbyteAudit || !params.airbyteAudit.enabled) return null;
   
-  const auditsSourceTable = `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${params.airbyteAudit.auditsTableName || 'audits'}\``;
+  const auditsSourceTable = `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${params.airbyteAudit.sourceAuditsTableName || 'audits'}\``;
 
-  return params.dataSchema.map(entitySchema => {
-    const names = auditNames(params, entitySchema);
+  return params.dataSchema
+    .filter(entitySchema => isAuditLinkEnabled(params, entitySchema))
+    .map(entitySchema => {
+      const names = auditNames(params, entitySchema);
 
-    publish(names.auditsTableName, {
+    publish(names.sourceAuditsTableName, {
       type: "table",
       tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'audit'],
       description: `[AIRBYTE] Keys-only projection of the raw audits table for ${entitySchema.entityTableName}, used to bridge web request context onto the Airbyte version table.`,
@@ -104,19 +116,19 @@ module.exports = (params) => {
       }
     }).query(ctx => auditsQuery({
       auditsSourceTable,
-      auditableType: entitySchema.auditableType || entitySchema.entityTableName,
+      auditableType: entitySchema.auditableType,
       primaryKeyField: names.primaryKey
     }));
 
     return operate(names.applyOperationName, {
       tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'audit'],
-      dependencies: [names.auditsTableName],
+      dependencies: [names.sourceAuditsTableName],
       description: `[AIRBYTE] Links each ${entitySchema.entityTableName} version to its nearest-time audit, filling in request_uuid and audit_id on the version table.`
     }).queries(ctx => applyAuditLinkQuery({
       versionTable: ctx.ref(names.versionTableName),
       matchQuery: auditLinkMatchQuery({
         versionTable: ctx.ref(names.versionTableName),
-        auditsTable: ctx.ref(names.auditsTableName),
+        auditsTable: ctx.ref(names.sourceAuditsTableName),
         primaryKeyField: names.primaryKey,
         toleranceSeconds: params.airbyteAudit.matchToleranceSeconds || 5
       }),
@@ -125,8 +137,8 @@ module.exports = (params) => {
   });
 };
 
-// Named properties for Jest / airbyte_entity_latest.js:
 module.exports.auditNames = auditNames;
+module.exports.isAuditLinkEnabled = isAuditLinkEnabled;
 module.exports.auditsQuery = auditsQuery;
 module.exports.auditLinkMatchQuery = auditLinkMatchQuery;
 module.exports.applyAuditLinkQuery = applyAuditLinkQuery;

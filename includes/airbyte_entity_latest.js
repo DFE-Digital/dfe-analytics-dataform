@@ -22,7 +22,7 @@ module.exports = (params) => {
                 ...(params.airbyteReconciliation.enabled
                     ? [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName]
                     : []),
-                ...(params.airbyteAudit && params.airbyteAudit.enabled
+                ...(airbyteAudits.isAuditLinkEnabled(params, tableSchema)
                     ? [airbyteAudits.auditNames(params, tableSchema).applyOperationName]
                     : [])
             ],

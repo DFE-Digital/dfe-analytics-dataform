@@ -11,9 +11,13 @@ module.exports = (params) => {
   const eventsTableName = `events_${params.eventSourceName}`;
 
   return publish(tableName, {
-    type: "table",
+    type: "incremental",
+    uniqueKey: ["request_uuid"],
     bigquery: {
       partitionBy: "DATE(occurred_at)",
+      ...(params.airbyteAudit.webRequestEventExpirationDays
+      ? { partitionExpirationDays: params.airbyteAudit.webRequestEventExpirationDays }
+      : {}),
       labels: {
         eventsource: params.eventSourceName.toLowerCase(),
         sourcedataset: params.bqDatasetName.toLowerCase(),
@@ -36,23 +40,35 @@ module.exports = (params) => {
     }
   }).query(ctx => `
 SELECT
-  event.request_uuid,
-  event.occurred_at,
-  event.request_path,
-  event.request_user_id,
-  event.request_method,
-  event.request_user_agent,
-  event.request_referer,
-  event.response_status,
-  event.anonymised_user_agent_and_ip
+  request_uuid,
+  request_path,
+  request_user_id,
+  request_method,
+  request_user_agent,
+  request_referer,
+  request_query,
+  response_content_type,
+  response_status,
+  anonymised_user_agent_and_ip,
+  device_category,
+  browser_name,
+  browser_version,
+  operating_system_name,
+  operating_system_vendor,
+  operating_system_version
 FROM
-  ${ctx.ref(eventsTableName)} AS event
+  ${ctx.ref(eventsTableName)}
 WHERE
-  event.event_type = 'web_request'
+  event_type = 'web_request'
+  AND request_uuid IN (
+      ${params.dataSchema.map(e =>
+        `SELECT request_uuid FROM ${ctx.ref(auditNames(params, e).auditsTableName)}`
+      ).join("\nUNION DISTINCT\n")}
+    )
+    ${params.airbyteAudit.webRequestEventExpirationDays
+      ? `AND DATE(occurred_at) >= CURRENT_DATE - ${params.airbyteAudit.webRequestEventExpirationDays}`
+      : ``}
+    ${ctx.when(ctx.incremental(),
+      `AND DATE(occurred_at) > (SELECT DATE(MAX(occurred_at)) FROM ${ctx.self()})`)}
 `)
-    .preOps(ctx => `
-      ${params.airbyteAudit.webRequestEventExpirationDays
-        ? `DELETE FROM ${ctx.self()} WHERE DATE(occurred_at) < CURRENT_DATE - ${params.airbyteAudit.webRequestEventExpirationDays};`
-        : ``}
-    `);
 };
