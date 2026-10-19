@@ -127,7 +127,7 @@ module.exports = (params) => {
                 auditsTableName: 'audit',           // name of the raw Airbyte-synced audits table (falls back to 'audits' if not set — see airbyte_audits.js)
                 matchToleranceSeconds: 5,           // max distance between version.valid_from and audit.created_at to count as a match
                 webRequestEventExpirationDays: null, // retention for audited_web_requests_{source}_airbyte
-                backfillFromDate: false              // one-shot: link from the cutoff; set, run, remove
+                backfill: false              // one-shot: link from the cutoff; set, run, remove
         },
 
         ...params
@@ -148,7 +148,7 @@ module.exports = (params) => {
         auditsTableName: 'audit',
         matchToleranceSeconds: 5,
         webRequestEventExpirationDays: null,
-        backfillFromDate: false,
+        backfill: false,
         ...(params.airbyteAudit)
     };
 

@@ -54,7 +54,7 @@ WHERE
    Matches on (entity, id) with the audit whose created_at is closest to the version's valid_from,
    within toleranceSeconds. action is used as a tie-breaker when two audits are equidistant
    (prefers 'update' matches for update-like versions, falls back to closest absolute value). */
-function auditLinkMatchQuery({ versionTable, auditsTable, primaryKeyField, toleranceSeconds }) {
+function auditLinkMatchQuery({ versionTable, auditsTable, primaryKeyField, toleranceSeconds, lowerBound }) {
   return `SELECT
   version.${primaryKeyField} AS ${primaryKeyField},
   version.valid_from AS valid_from,
@@ -83,7 +83,7 @@ QUALIFY ROW_NUMBER() OVER (
 /* Step 3: apply. Idempotent UPDATE, following the same pattern as
    airbyte_reconciliation.js's applyReconciliationQuery: request_uuid IS NULL in the WHERE clause
    excludes rows already linked, so re-running is a no-op for already-matched rows. */
-function applyAuditLinkQuery({ versionTable, matchQuery, primaryKeyField }) {
+function applyAuditLinkQuery({ versionTable, matchQuery, primaryKeyField, lowerBound }) {
   return `UPDATE ${versionTable} AS version
 SET
   version.request_uuid = link.request_uuid,
@@ -94,7 +94,8 @@ FROM (
 WHERE
   version.${primaryKeyField} = link.${primaryKeyField}
   AND version.valid_from = link.valid_from
-  AND version.request_uuid IS NULL`;
+  AND version.request_uuid IS NULL
+  AND (version.valid_to IS NULL OR version.valid_to >= ${lowerBound})`;
 }
 
 /* Publish the functions above */
@@ -144,9 +145,10 @@ module.exports = (params) => {
           versionTable: ctx.ref(names.versionTableName),
           auditsTable: ctx.ref(names.auditsTableName),
           primaryKeyField: names.primaryKey,
-          toleranceSeconds: params.airbyteAudit.matchToleranceSeconds || 5
+          toleranceSeconds: params.airbyteAudit.matchToleranceSeconds || 5,
+          lowerBound
         }),
-        primaryKeyField: names.primaryKey
+        primaryKeyField: names.primaryKey, lowerBound
       }));
     });
 };
