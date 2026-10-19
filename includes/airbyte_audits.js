@@ -14,7 +14,7 @@ function auditNames(params, entitySchema) {
   return {
     primaryKey: entitySchema.primaryKey || params.airbyteConfig.defaultPrimaryKeyField || 'id',
     versionTableName: `${entitySchema.entityTableName}_version_${params.eventSourceName}${suffix}`,
-    sourceAuditsTableName: params.airbyteAudit.auditsTableName,
+    auditsTableName: `${entitySchema.entityTableName}_audits_${params.eventSourceName}${suffix}`,
     auditedWebRequestsTableName: `audited_web_requests_${params.eventSourceName}${suffix}`,
     applyOperationName: `${entitySchema.entityTableName}_audit_link_apply_${params.eventSourceName}`,
   };

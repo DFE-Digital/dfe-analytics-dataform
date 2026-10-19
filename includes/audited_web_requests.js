@@ -40,7 +40,11 @@ module.exports = (params) => {
       response_status: "HTTP response status of the request.",
       anonymised_user_agent_and_ip: "Anonymised hash of user agent and IP for the request."
     }
-  }).query(ctx => `
+  }).preOps(ctx => ctx.incremental() ? `
+  DECLARE web_request_checkpoint DEFAULT (
+    SELECT DATE_SUB(DATE(MAX(occurred_at)), INTERVAL 3 DAY) FROM ${ctx.self()}
+  );` : ``)
+  .query(ctx => `
 SELECT
   request_uuid,
   occurred_at,
@@ -72,7 +76,7 @@ WHERE
       ? `AND DATE(occurred_at) >= CURRENT_DATE - ${params.airbyteAudit.webRequestEventExpirationDays}`
       : ``}
     ${ctx.when(ctx.incremental(),
-      `AND DATE(occurred_at) > (SELECT TIMESTAMP_SUB(MAX(occurred_at), INTERVAL 3 DAY) FROM ${ctx.self()})`)}
+      `AND DATE(occurred_at) > web_request_checkpoint`)}
   QUALIFY ROW_NUMBER() OVER (PARTITION BY request_uuid ORDER BY occurred_at) = 1    
 `)
 };
