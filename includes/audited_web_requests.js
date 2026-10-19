@@ -17,9 +17,11 @@ module.exports = (params) => {
     uniqueKey: ["request_uuid"],
     bigquery: {
       partitionBy: "DATE(occurred_at)",
+      clusterBy: ["request_uuid"],
       ...(params.airbyteAudit.webRequestEventExpirationDays
       ? { partitionExpirationDays: params.airbyteAudit.webRequestEventExpirationDays }
       : {}),
+      updatePartitionFilter: "occurred_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 4 DAY)",
       labels: {
         eventsource: params.eventSourceName.toLowerCase(),
         sourcedataset: params.bqDatasetName.toLowerCase(),
@@ -40,7 +42,6 @@ module.exports = (params) => {
       response_status: "HTTP response status of the request.",
       anonymised_user_agent_and_ip: "Anonymised hash of user agent and IP for the request."
     },
-    updatePartitionFilter: "occurred_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 4 DAY)",
   }).preOps(ctx => ctx.incremental() ? `
   DECLARE web_request_checkpoint DEFAULT (
     SELECT DATE_SUB(DATE(MAX(occurred_at)), INTERVAL 3 DAY) FROM ${ctx.self()}

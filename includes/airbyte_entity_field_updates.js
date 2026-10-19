@@ -6,8 +6,6 @@
    Differences vs the legacy {eventSourceName}_entity_field_updates model:
    - One output relation per entity (like the flattened field updates tables), keyed on the
      entity's primary key column rather than a generic entity_id/entity_table_name pair.
-   - CDC data carries no web request context, so event_type, request_*, response_*, device/browser
-     and anonymised_user_agent_and_ip columns cannot be reproduced.
    - Only fields configured in dataSchema keys are compared. updated_at is never in that list, and
      historic keys are excluded (they no longer exist as columns in the Airbyte source), so the
      legacy behaviour of ignoring updated_at churn is preserved automatically.
@@ -117,7 +115,23 @@ module.exports = (params) => {
                     },
                     previous_occurred_at: "Timestamp this entity was previously updated (valid_from of the previous version).",
                     seconds_since_previous_update: "The number of seconds between occurred_at and previous_occurred_at.",
-                    ...(auditLinked ? { request_uuid: "UUID of the web request that caused this update. Join to audited_web_requests_{source}_airbyte for request details." 
+                    ...(auditLinked ? { 
+                        request_uuid: "UUID of the web request that caused this update, linked via the audits table. NULL if no matching audit was found (e.g. the change was made by a background job rather than a web request).",
+                        request_user_id: "If a user was logged in when they sent a web request event that caused this update, then this is the UID of this user.",
+                        request_method: "Whether the web request that caused this update was a GET or a POST request.",
+                        request_path: "The path, starting with a / and excluding any query parameters, of the web request that caused this update.",
+                        request_user_agent: "The user agent of the web request that caused this update. Allows a user's browser and operating system to be identified.",
+                        request_referer: "The URL of any page the user was viewing when they initiated the web request that caused this update. This is the full URL, including protocol (https://) and any query parameters, if the browser shared these with our application as part of the web request. It is very common for this referer to be truncated for referrals from external sites.",
+                        request_query: "ARRAY of STRUCTs, each with a key and a value. Contains any query parameters that were sent to the application as part of the web request that caused this update.",
+                        response_content_type: "Content type of any data that was returned to the browser following the web request that caused this update. For example, 'text/html; charset=utf-8'. Image views, for example, may have a non-text/html content type.",
+                        response_status: "HTTP response code returned by the application in response to the web request that caused this update. See https://developer.mozilla.org/en-US/docs/Web/HTTP/Status.",
+                        anonymised_user_agent_and_ip: "One way hash of a combination of the IP address and user agent of the user who made the web request that caused this update. Can be used to identify the user anonymously, even when user_id is not set. Cannot be used to identify the user over a time period of longer than about a month, because of IP address changes and browser updates.",
+                        device_category: "The category of device used to cause this update - desktop, mobile, bot or unknown.",
+                        browser_name: "The name of the browser that caused this update.",
+                        browser_version: "The version of the browser that caused this update.",
+                        operating_system_name: "The name of the operating system that caused this update.",
+                        operating_system_vendor: "The vendor of the operating system that caused this update.",
+                        operating_system_version: "The version of the operating system that caused this update." 
                     } : {}),
                     ...(hasTimestamps ? {
                         seconds_since_created: "The number of seconds between occurred_at and created_at."
@@ -151,8 +165,9 @@ versions_with_field_arrays AS (
     PARTITION BY ${primaryKey}
     ORDER BY version_number ASC
   )
-)
-SELECT
+),
+field_updates AS (
+  SELECT
   versions_with_field_arrays.${primaryKey},
   occurred_at,
   FARM_FINGERPRINT(${primaryKey} || CAST(occurred_at AS STRING)) AS update_id,
@@ -169,6 +184,29 @@ FROM
   JOIN UNNEST(previous_data) AS previous_data_combined ON new_data_combined.key = previous_data_combined.key
 WHERE
   IFNULL(new_data_combined.value, "null") != IFNULL(previous_data_combined.value, "null")
+)
+${auditLinked ? `
+SELECT
+  field_updates.*,
+  web.request_user_id,
+  web.request_method,
+  web.request_path,
+  web.request_user_agent,
+  web.request_referer,
+  web.request_query,
+  web.response_content_type,
+  web.response_status,
+  web.anonymised_user_agent_and_ip,
+  web.device_category,
+  web.browser_name,
+  web.browser_version,
+  web.operating_system_name,
+  web.operating_system_vendor,
+  web.operating_system_version
+FROM field_updates
+LEFT JOIN ${ctx.ref(airbyteAudits.auditNames(params, tableSchema).auditedWebRequestsTableName)} AS web
+  USING (request_uuid)` 
+  : `SELECT * FROM field_updates`}
 `)
             .postOps(ctx => materialisation == 'table'
                 /* Key constraints can only be set on tables - ALTER TABLE ... ADD PRIMARY KEY /
