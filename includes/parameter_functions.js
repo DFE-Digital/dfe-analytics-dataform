@@ -307,8 +307,8 @@ function validateParams(params) {
                 !(Number.isInteger(params.airbyteAudit.matchToleranceSeconds) && params.airbyteAudit.matchToleranceSeconds > 0)) {
                 throw new Error(`airbyteAudit.matchToleranceSeconds must be a positive integer.`);
             }
-            if (params.airbyteAudit.backfillFromDate && !(params.airbyteAudit.backfillFromDate instanceof Date)) {
-                throw new Error(`airbyteAudit.backfillFromDate must be a Date object.`);
+            if (params.airbyteAudit.backfill !== undefined && typeof params.airbyteAudit.backfill !== 'boolean') {
+                throw new Error(`airbyteAudit.backfill must be a boolean, not "${params.airbyteAudit.backfill}".`);
             }
 
             const railsClassName = /^[A-Z][A-Za-z0-9]*(::[A-Z][A-Za-z0-9]*)*$/;

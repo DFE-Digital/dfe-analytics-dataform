@@ -8,6 +8,8 @@
    Detect/log once, then apply via an idempotent UPDATE so the versioning logic in airbyte_entity_version.js is untouched.
 */
 
+const parameterFunctions = require("./parameter_functions");
+
 /* Shared naming/reference helper */
 function auditNames(params, entitySchema) {
   const suffix = params.airbyteConfig.tableSuffix || '_airbyte';
@@ -67,7 +69,9 @@ ON
   AND ABS(TIMESTAMP_DIFF(version.valid_from, audit.audit_created_at, SECOND)) <= ${toleranceSeconds}
 WHERE
   version.request_uuid IS NULL
-  AND version.valid_from >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
+  AND version.valid_from >= ${lowerBound}
+  AND (version.valid_to IS NULL OR version.valid_to >= ${lowerBound})
+  AND audit.audit_created_at >= TIMESTAMP_SUB(${lowerBound}, INTERVAL ${toleranceSeconds} SECOND)
 QUALIFY ROW_NUMBER() OVER (
   PARTITION BY version.${primaryKeyField}, version.valid_from
   ORDER BY
@@ -104,38 +108,47 @@ module.exports = (params) => {
     .map(entitySchema => {
       const names = auditNames(params, entitySchema);
 
-    publish(names.auditsTableName, {
-      type: "table",
-      tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'audit'],
-      description: `[AIRBYTE] Keys-only projection of the raw audits table for ${entitySchema.entityTableName}, used to bridge web request context onto the Airbyte version table.`,
-      columns: {
-        [names.primaryKey]: `Primary key of the audited ${entitySchema.entityTableName} entity.`,
-        action: "The audited gem action recorded for this audit (e.g. create, update, destroy).",
-        request_uuid: "request_uuid of the web request that produced this audit, used to join to events.",
-        audit_created_at: "Timestamp the audit record was created in the source database.",
-        audit_id: "Primary key of the audit record itself."
-      }
-    }).query(ctx => auditsQuery({
-      auditsSourceTable,
-      auditableType: entitySchema.auditableType,
-      primaryKeyField: names.primaryKey
-    }));
+      const legacyEnabled = parameterFunctions.airbyteLegacyMergeEnabledFor(params, entitySchema);
+      const floor = `TIMESTAMP("${legacyEnabled && params.airbyteLegacyMergeCutoff ? params.airbyteLegacyMergeCutoff : '2026-01-01'}")`;
+      const lowerBound = params.airbyteAudit.backfill
+        ? floor
+        : `GREATEST(${floor}, TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY))`;
+      publish(names.auditsTableName, {
+        type: "table",
+        bigquery: {
+          partitionBy: "DATE(audit_created_at)",
+          clusterBy: [names.primaryKey]
+        },
+        tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'audit'],
+        description: `[AIRBYTE] Keys-only projection of the raw audits table for ${entitySchema.entityTableName}, used to bridge web request context onto the Airbyte version table.`,
+        columns: {
+          [names.primaryKey]: `Primary key of the audited ${entitySchema.entityTableName} entity.`,
+          action: "The audited gem action recorded for this audit (e.g. create, update, destroy).",
+          request_uuid: "request_uuid of the web request that produced this audit, used to join to events.",
+          audit_created_at: "Timestamp the audit record was created in the source database.",
+          audit_id: "Primary key of the audit record itself."
+        }
+      }).query(ctx => auditsQuery({
+        auditsSourceTable,
+        auditableType: entitySchema.auditableType,
+        primaryKeyField: names.primaryKey
+      }));
 
-    return operate(names.applyOperationName, {
-      tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'audit'],
-      dependencyTargets: [{ name: names.auditsTableName }, { name: names.versionTableName }],
-      description: `[AIRBYTE] Links each ${entitySchema.entityTableName} version to its nearest-time audit, filling in request_uuid and audit_id on the version table.`
-    }).queries(ctx => applyAuditLinkQuery({
-      versionTable: ctx.ref(names.versionTableName),
-      matchQuery: auditLinkMatchQuery({
+      return operate(names.applyOperationName, {
+        tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'audit'],
+        dependencyTargets: [{ name: names.auditsTableName }, { name: names.versionTableName }],
+        description: `[AIRBYTE] Links each ${entitySchema.entityTableName} version to its nearest-time audit, filling in request_uuid and audit_id on the version table.`
+      }).queries(ctx => applyAuditLinkQuery({
         versionTable: ctx.ref(names.versionTableName),
-        auditsTable: ctx.ref(names.auditsTableName),
-        primaryKeyField: names.primaryKey,
-        toleranceSeconds: params.airbyteAudit.matchToleranceSeconds || 5
-      }),
-      primaryKeyField: names.primaryKey
-    }));
-  });
+        matchQuery: auditLinkMatchQuery({
+          versionTable: ctx.ref(names.versionTableName),
+          auditsTable: ctx.ref(names.auditsTableName),
+          primaryKeyField: names.primaryKey,
+          toleranceSeconds: params.airbyteAudit.matchToleranceSeconds || 5
+        }),
+        primaryKeyField: names.primaryKey
+      }));
+    });
 };
 
 module.exports.auditNames = auditNames;
