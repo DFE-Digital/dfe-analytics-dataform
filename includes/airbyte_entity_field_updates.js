@@ -33,6 +33,7 @@ module.exports = (params) => {
         const versionTableName = `${tableSchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
         const primaryKey = tableSchema.primaryKey || params.airbyteConfig.defaultPrimaryKeyField || 'id';
         const hasTimestamps = tableSchema.hasTimestamps;
+        const auditLinked = airbyteAudits.isAuditLinkEnabled(params, tableSchema);
         const materialisation = tableSchema.materialisation || 'table';
 
         /* The version table publishes each key under its alias when one is configured, falling
@@ -116,6 +117,8 @@ module.exports = (params) => {
                     },
                     previous_occurred_at: "Timestamp this entity was previously updated (valid_from of the previous version).",
                     seconds_since_previous_update: "The number of seconds between occurred_at and previous_occurred_at.",
+                    ...(auditLinked ? { request_uuid: "UUID of the web request that caused this update. Join to audited_web_requests_{source}_airbyte for request details." 
+                    } : {}),
                     ...(hasTimestamps ? {
                         seconds_since_created: "The number of seconds between occurred_at and created_at."
                     } : {})
@@ -125,6 +128,7 @@ module.exports = (params) => {
 WITH versions_with_new_data AS (
   SELECT
     ${primaryKey},
+    ${auditLinked ? `request_uuid,` : ``}
     version_number,
     valid_from AS occurred_at,
     ${hasTimestamps ? `created_at,` : ``}
@@ -135,6 +139,7 @@ WITH versions_with_new_data AS (
 versions_with_field_arrays AS (
   SELECT
     ${primaryKey},
+    ${auditLinked ? `request_uuid,` : ``}
     occurred_at,
     ${hasTimestamps ? `created_at,` : ``}
     new_data,
@@ -151,6 +156,7 @@ SELECT
   versions_with_field_arrays.${primaryKey},
   occurred_at,
   FARM_FINGERPRINT(${primaryKey} || CAST(occurred_at AS STRING)) AS update_id,
+  ${auditLinked ? `request_uuid,` : ``}
   new_data_combined.key AS key_updated,
   new_data_combined.value AS new_value,
   previous_data_combined.value AS previous_value,

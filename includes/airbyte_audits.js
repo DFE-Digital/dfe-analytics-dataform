@@ -67,6 +67,7 @@ ON
   AND ABS(TIMESTAMP_DIFF(version.valid_from, audit.audit_created_at, SECOND)) <= ${toleranceSeconds}
 WHERE
   version.request_uuid IS NULL
+  AND version.valid_from >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
 QUALIFY ROW_NUMBER() OVER (
   PARTITION BY version.${primaryKeyField}, version.valid_from
   ORDER BY
@@ -96,14 +97,14 @@ WHERE
 module.exports = (params) => {
   if (!params.enableAirbyteSource || !params.airbyteAudit || !params.airbyteAudit.enabled) return null;
   
-  const auditsSourceTable = `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${params.airbyteAudit.sourceAuditsTableName || 'audits'}\``;
+  const auditsSourceTable = `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${params.airbyteAudit.auditsTableName || 'audits'}\``;
 
   return params.dataSchema
     .filter(entitySchema => isAuditLinkEnabled(params, entitySchema))
     .map(entitySchema => {
       const names = auditNames(params, entitySchema);
 
-    publish(names.sourceAuditsTableName, {
+    publish(names.auditsTableName, {
       type: "table",
       tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'audit'],
       description: `[AIRBYTE] Keys-only projection of the raw audits table for ${entitySchema.entityTableName}, used to bridge web request context onto the Airbyte version table.`,
@@ -122,13 +123,13 @@ module.exports = (params) => {
 
     return operate(names.applyOperationName, {
       tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'audit'],
-      dependencies: [names.sourceAuditsTableName],
+      dependencies: [names.auditsTableName, names.versionTableName],
       description: `[AIRBYTE] Links each ${entitySchema.entityTableName} version to its nearest-time audit, filling in request_uuid and audit_id on the version table.`
     }).queries(ctx => applyAuditLinkQuery({
       versionTable: ctx.ref(names.versionTableName),
       matchQuery: auditLinkMatchQuery({
         versionTable: ctx.ref(names.versionTableName),
-        auditsTable: ctx.ref(names.sourceAuditsTableName),
+        auditsTable: ctx.ref(names.auditsTableName),
         primaryKeyField: names.primaryKey,
         toleranceSeconds: params.airbyteAudit.matchToleranceSeconds || 5
       }),

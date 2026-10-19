@@ -459,7 +459,7 @@ ${injectLegacy ? `
         CAST(NULL AS TIMESTAMP) AS deleted_at,
         CAST(NULL AS STRING)     AS _airbyte_raw_id
         ${params.airbyteAudit && params.airbyteAudit.enabled ? `,
-      CAST(NULL AS STRING) AS request_uuid,
+      request_uuid,
       CAST(NULL AS STRING) AS audit_id` : ``}
     FROM ${ctx.ref(legacyModel)}
     WHERE valid_from <= TIMESTAMP("${legacyCutoff}")

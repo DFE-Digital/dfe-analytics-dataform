@@ -3,6 +3,8 @@
    expire per params.airbyteAudit.webRequestEventExpirationDays), kept separate from the version
    tables so identifying data has its own retention boundary. */
 
+const {auditNames, isAuditLinkEnabled} = require("./airbyte_audits");
+
 module.exports = (params) => {
   if (!params.enableAirbyteSource || !params.airbyteAudit || !params.airbyteAudit.enabled) return null;
 
@@ -41,6 +43,7 @@ module.exports = (params) => {
   }).query(ctx => `
 SELECT
   request_uuid,
+  occurred_at,
   request_path,
   request_user_id,
   request_method,
@@ -61,7 +64,7 @@ FROM
 WHERE
   event_type = 'web_request'
   AND request_uuid IN (
-      ${params.dataSchema.map(e =>
+      ${params.dataSchema.filter(e => isAuditLinkEnabled(params, e)).map(e =>
         `SELECT request_uuid FROM ${ctx.ref(auditNames(params, e).auditsTableName)}`
       ).join("\nUNION DISTINCT\n")}
     )
@@ -69,6 +72,7 @@ WHERE
       ? `AND DATE(occurred_at) >= CURRENT_DATE - ${params.airbyteAudit.webRequestEventExpirationDays}`
       : ``}
     ${ctx.when(ctx.incremental(),
-      `AND DATE(occurred_at) > (SELECT DATE(MAX(occurred_at)) FROM ${ctx.self()})`)}
+      `AND DATE(occurred_at) > (SELECT TIMESTAMP_SUB(MAX(occurred_at), INTERVAL 3 DAY) FROM ${ctx.self()})`)}
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY request_uuid ORDER BY occurred_at) = 1    
 `)
 };
