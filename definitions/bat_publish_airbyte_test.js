@@ -8,7 +8,7 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
-    disabled: true,
+    disabled: false,
     eventSourceName: "publish",
     bqDatasetName: "publish_api_events_production",
     bqEventsTableName: "events",
@@ -51,6 +51,13 @@ dfeAnalyticsDataform({
         detectionWindowDays: 60
     },
 
+    airbyteAudit: {
+        enabled: true,
+        auditsTableName: 'audit',
+        matchToleranceSeconds: 5,
+        webRequestEventExpirationDays: 365
+    },
+
     dataSchema: [{
             entityTableName: "contact",
             description: "",
@@ -73,6 +80,7 @@ dfeAnalyticsDataform({
         {
             entityTableName: "course",
             description: "",
+            auditableType: "Course",
             keys: [{
                 keyName: "a_level_subject_requirements",
                 dataType: "string",
@@ -422,6 +430,7 @@ dfeAnalyticsDataform({
         },
         {
             entityTableName: "provider",
+            auditableType: "Provider",
             description: "",
             keys: [{
                 keyName: "accredited",
@@ -590,6 +599,7 @@ dfeAnalyticsDataform({
         {
             entityTableName: "site",
             description: "",
+            auditableType: "Site",
             keys: [{
                 keyName: "added_via",
                 dataType: "string",

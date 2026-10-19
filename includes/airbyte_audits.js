@@ -123,7 +123,7 @@ module.exports = (params) => {
 
     return operate(names.applyOperationName, {
       tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'audit'],
-      dependencies: [names.auditsTableName, names.versionTableName],
+      dependencyTargets: [{ name: names.auditsTableName }, { name: names.versionTableName }],
       description: `[AIRBYTE] Links each ${entitySchema.entityTableName} version to its nearest-time audit, filling in request_uuid and audit_id on the version table.`
     }).queries(ctx => applyAuditLinkQuery({
       versionTable: ctx.ref(names.versionTableName),
