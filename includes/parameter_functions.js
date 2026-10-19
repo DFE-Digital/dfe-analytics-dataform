@@ -34,6 +34,7 @@ const validTopLevelParameters = ['eventSourceName',
     'airbyteReconciliation',
     'enabledAirbyteLegacyMerge',
     'airbyteLegacyMergeCutoff',
+    'airbyteAudit',
     'versionOrderBy'
 ];
 const validDataSchemaTableParameters = ['entityTableName',
@@ -47,7 +48,8 @@ const validDataSchemaTableParameters = ['entityTableName',
     'expirationDays',
     'hasTimestamps',
     'versionOrderBy',
-    'includeLegacyHistory'
+    'includeLegacyHistory',
+    'auditableType'
 ];
 const validCustomEventSchemaEventParameters = ['eventType',
     'description',
@@ -282,6 +284,48 @@ function validateParams(params) {
         }
         if (params.airbyteReconciliation.enabled !== undefined && typeof params.airbyteReconciliation.enabled !== 'boolean') {
             throw new Error(`airbyteReconciliation.enabled must be a boolean, not "${params.airbyteReconciliation.enabled}".`);
+        }
+    }
+
+    if (params.airbyteAudit !== undefined) {
+        if (typeof params.airbyteAudit !== 'object' || params.airbyteAudit === null) {
+            throw new Error(`airbyteAudit must be an object, not "${params.airbyteAudit}".`);
+        }
+        if (params.airbyteAudit.enabled !== undefined && typeof params.airbyteAudit.enabled !== 'boolean') {
+            throw new Error(`airbyteAudit.enabled must be a boolean, not "${params.airbyteAudit.enabled}".`);
+        }
+        if (params.airbyteAudit.enabled) {
+            if (!params.enableAirbyteSource) {
+                throw new Error(`airbyteAudit.enabled is true but enableAirbyteSource is false.`);
+            }
+            if (params.airbyteAudit.webRequestEventExpirationDays !== null &&
+                params.airbyteAudit.webRequestEventExpirationDays !== undefined &&
+                !(Number.isInteger(params.airbyteAudit.webRequestEventExpirationDays) && params.airbyteAudit.webRequestEventExpirationDays > 0)) {
+                throw new Error(`airbyteAudit.webRequestEventExpirationDays is not a positive integer.`);
+            }
+            if (params.airbyteAudit.matchToleranceSeconds !== undefined &&
+                !(Number.isInteger(params.airbyteAudit.matchToleranceSeconds) && params.airbyteAudit.matchToleranceSeconds > 0)) {
+                throw new Error(`airbyteAudit.matchToleranceSeconds must be a positive integer.`);
+            }
+            if (params.airbyteAudit.backfill !== undefined && typeof params.airbyteAudit.backfill !== 'boolean') {
+                throw new Error(`airbyteAudit.backfill must be a boolean, not "${params.airbyteAudit.backfill}".`);
+            }
+
+            const railsClassName = /^[A-Z][A-Za-z0-9]*(::[A-Z][A-Za-z0-9]*)*$/;
+            params.dataSchema.forEach(entitySchema => {
+                const t = entitySchema.auditableType;
+                if (t === undefined || t === null) return; // entity not opted in
+                if (typeof t !== 'string' || !railsClassName.test(t)) {
+                throw new Error(
+                    `auditableType for ${entitySchema.entityTableName} must be a Rails class name ` +
+                    `(e.g. "ApplicationChoice" or "Admin::User"), not "${t}".`
+                );
+                }
+            });
+
+            if (!params.dataSchema.some(e => e.auditableType)) {
+                throw new Error(`airbyteAudit.enabled is true but no dataSchema entity sets auditableType, so no audit linkage would be generated.`);
+            }
         }
     }
 

@@ -63,6 +63,7 @@
 
 const data_functions = require("./data_functions");
 const parameterFunctions = require("./parameter_functions");
+const airbyteAudits = require("./airbyte_audits");
 
 /* dataSchema dataType -> BigQuery type, for scalar columns and array elements alike. */
 const BQ_TYPES = {
@@ -84,6 +85,7 @@ module.exports = (params) => {
         const tableName = `${entitySchema.entityTableName}_version_${params.eventSourceName}${suffix}`;
         const sourceTable = `\`${params.bqProjectName}.${params.airbyteConfig.datasetName}.${entitySchema.entityTableName}\``;
         const primaryKey = entitySchema.primaryKey || params.airbyteConfig.defaultPrimaryKeyField || 'id';
+        const auditLinked = airbyteAudits.isAuditLinkEnabled(params, entitySchema);
 
         /* Entity-level override wins; otherwise inherit the source-level default. Explicitly
            undefined-checked so that a per-entity `hasTimestamps: false` is distinguishable from
@@ -148,7 +150,8 @@ module.exports = (params) => {
             'created_at',
             ...(hasTimestamps ? ['updated_at'] : []),
             'deleted_at',
-            '_airbyte_raw_id'
+            '_airbyte_raw_id',
+            ...(auditLinked ? ['request_uuid', 'audit_id'] : [])
         ];
         const versionColsSql = versionCols.map(c => '`' + c + '`').join(', ');
 
@@ -356,6 +359,10 @@ module.exports = (params) => {
                         deleted_at: "Timestamp of the CDC deletion event at which this entity was deleted in the source database. NULL if the entity has not been deleted.",
                         _airbyte_raw_id: "Unique identifier assigned by Airbyte to each raw record ingested from the source. NULL for pre-cutoff versions seeded from the legacy event-stream model.",
                         _airbyte_extracted_at: "Timestamp when Airbyte extracted this record from the source database. NULL for pre-cutoff versions seeded from the legacy event-stream model.",
+                        ...(auditLinked ? {
+                            request_uuid: "request_uuid of the web request linked to this version via the audits table. NULL until the audit-link apply operation runs, or if no matching audit was found.",
+                            audit_id: "Primary key of the audits record linked to this version. NULL until linked."
+                        } : {}),    
                     },
                     ...(entitySchema.keys ? parameterFunctions.getKeyColumns(entitySchema.keys) : [])
                 ),
@@ -431,6 +438,9 @@ WITH
         }
       TIMESTAMP(_ab_cdc_deleted_at) AS deleted_at,
       CAST(_airbyte_raw_id AS STRING) AS _airbyte_raw_id
+      ${auditLinked ? `,
+      CAST(NULL AS STRING) AS request_uuid,
+      CAST(NULL AS STRING) AS audit_id` : ``}
     FROM ${sourceTable}
     WHERE
       ${primaryKey} IS NOT NULL
@@ -450,6 +460,9 @@ ${injectLegacy ? `
         ${legacyTimestampProjection}
         CAST(NULL AS TIMESTAMP) AS deleted_at,
         CAST(NULL AS STRING)     AS _airbyte_raw_id
+        ${auditLinked ? `,
+      request_uuid,
+      CAST(NULL AS STRING) AS audit_id` : ``}
     FROM ${ctx.ref(legacyModel)}
     WHERE valid_from <= TIMESTAMP("${legacyCutoff}")
     ),
