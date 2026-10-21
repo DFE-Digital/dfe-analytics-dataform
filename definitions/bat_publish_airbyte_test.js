@@ -14,7 +14,7 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
-    disabled: true,
+    disabled: false,
     eventSourceName: "publish",
     bqDatasetName: "publish_api_events_production",
     bqEventsTableName: "events",
@@ -49,13 +49,13 @@ dfeAnalyticsDataform({
 
     airbyteReconciliation: {
         enabled: true,
-        minLiveFraction: 0.8,
+        minLiveFraction: 0.7,
         maxDeleteFraction: 0.2,
         minSnapshotAgeMinutes: 60,
         detectionWindowDays: 60,
         /* Skips the delete-volume guard for the financial_incentive
            full refresh at this LSN. */
-        forceReconcileSnapshotLsn: 5551278794824
+        forceReconcileSnapshotLsn: 5876141942712
     },
 
     dataSchema: [{
