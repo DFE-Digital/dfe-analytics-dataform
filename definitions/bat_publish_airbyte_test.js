@@ -14,7 +14,7 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
-    disabled: false,
+    disabled: true,
     eventSourceName: "publish",
     bqDatasetName: "publish_api_events_production",
     bqEventsTableName: "events",
