@@ -23,6 +23,24 @@
    version_number recompute across the cutoff seam. Applied on full-refresh only; on incremental
    runs the checkpoint is past the cutoff and legacy is never touched.
 
+   Seam echoes (ordering by updated_at only):
+   The legacy model and Airbyte can both describe the same database write with different
+   timestamps: Airbyte carries the database's updated_at, while the legacy valid_from is the
+   event's occurred_at, a few milliseconds later. The two rows then survive the
+   merged_full_history dedup (different timestamps) and, where the legacy projection differs
+   (e.g. columns added after the event was emitted are NULL on the legacy side), the content
+   dedup too. The legacy echo sorts last and becomes the current version, closing the Airbyte
+   row. An Airbyte full refresh later re-sends that unchanged row with the same updated_at; the
+   incremental MERGE only matches open versions (updatePartitionFilter), so it re-inserts the
+   closed Airbyte row as a duplicate (id, valid_from).
+   To prevent this, legacy versions with a valid_from later than the updated_at of the entity's
+   earliest post-cutoff Airbyte row are dropped. That updated_at is the last time the database
+   row changed before Airbyte first read it, so no real change can sit after it: any later
+   legacy version is an echo of a write Airbyte already has. Earlier legacy history is kept, and
+   entities with no post-cutoff Airbyte row keep their legacy versions unchanged.
+   Not applied when ordering by CDC time: re-sent rows get a new cdc_updated_at there, so they
+   cannot collide with an existing version.
+
    hasTimestamps:
    Resolved per entity, falling back to the source-level params.hasTimestamps. Controls only whether
    the source's created_at / updated_at columns are carried through. Version ordering is controlled
@@ -121,6 +139,10 @@ module.exports = (params) => {
             throw new Error(`enabledAirbyteLegacyMerge is true but airbyteLegacyMergeCutoff was not provided (entity: ${entitySchema.entityTableName}).`);
 
         }
+
+        /* Drop legacy versions that echo a database write Airbyte already has (see "Seam echoes" in
+           the header). Only needed when ordering by updated_at. */
+        const dropSeamEchoes = orderByUpdatedAt;
 
         /* Column that carries the version-ordering timestamp (matches the Airbyte model's). */
         const orderCol = orderByUpdatedAt ? 'updated_at' : 'cdc_updated_at';
@@ -361,7 +383,9 @@ module.exports = (params) => {
                 ),
                 bigquery: {
                     partitionBy: "DATE(valid_to)",
-                    /* updatePartitionFilter ensures the MERGE only scans/rewrites current versions */
+                    /* updatePartitionFilter ensures the MERGE only scans/rewrites current versions.
+                       This relies on every incoming row being either new or the current version; see
+                       "Seam echoes" in the header for the case that broke that assumption. */
                     updatePartitionFilter: "valid_to IS NULL",
                     clusterBy: [primaryKey, "is_current"],
                     labels: {
@@ -441,7 +465,20 @@ WITH
     ) = 1
   ),
 
-${injectLegacy ? `
+${injectLegacy ? `${dropSeamEchoes ? `
+    airbyte_first_seen AS (
+    /* Per entity, the updated_at of its earliest post-cutoff Airbyte row: the last time the database
+       row changed before Airbyte first read it. Legacy versions after this are echoes of a write
+       Airbyte already has (see "Seam echoes" in the header). Deletion rows are excluded, as they may
+       not carry the row's updated_at. */
+        SELECT
+            \`${primaryKey}\`,
+            MIN(updated_at) AS first_updated_at
+        FROM source_data
+        WHERE deleted_at IS NULL
+        GROUP BY 1
+    ),
+` : ``}
     legacy_data AS (
     SELECT
         \`${primaryKey}\`,
@@ -450,8 +487,13 @@ ${injectLegacy ? `
         ${legacyTimestampProjection}
         CAST(NULL AS TIMESTAMP) AS deleted_at,
         CAST(NULL AS STRING)     AS _airbyte_raw_id
-    FROM ${ctx.ref(legacyModel)}
-    WHERE valid_from <= TIMESTAMP("${legacyCutoff}")
+    FROM ${ctx.ref(legacyModel)}${dropSeamEchoes ? `
+    LEFT JOIN airbyte_first_seen USING (\`${primaryKey}\`)` : ``}
+    WHERE valid_from <= TIMESTAMP("${legacyCutoff}")${dropSeamEchoes ? `
+      AND (
+        airbyte_first_seen.first_updated_at IS NULL
+        OR valid_from <= airbyte_first_seen.first_updated_at
+      )` : ``}
     ),
 
     legacy_deletions AS (
