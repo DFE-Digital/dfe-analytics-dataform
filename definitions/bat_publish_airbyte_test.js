@@ -3,6 +3,12 @@
 
    Covers Publish teacher training courses / Find postgraduate teacher training
    (one Rails app, one database, so one definitions file).
+
+   valueMappings note: dfe-analytics serialises attributes through Rails and so emits the
+   enum LABEL, while Airbyte reads the raw Postgres column and emits the BACKING VALUE.
+   Every string-backed Rails enum therefore needs a valueMappings block here for the two
+   pipelines to agree. Mappings below are taken from app/models in
+   DFE-Digital/publish-teacher-training.
 */
 
 const dfeAnalyticsDataform = require("../");
@@ -21,8 +27,6 @@ dfeAnalyticsDataform({
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     expirationDays: false,
     enableMonitoring: false,
-
-    // NEW: Enable Airbyte
     enableAirbyteSource: true,
     hasTimestamps: true,
 
@@ -48,7 +52,10 @@ dfeAnalyticsDataform({
         minLiveFraction: 0.8,
         maxDeleteFraction: 0.2,
         minSnapshotAgeMinutes: 60,
-        detectionWindowDays: 60
+        detectionWindowDays: 60,
+        /* Skips the delete-volume guard for the financial_incentive
+           full refresh at this LSN. */
+        forceReconcileSnapshotLsn: 5551278794824
     },
 
     dataSchema: [{
@@ -63,7 +70,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "type",
                 dataType: "string",
-                description: ""
+                description: "Contact type. Stored values match the Rails labels, so no mapping is needed: admin, utt, web_link, fraud, finance."
             }, {
                 keyName: "permission_given",
                 dataType: "boolean",
@@ -73,6 +80,7 @@ dfeAnalyticsDataform({
         {
             entityTableName: "course",
             description: "",
+            hasTimestamps: false,
             keys: [{
                 keyName: "a_level_subject_requirements",
                 dataType: "string",
@@ -190,7 +198,12 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "level",
                 dataType: "string",
-                description: ""
+                description: "Phase of education that the course trains teachers for. Stored capitalised in the database, so mapped here to match the Rails label emitted by dfe-analytics.",
+                valueMappings: {
+                    "Primary": "primary",
+                    "Secondary": "secondary",
+                    "Further education": "further_education"
+                }
             }, {
                 keyName: "maths",
                 dataType: "string",
@@ -208,11 +221,27 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "profpost_flag",
                 dataType: "string",
-                description: ""
+                description: "Training programme outcome originating in the UCAS NetUpdate system. Describes whether the student receives a professional or postgraduate qualification alongside QTS.",
+                valueMappings: {
+                    "": "recommendation_for_qts",
+                    "PF": "professional",
+                    "PG": "postgraduate",
+                    "BO": "professional_postgraduate"
+                }
             }, {
                 keyName: "program_type",
                 dataType: "string",
-                description: ""
+                description: "Route into teaching that this course represents.",
+                valueMappings: {
+                    "HE": "higher_education_programme",
+                    "HES": "higher_education_salaried_programme",
+                    "SD": "school_direct_training_programme",
+                    "SS": "school_direct_salaried_training_programme",
+                    "SC": "scitt_programme",
+                    "SSC": "scitt_salaried_programme",
+                    "TA": "pg_teaching_apprenticeship",
+                    "TDA": "teacher_degree_apprenticeship"
+                }
             }, {
                 keyName: "provider_id",
                 dataType: "string",
@@ -233,7 +262,8 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "schools_validated",
                 dataType: "boolean",
-                description: "TRUE if the provider has validated the attached schools for the course (rolled-over period only)"
+                description: "Historic field as of 05/10/26. TRUE if the provider has validated the attached schools for the course (rolled-over period only)",
+                historic: true
             }, {
                 keyName: "qualification",
                 dataType: "string",
@@ -263,7 +293,12 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "study_mode",
                 dataType: "string",
-                description: ""
+                description: "Whether the course is offered full time, part time, or either.",
+                valueMappings: {
+                    "F": "full_time",
+                    "P": "part_time",
+                    "B": "full_time_or_part_time"
+                }
             }, {
                 keyName: "uuid",
                 dataType: "string",
@@ -285,7 +320,6 @@ dfeAnalyticsDataform({
                 pastKeyNames: ["first_published_date", "first_published_datetime"],
                 dataType: "timestamp",
                 description: "The timestamp that the course was first published at."
-            
             }]
         },
         {
@@ -331,8 +365,26 @@ dfeAnalyticsDataform({
             }]
         },
         {
+            entityTableName: "course_school",
+            description: "Table of course schools in Publish/Find service",
+            keys: [{
+                keyName: "course_id",
+                dataType: "string",
+                description: "UID of the course",
+                foreignKeyTable: "course"
+            }, {
+                keyName: "gias_school_id",
+                dataType: "string",
+                description: "UID of the school in GIAS"
+            }, {
+                keyName: "provider_school_id",
+                dataType: "string",
+                description: "UID of the provider school"
+            }]
+        },
+        {
             entityTableName: "course_site",
-            description: "",
+            description: "Join table between course and site, holding the publication and vacancy state of each course/site combination. Backed by the SiteStatus model.",
             hasTimestamps: false,
             keys: [{
                 keyName: "course_id",
@@ -342,7 +394,11 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "publish",
                 dataType: "string",
-                description: ""
+                description: "Whether this course/site combination is published on UCAS. Set automatically from the status state machine - a course/site is published when status is running, and unpublished otherwise.",
+                valueMappings: {
+                    "Y": "published",
+                    "N": "unpublished"
+                }
             }, {
                 keyName: "site_id",
                 dataType: "string",
@@ -351,11 +407,23 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "status",
                 dataType: "string",
-                description: ""
+                description: "State of the course/site combination. Only rows with status 'running' and publish 'published' are findable on Find.",
+                valueMappings: {
+                    "D": "discontinued",
+                    "R": "running",
+                    "N": "new_status",
+                    "S": "suspended"
+                }
             }, {
                 keyName: "vac_status",
                 dataType: "string",
-                description: ""
+                description: "Vacancy status for this course/site combination, which must be consistent with the study_mode of the course. Note that no_vacancies is stored as an empty string rather than NULL.",
+                valueMappings: {
+                    "B": "both_full_time_and_part_time_vacancies",
+                    "P": "part_time_vacancies",
+                    "F": "full_time_vacancies",
+                    "": "no_vacancies"
+                }
             }]
         },
         {
@@ -418,11 +486,16 @@ dfeAnalyticsDataform({
                 keyName: "year",
                 dataType: "integer",
                 description: "Recruitment cycle year that this financial incentive applies to e.g. 2025 for ITT2025-26."
+            }, {
+                keyName: "degree_dependent",
+                dataType: "boolean",
+                description: "TRUE if financial incentive depends on the candidate's degree"
             }]
         },
         {
             entityTableName: "provider",
             description: "",
+            hasTimestamps: false,
             keys: [{
                 keyName: "accredited",
                 dataType: "boolean",
@@ -490,7 +563,13 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "provider_type",
                 dataType: "string",
-                description: ""
+                description: "Type of organisation running the training.",
+                valueMappings: {
+                    "B": "scitt",
+                    "Y": "lead_school",
+                    "O": "university",
+                    "F": "further_education_legacy"
+                }
             }, {
                 keyName: "value_proposition",
                 dataType: "string",
@@ -503,7 +582,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "region_code",
                 dataType: "string",
-                description: "",
+                description: "Integer-based region code. Note that gias_school uses a different, letter-based region_code scheme.",
                 valueMappings: {
                     "0": "no_region",
                     "1": "london",
@@ -556,8 +635,28 @@ dfeAnalyticsDataform({
                 isArray: true,
                 arraySource: "json",
                 description: "Comma-separated list of alternative names by which this provider is known."
-            }
-            ]
+            }]
+        }, {
+            entityTableName: "provider_school",
+            description: "Table of provider schools in Publihse/Find service",
+            keys: [{
+                keyName: "provider_id",
+                dataType: "string",
+                description: "UID of the provider for this provider school",
+                foreignKeyTable: "provider"
+            }, {
+                keyName: "gias_school_id",
+                dataType: "string",
+                description: "UID of the school in GIAS"
+            }, {
+                keyName: "site_code",
+                dataType: "string",
+                description: "Code of the site"
+            }, {
+                keyName: "uuid",
+                dataType: "string",
+                description: "Unique identifier of the ID in provider school"
+            }]
         },
         {
             entityTableName: "recruitment_cycle",
@@ -593,7 +692,8 @@ dfeAnalyticsDataform({
             keys: [{
                 keyName: "added_via",
                 dataType: "string",
-                description: "Interface used to create sites. 'publish_interface' for sites created with standard interface. 'register_import' for sites created using Register school importer"
+                description: "Historic field as of 05/10/26. Interface used to create sites. 'publish_interface' for sites created with standard interface. 'register_import' for sites created using Register school importer",
+                historic: true
             }, {
                 keyName: "address1",
                 dataType: "string",
@@ -642,7 +742,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "region_code",
                 dataType: "string",
-                description: "",
+                description: "Integer-based region code. Note that gias_school uses a different, letter-based region_code scheme.",
                 valueMappings: {
                     "0": "no_region",
                     "1": "london",
@@ -720,33 +820,33 @@ dfeAnalyticsDataform({
         {
             entityTableName: "subject",
             description: "",
-            hasTimestamps:false,
-            keys: [
-            {
-                keyName: "match_synonyms",
-                dataType: "string",
-                isArray: true,
-                arraySource: "json",
-                description: "Comma-separated list used to match a list of aliases for a subject - the aliases could be abbreviation, other names, even codes or any significant value that was heavily searched on Find - for any given subject. Some subjects might have empty others many values."
-            },
-            {
-                keyName: "type",
-                dataType: "string",
-                description: ""
-            }, {
-                keyName: "subject_code",
-                dataType: "string",
-                description: ""
-            }, {
-                keyName: "subject_name",
-                dataType: "string",
-                description: ""
-            }, {
-                keyName: "subject_group_id",
-                dataType: "string",
-                description: "UID of the subject group for this subject",
-                foreignKeyTable: "subject_group"
-            }]
+            hasTimestamps: false,
+            keys: [{
+                    keyName: "match_synonyms",
+                    dataType: "string",
+                    isArray: true,
+                    arraySource: "json",
+                    description: "Comma-separated list used to match a list of aliases for a subject - the aliases could be abbreviation, other names, even codes or any significant value that was heavily searched on Find - for any given subject. Some subjects might have empty others many values."
+                },
+                {
+                    keyName: "type",
+                    dataType: "string",
+                    description: "Single table inheritance column holding the Ruby class name of the subject, e.g. PrimarySubject, SecondarySubject, ModernLanguagesSubject, FurtherEducationSubject, DesignTechnologySubject, DiscontinuedSubject. Not a Rails enum, so no mapping applies."
+                }, {
+                    keyName: "subject_code",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "subject_name",
+                    dataType: "string",
+                    description: ""
+                }, {
+                    keyName: "subject_group_id",
+                    dataType: "string",
+                    description: "UID of the subject group for this subject",
+                    foreignKeyTable: "subject_group"
+                }
+            ]
         },
         {
             entityTableName: "subject_group",
@@ -880,7 +980,19 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "group_code",
                 dataType: "string",
-                description: "See https://www.get-information-schools.service.gov.uk/glossary"
+                description: "See https://www.get-information-schools.service.gov.uk/glossary",
+                valueMappings: {
+                    "1": "colleges",
+                    "2": "universities",
+                    "3": "independent_schools",
+                    "4": "local_authority_schools",
+                    "5": "special_schools",
+                    "6": "welsh_schools",
+                    "9": "other_types",
+                    "10": "academies",
+                    "11": "free_schools",
+                    "13": "online_provider"
+                }
             }, {
                 keyName: "latitude",
                 dataType: "float",
@@ -904,7 +1016,17 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "phase_code",
                 dataType: "string",
-                description: "See https://www.get-information-schools.service.gov.uk/glossary"
+                description: "See https://www.get-information-schools.service.gov.uk/glossary",
+                valueMappings: {
+                    "0": "not_applicable",
+                    "1": "nursery",
+                    "2": "primary",
+                    "3": "middle_deemed_primary",
+                    "4": "secondary",
+                    "5": "middle_deemed_secondary",
+                    "6": "sixteen_plus",
+                    "7": "all_through"
+                }
             }, {
                 keyName: "postcode",
                 dataType: "string",
@@ -912,7 +1034,13 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "status_code",
                 dataType: "string",
-                description: "See https://www.get-information-schools.service.gov.uk/glossary"
+                description: "See https://www.get-information-schools.service.gov.uk/glossary",
+                valueMappings: {
+                    "1": "open",
+                    "2": "closed",
+                    "3": "proposed_to_close",
+                    "4": "proposed_to_open"
+                }
             }, {
                 keyName: "telephone",
                 dataType: "string",
@@ -924,7 +1052,48 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "type_code",
                 dataType: "string",
-                description: "See https://www.get-information-schools.service.gov.uk/glossary"
+                description: "See https://www.get-information-schools.service.gov.uk/glossary",
+                valueMappings: {
+                    "01": "community_school",
+                    "02": "voluntary_aided_school",
+                    "03": "voluntary_controlled_school",
+                    "05": "foundation_school",
+                    "06": "city_technical_college",
+                    "07": "community_special_school",
+                    "08": "non_maintained_special_school",
+                    "10": "other_independent_special_school",
+                    "11": "other_independent_school",
+                    "12": "other_foundation_school",
+                    "14": "pupil_referral_unit",
+                    "15": "local_authority_nursery_school",
+                    "18": "further_education",
+                    "24": "secure_units",
+                    "25": "offshore_units",
+                    "26": "service_childrens_education",
+                    "27": "miscellaneous",
+                    "28": "academy_sponsor_led",
+                    "29": "heis",
+                    "30": "welsh_establishment",
+                    "31": "sixth_form_centres",
+                    "32": "special_post_16_intitutions",
+                    "33": "academy_special_sponsor_led",
+                    "34": "academy_converter",
+                    "35": "free_schools",
+                    "36": "free_special_schools",
+                    "37": "british_schools_overseas",
+                    "38": "free_schools_alternative_provision",
+                    "39": "free_schools_16_to_19",
+                    "40": "university_technical_colleges",
+                    "41": "studio_schools",
+                    "42": "academy_alternative_provider_converter",
+                    "43": "academy_alternative_provision_sponsor_led",
+                    "44": "academy_special_converter",
+                    "45": "academy_16_to_19_converter",
+                    "46": "academy_16_to_19_sponsor_led",
+                    "49": "online_provider",
+                    "56": "institute_funded_by_other_gov_dept",
+                    "57": "academy_secure_16_to_19"
+                }
             }, {
                 keyName: "ukprn",
                 dataType: "string",
@@ -940,7 +1109,19 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "region_code",
                 dataType: "string",
-                description: "",
+                description: "GIAS region code. Letter-based and NOT the same scheme as the integer region_code used on provider and site - the two must not share a mapping. See https://www.get-information-schools.service.gov.uk/glossary",
+                valueMappings: {
+                    "A": "north_east",
+                    "B": "north_west",
+                    "D": "yorkshire_and_the_humber",
+                    "E": "east_midlands",
+                    "F": "west_midlands",
+                    "G": "east_of_england",
+                    "H": "london",
+                    "J": "south_east",
+                    "K": "south_west",
+                    "Z": "not_applicable"
+                }
             }]
         },
         {
@@ -962,7 +1143,7 @@ dfeAnalyticsDataform({
             keys: [{
                 keyName: "ease_of_use",
                 dataType: "string",
-                description: "User's opinion or comment on how easy the service was to use It can be (Very easy, Easy, Neither easy nor difficult, Difficult, Very difficult)."
+                description: "User's opinion of how easy the service was to use. Stored values match the Rails labels, so no mapping is needed: very_easy, easy, neither_easy_nor_difficult, difficult, very_difficult."
             }, {
                 keyName: "experience",
                 dataType: "string",
@@ -983,7 +1164,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "status",
                 dataType: "string",
-                description: "Marks job outcome (e.g. completed, failed) - more will be added over time"
+                description: "Marks job outcome. Currently started, finished or failed - more will be added over time. Stored values match the Rails labels, so no mapping is needed."
             }, {
                 keyName: "short_summary",
                 dataType: "string",
@@ -1038,7 +1219,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "authenticable_type",
                 dataType: "string",
-                description: "Type of authenticable entity"
+                description: "Type of authenticable entity. Holds the Ruby class name of the polymorphic association, not a Rails enum, so no mapping applies."
             }]
         },
         {
@@ -1143,7 +1324,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "sessionable_type",
                 dataType: "string",
-                description: "Type of entity the session belongs to."
+                description: "Type of entity the session belongs to. Holds the Ruby class name of the polymorphic association, not a Rails enum, so no mapping applies."
             }]
         },
         {
@@ -1152,7 +1333,7 @@ dfeAnalyticsDataform({
             keys: [{
                 keyName: "status",
                 dataType: "string",
-                description: "The onboarding request can have the following statuses. Pending means the form has been created and sent to the provider. Submitted means the provider has completed and returned the form. Expired means the form is no longer valid. Closed means the support team has actioned the request. Rejected means the support team has declined the request."
+                description: "The onboarding request can have the following statuses. Pending means the form has been created and sent to the provider. Submitted means the provider has completed and returned the form. Expired means the form is no longer valid. Closed means the support team has actioned the request. Rejected means the support team has declined the request. Stored values match the Rails labels, so no mapping is needed."
             }, {
                 keyName: "form_name",
                 dataType: "string",
@@ -1240,6 +1421,45 @@ dfeAnalyticsDataform({
                 keyName: "support_agent_id",
                 dataType: "string",
                 description: "Admin user who is assigned to the request during form creation (linked to User table)"
+            }]
+        },
+        {
+            entityTableName: "audit",
+            description: "Change log tracking actions on auditable models. Used for linking web analytics data to database changes in Airbyte pipeline",
+            hasTimestamps: false,
+            keys: [{
+                keyName: "auditable_id",
+                dataType: "string",
+                description: "ID of the record being audited."
+            }, {
+                keyName: "auditable_type",
+                dataType: "string",
+                description: "Class name of the audited model"
+            }, {
+                keyName: "associated_id",
+                dataType: "string",
+                description: "ID of a related/parent object."
+            }, {
+                keyName: "associated_type",
+                dataType: "string",
+                description: "Class name of the associated object."
+            }, {
+                keyName: "user_id",
+                dataType: "string",
+                description: "ID of the user who made the change."
+            }, {
+                keyName: "user_type",
+                dataType: "string",
+                description: "Class name of the user model"
+            }, {
+                keyName: "request_uuid",
+                dataType: "string",
+                description: "UUID of the web request that caused this version to be created.",
+                alias: 'request_uuid_audits'
+            }, {
+                keyName: "action",
+                dataType: "string",
+                description: "Type of action performed (create/update/destroy)."
             }]
         }
     ],
