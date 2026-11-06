@@ -118,15 +118,22 @@ module.exports = (params) => {
         type: "table",
         bigquery: {
           partitionBy: "DATE(audit_created_at)",
-          clusterBy: [names.primaryKey]
+          clusterBy: [names.primaryKey],
+          ...(params.expirationDays || entitySchema.expirationDays
+            ? { partitionExpirationDays: Math.min(...[params.expirationDays, entitySchema.expirationDays].filter(days => days > 0)) }
+            : {})
         },
         tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'audit'],
         description: `[AIRBYTE] Keys-only projection of the raw audits table for ${entitySchema.entityTableName}, used to bridge web request context onto the Airbyte version table.`,
         columns: {
-          [names.primaryKey]: {
-            description: `Primary key of the audited ${entitySchema.entityTableName} entity.`,
-            bigqueryPolicyTags: entitySchema.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
-          },
+          [names.primaryKey]: {
+
+            description: `Primary key of the audited ${entitySchema.entityTableName} entity.`,
+
+            bigqueryPolicyTags: entitySchema.hidePrimaryKey && params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
+
+          },
+
           action: "The audited gem action recorded for this audit (e.g. create, update, destroy).",
           request_uuid: "request_uuid of the web request that produced this audit, used to join to events.",
           audit_created_at: "Timestamp the audit record was created in the source database.",
