@@ -8,14 +8,14 @@
 const dfeAnalyticsDataform = require("../");
 
 dfeAnalyticsDataform({
-    disabled: true,
+    disabled: false,
     eventSourceName: "publish",
     bqDatasetName: "publish_api_events_production",
     bqEventsTableName: "events",
     urlRegex: "(?i)(publish-teacher-training-courses.service.gov.uk|find-postgraduate-teacher-training.service.gov.uk)",
     requestPathGroupingRegex: '[a-zA-Z0-9]{3}/[a-zA-Z0-9]{4}$',
     /* Find UIDs in URLs look like /course/3RT/5X3R and don't necessarily contain numbers, so override the default dfe-analytics-dataform request path grouping logic to look for three non-special characters followed by a forward slash followed by 4 non-special characters, and replace them with the string UID i.e. /course/UID */
-    transformEntityEvents: true,
+    transformEntityEvents: false,
     compareChecksums: false,
     enableSessionTables: false,
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
