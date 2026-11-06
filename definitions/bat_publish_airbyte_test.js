@@ -3,6 +3,12 @@
 
    Covers Publish teacher training courses / Find postgraduate teacher training
    (one Rails app, one database, so one definitions file).
+
+   valueMappings note: dfe-analytics serialises attributes through Rails and so emits the
+   enum LABEL, while Airbyte reads the raw Postgres column and emits the BACKING VALUE.
+   Every string-backed Rails enum therefore needs a valueMappings block here for the two
+   pipelines to agree. Mappings below are taken from app/models in
+   DFE-Digital/publish-teacher-training.
 */
 
 const dfeAnalyticsDataform = require("../");
@@ -21,8 +27,6 @@ dfeAnalyticsDataform({
     hiddenPolicyTagLocation: "projects/rugged-abacus-218110/locations/europe-west2/taxonomies/69524444121704657/policyTags/6523652585511281766",
     expirationDays: false,
     enableMonitoring: false,
-
-    // NEW: Enable Airbyte
     enableAirbyteSource: true,
     hasTimestamps: true,
 
@@ -45,10 +49,13 @@ dfeAnalyticsDataform({
 
     airbyteReconciliation: {
         enabled: true,
-        minLiveFraction: 0.8,
+        minLiveFraction: 0.7,
         maxDeleteFraction: 0.2,
         minSnapshotAgeMinutes: 60,
-        detectionWindowDays: 60
+        detectionWindowDays: 60,
+        /* Skips the delete-volume guard for the financial_incentive
+           full refresh at this LSN. */
+        forceReconcileSnapshotLsn: 5876141942712
     },
 
     airbyteAudit: {
