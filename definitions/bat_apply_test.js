@@ -17,7 +17,7 @@ dfeAnalyticsDataform({
     expirationDays: 50000,
     dataSchema: [{
             entityTableName: "application_choices",
-            description: "",
+            description: "Testing if copilot reviewer is present",
             dataFreshnessDays: 3,
             keys: [{
                 keyName: "accepted_at",
