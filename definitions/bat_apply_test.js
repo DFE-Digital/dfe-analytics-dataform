@@ -26,7 +26,7 @@ dfeAnalyticsDataform({
             }, {
                 keyName: "application_form_id",
                 dataType: "string",
-                description: "",
+                description: "Testing if copilot reviewer is present"",
                 foreignKeyTable: "application_forms"
             }, {
                 keyName: "conditions_not_met_at",
