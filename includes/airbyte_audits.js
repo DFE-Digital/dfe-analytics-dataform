@@ -66,7 +66,7 @@ INNER JOIN
   ${auditsTable} AS audit
 ON
   version.${primaryKeyField} = audit.${primaryKeyField}
-  AND ABS(TIMESTAMP_DIFF(version.valid_from, audit.audit_created_at, SECOND)) <= ${toleranceSeconds}
+  AND ABS(TIMESTAMP_DIFF(version.valid_from, audit.audit_created_at, MICROSECOND)) <= ${toleranceSeconds} * 1000000
 WHERE
   version.request_uuid IS NULL
   AND version.valid_from >= ${lowerBound}
@@ -75,7 +75,7 @@ WHERE
 QUALIFY ROW_NUMBER() OVER (
   PARTITION BY version.${primaryKeyField}, version.valid_from
   ORDER BY
-    ABS(TIMESTAMP_DIFF(version.valid_from, audit.audit_created_at, SECOND)) ASC,
+    ABS(TIMESTAMP_DIFF(version.valid_from, audit.audit_created_at, MICROSECOND)) ASC,
     IF(audit.action = 'update', 0, 1) ASC
 ) = 1`;
 }
@@ -118,10 +118,14 @@ module.exports = (params) => {
         type: "table",
         bigquery: {
           partitionBy: "DATE(audit_created_at)",
-          clusterBy: [names.primaryKey],
-          ...(params.expirationDays || entitySchema.expirationDays
-            ? { partitionExpirationDays: Math.min(...[params.expirationDays, entitySchema.expirationDays].filter(days => days > 0)) }
-            : {})
+          clusterBy: [names.primaryKey],
+
+          ...(params.expirationDays || entitySchema.expirationDays
+
+            ? { partitionExpirationDays: Math.min(...[params.expirationDays, entitySchema.expirationDays].filter(days => days > 0)) }
+
+            : {})
+
         },
         tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'audit'],
         description: `[AIRBYTE] Keys-only projection of the raw audits table for ${entitySchema.entityTableName}, used to bridge web request context onto the Airbyte version table.`,
