@@ -11,6 +11,7 @@ module.exports = (params) => {
   const suffix = params.airbyteConfig.tableSuffix || '_airbyte';
   const tableName = `audited_web_requests_${params.eventSourceName}${suffix}`;
   const eventsTableName = `events_${params.eventSourceName}`;
+  const floor = `TIMESTAMP("${params.airbyteLegacyMergeCutoff || '2026-01-01'}")`;
 
   return publish(tableName, {
     type: "incremental",
@@ -21,7 +22,7 @@ module.exports = (params) => {
       ...(params.webRequestEventExpirationDays
       ? { partitionExpirationDays: params.webRequestEventExpirationDays }
       : {}),
-      updatePartitionFilter: "occurred_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 4 DAY)",
+      updatePartitionFilter: "occurred_at >= event_timestamp_checkpoint",
       labels: {
         eventsource: params.eventSourceName.toLowerCase(),
         sourcedataset: params.bqDatasetName.toLowerCase(),
@@ -42,10 +43,11 @@ module.exports = (params) => {
       response_status: "HTTP response status of the request.",
       anonymised_user_agent_and_ip: "Anonymised hash of user agent and IP for the request."
     },
-  }).preOps(ctx => ctx.incremental() ? `
-  DECLARE web_request_checkpoint DEFAULT (
-    SELECT DATE_SUB(DATE(MAX(occurred_at)), INTERVAL 3 DAY) FROM ${ctx.self()}
-  );` : ``)
+  }).preOps(ctx => `DECLARE date_checkpoint DATE DEFAULT (
+    ${ctx.when(ctx.incremental(),
+      `SELECT DATE_SUB(IFNULL(DATE(MAX(occurred_at)), ${floor}), INTERVAL 3 DAY) FROM ${ctx.self()}`,
+      `SELECT ${floor}`)}
+  )`)
   .query(ctx => `
 SELECT
   request_uuid,
@@ -77,8 +79,7 @@ WHERE
     ${params.webRequestEventExpirationDays
       ? `AND DATE(occurred_at) >= CURRENT_DATE - ${params.webRequestEventExpirationDays}`
       : ``}
-    ${ctx.when(ctx.incremental(),
-      `AND DATE(occurred_at) > web_request_checkpoint`)}
+  AND DATE(occurred_at) > web_request_checkpoint
   QUALIFY ROW_NUMBER() OVER (PARTITION BY request_uuid ORDER BY occurred_at) = 1    
 `)
 };
