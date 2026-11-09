@@ -61,8 +61,7 @@ dfeAnalyticsDataform({
     airbyteAudit: {
         enabled: true,
         auditsTableName: 'audit',
-        matchToleranceSeconds: 5,
-        webRequestEventExpirationDays: 365
+        matchToleranceSeconds: 5
     },
 
     dataSchema: [{

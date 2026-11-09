@@ -18,8 +18,8 @@ module.exports = (params) => {
     bigquery: {
       partitionBy: "DATE(occurred_at)",
       clusterBy: ["request_uuid"],
-      ...(params.airbyteAudit.webRequestEventExpirationDays
-      ? { partitionExpirationDays: params.airbyteAudit.webRequestEventExpirationDays }
+      ...(params.webRequestEventExpirationDays
+      ? { partitionExpirationDays: params.webRequestEventExpirationDays }
       : {}),
       updatePartitionFilter: "occurred_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 4 DAY)",
       labels: {
@@ -74,8 +74,8 @@ WHERE
         `SELECT request_uuid FROM ${ctx.ref(auditNames(params, e).auditsTableName)}`
       ).join("\nUNION DISTINCT\n")}
     )
-    ${params.airbyteAudit.webRequestEventExpirationDays
-      ? `AND DATE(occurred_at) >= CURRENT_DATE - ${params.airbyteAudit.webRequestEventExpirationDays}`
+    ${params.webRequestEventExpirationDays
+      ? `AND DATE(occurred_at) >= CURRENT_DATE - ${params.webRequestEventExpirationDays}`
       : ``}
     ${ctx.when(ctx.incremental(),
       `AND DATE(occurred_at) > web_request_checkpoint`)}

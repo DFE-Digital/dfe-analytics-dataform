@@ -298,11 +298,6 @@ function validateParams(params) {
             if (!params.enableAirbyteSource) {
                 throw new Error(`airbyteAudit.enabled is true but enableAirbyteSource is false.`);
             }
-            if (params.airbyteAudit.webRequestEventExpirationDays !== null &&
-                params.airbyteAudit.webRequestEventExpirationDays !== undefined &&
-                !(Number.isInteger(params.airbyteAudit.webRequestEventExpirationDays) && params.airbyteAudit.webRequestEventExpirationDays > 0)) {
-                throw new Error(`airbyteAudit.webRequestEventExpirationDays is not a positive integer.`);
-            }
             if (params.airbyteAudit.matchToleranceSeconds !== undefined &&
                 !(Number.isInteger(params.airbyteAudit.matchToleranceSeconds) && params.airbyteAudit.matchToleranceSeconds > 0)) {
                 throw new Error(`airbyteAudit.matchToleranceSeconds must be a positive integer.`);
