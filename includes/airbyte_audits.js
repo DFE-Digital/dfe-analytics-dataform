@@ -55,29 +55,40 @@ WHERE
    within toleranceSeconds. action is used as a tie-breaker when two audits are equidistant
    (prefers 'update' matches for update-like versions, falls back to closest absolute value). */
 function auditLinkMatchQuery({ versionTable, auditsTable, primaryKeyField, toleranceSeconds, lowerBound }) {
-  return `SELECT
-  version.${primaryKeyField} AS ${primaryKeyField},
-  version.valid_from AS valid_from,
-  audit.request_uuid AS request_uuid,
-  audit.audit_id AS audit_id
-FROM
-  ${versionTable} AS version
-INNER JOIN
-  ${auditsTable} AS audit
-ON
-  version.${primaryKeyField} = audit.${primaryKeyField}
-  AND ABS(TIMESTAMP_DIFF(version.valid_from, audit.audit_created_at, MICROSECOND)) <= ${toleranceSeconds} * 1000000
-WHERE
-  version.request_uuid IS NULL
-  AND version.valid_from >= ${lowerBound}
-  AND (version.valid_to IS NULL OR version.valid_to >= ${lowerBound})
-  AND audit.audit_created_at >= TIMESTAMP_SUB(${lowerBound}, INTERVAL ${toleranceSeconds} SECOND)
-QUALIFY ROW_NUMBER() OVER (
-  PARTITION BY version.${primaryKeyField}, version.valid_from
-  ORDER BY
-    ABS(TIMESTAMP_DIFF(version.valid_from, audit.audit_created_at, MICROSECOND)) ASC,
-    IF(audit.action = 'update', 0, 1) ASC
-) = 1`;
+  return `
+    WITH candidates AS (
+    SELECT
+        version.${primaryKeyField} AS ${primaryKeyField},
+        version.valid_from,
+        audit.request_uuid,
+        audit.audit_id,
+        audit.action,
+        ABS(TIMESTAMP_DIFF(version.valid_from, audit.audit_created_at, MICROSECOND)) AS time_gap_microseconds
+    FROM ${versionTable} AS version
+    JOIN ${auditsTable} AS audit
+        ON version.${primaryKeyField} = audit.${primaryKeyField}
+    AND ABS(TIMESTAMP_DIFF(version.valid_from, audit.audit_created_at, MICROSECOND)) <= ${toleranceSeconds} * 1000000
+    WHERE version.request_uuid IS NULL
+        AND version.valid_from >= ${lowerBound}
+        AND (version.valid_to IS NULL OR version.valid_to >= ${lowerBound})
+        AND audit.audit_created_at >= TIMESTAMP_SUB(${lowerBound}, INTERVAL ${toleranceSeconds} SECOND)
+        AND NOT EXISTS (
+            -- skip audits already linked on earlier runs
+            SELECT 1 FROM ${versionTable} AS linked
+            WHERE linked.${primaryKeyField} = audit.${primaryKeyField} AND linked.audit_id = audit.audit_id)
+    ),
+    nearest_audit_per_version AS (
+    SELECT * FROM candidates
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY ${primaryKeyField}, valid_from
+        ORDER BY time_gap_microseconds, SAFE_CAST(audit_id AS INT64)) = 1
+    )
+    SELECT ${primaryKeyField}, valid_from, request_uuid, audit_id
+    FROM nearest_audit_per_version
+    QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY ${primaryKeyField}, audit_id
+    ORDER BY time_gap_microseconds, valid_from) = 1
+  `;
 }
 
 /* Step 3: apply. Idempotent UPDATE, following the same pattern as
