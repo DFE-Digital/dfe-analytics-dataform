@@ -917,10 +917,6 @@ dfeAnalyticsDataform({
                 dataType: "boolean",
                 description: ""
             }, {
-                keyName: "discarded_at",
-                dataType: "timestamp",
-                description: ""
-            }, {
                 keyName: "first_login_date_utc",
                 dataType: "timestamp",
                 description: ""
