@@ -416,15 +416,20 @@ module.exports = (params) => {
                Where every open version is legacy, MAX() over them is NULL, `> NULL` matches no
                partitions, and the table silently stops ingesting. Fall back to the table-wide
                maximum, then to the cutoff for the case where no Airbyte row has landed at all. */
-            .preOps(ctx => `DECLARE extracted_at_checkpoint DEFAULT (
-        ${ctx.when(ctx.incremental(), 
-          `SELECT COALESCE(
-           (SELECT MAX(_airbyte_extracted_at) FROM ${ctx.self()} WHERE valid_to IS NULL),
-           (SELECT MAX(_airbyte_extracted_at) FROM ${ctx.self()}),
-           TIMESTAMP("${legacyEnabled && legacyCutoff ? legacyCutoff : '2026-01-01'}")
-         )`,
-          `SELECT TIMESTAMP("${legacyEnabled && legacyCutoff ? legacyCutoff : '2026-01-01'}")`)}
-        )`)
+            .preOps(ctx => [
+                `DECLARE extracted_at_checkpoint DEFAULT (
+                    ${ctx.when(ctx.incremental(), 
+                    `SELECT COALESCE(
+                    (SELECT MAX(_airbyte_extracted_at) FROM ${ctx.self()} WHERE valid_to IS NULL),
+                    (SELECT MAX(_airbyte_extracted_at) FROM ${ctx.self()}),
+                    TIMESTAMP("${legacyEnabled && legacyCutoff ? legacyCutoff : '2026-01-01'}")
+                    )`,
+                    `SELECT TIMESTAMP("${legacyEnabled && legacyCutoff ? legacyCutoff : '2026-01-01'}")`)}
+                    )`,
+                ...(auditLinked && ctx.incremental() ? [`ALTER TABLE ${ctx.self()}
+                    ADD COLUMN IF NOT EXISTS request_uuid STRING,
+                    ADD COLUMN IF NOT EXISTS audit_id STRING`] : [])
+            ])
             .query(ctx => {
 
                 /* Legacy is seeded only on the full historical build. 
@@ -542,12 +547,16 @@ ${ctx.incremental() ? `
      NOT EXISTS excludes any row whose (primaryKey, ordering timestamp) already exists in source_data.
      This handles full syncs that arrive days later: source_data's copy of the row wins, and the stale self() copy is dropped before any window functions run. 
      Without this,the QUALIFY in source_data would not help because it only deduplicates within the new batch, it cannot see rows already sitting in self(). */
-    SELECT * FROM source_data
+    SELECT ${auditLinked ? `source_data.* REPLACE (cur.request_uuid AS request_uuid, cur.audit_id AS audit_id)` : `source_data.*`}
+    FROM source_data
+    ${auditLinked ? `LEFT JOIN (
+    SELECT ${primaryKey}, ${orderCol}, request_uuid, audit_id
+    FROM ${ctx.self()} WHERE valid_to IS NULL
+    ) AS cur USING (${primaryKey}, ${orderCol})` : ``}
     
     UNION ALL
 
-    SELECT * EXCEPT (valid_from, valid_to, is_deleted, is_current, version_number)
-    FROM ${ctx.self()}
+    SELECT ${versionColsSql} FROM ${ctx.self()}
     WHERE
       valid_to IS NULL
       AND NOT EXISTS (
