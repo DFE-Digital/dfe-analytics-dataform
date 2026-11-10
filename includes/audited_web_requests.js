@@ -79,7 +79,7 @@ WHERE
     ${params.webRequestEventExpirationDays
       ? `AND DATE(occurred_at) >= CURRENT_DATE - ${params.webRequestEventExpirationDays}`
       : ``}
-  AND DATE(occurred_at) > web_request_checkpoint
+  AND DATE(occurred_at) > date_checkpoint
   QUALIFY ROW_NUMBER() OVER (PARTITION BY request_uuid ORDER BY occurred_at) = 1    
 `)
 };
