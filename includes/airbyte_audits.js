@@ -81,7 +81,7 @@ function auditLinkMatchQuery({ versionTable, auditsTable, primaryKeyField, toler
     SELECT * FROM candidates
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY ${primaryKeyField}, valid_from
-        ORDER BY time_gap_microseconds, SAFE_CAST(audit_id AS INT64)) = 1
+        ORDER BY time_gap_microseconds, CASE WHEN action = 'update' THEN 0 ELSE 1 END, SAFE_CAST(audit_id AS INT64)) = 1
     )
     SELECT ${primaryKeyField}, valid_from, request_uuid, audit_id
     FROM nearest_audit_per_version
