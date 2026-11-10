@@ -11,7 +11,7 @@ module.exports = (params) => {
   const suffix = params.airbyteConfig.tableSuffix || '_airbyte';
   const tableName = `audited_web_requests_${params.eventSourceName}${suffix}`;
   const eventsTableName = `events_${params.eventSourceName}`;
-  const floor = `TIMESTAMP("${params.airbyteLegacyMergeCutoff || '2026-01-01'}")`;
+  const floor = `DATE("${params.airbyteLegacyMergeCutoff || '2026-01-01'}")`;
 
   return publish(tableName, {
     type: "incremental",
@@ -22,7 +22,7 @@ module.exports = (params) => {
       ...(params.webRequestEventExpirationDays
       ? { partitionExpirationDays: params.webRequestEventExpirationDays }
       : {}),
-      updatePartitionFilter: "occurred_at >= event_timestamp_checkpoint",
+      updatePartitionFilter: "occurred_at >= date_checkpoint",
       labels: {
         eventsource: params.eventSourceName.toLowerCase(),
         sourcedataset: params.bqDatasetName.toLowerCase(),
