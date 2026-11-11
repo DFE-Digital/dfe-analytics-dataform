@@ -67,9 +67,7 @@ module.exports = (params) => {
                    (ctx.ref below), so they don't need repeating here. The reconciliation apply
                    operation is not in the ref graph, so it does. */
                 dependencies: [
-                    ...(params.airbyteReconciliation.enabled ?
-                        [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName] :
-                        [])
+                    ...(params.airbyteReconciliation.enabled ? [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName] : [])
                 ],
                 ...(materialisation == 'table' ? {
                     assertions: {
