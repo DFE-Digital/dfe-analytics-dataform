@@ -54,9 +54,9 @@ module.exports = (params) => {
            column names consumers see in the version and flattened tables. */
         const newDataStructSql = trackedKeys.map(k => {
             const col = outName(k);
-            const valueSql = (k.dataType === 'json' || k.isArray)
-                ? `TO_JSON_STRING(\`${col}\`)`
-                : `CAST(\`${col}\` AS STRING)`;
+            const valueSql = (k.dataType === 'json' || k.isArray) ?
+                `TO_JSON_STRING(\`${col}\`)` :
+                `CAST(\`${col}\` AS STRING)`;
             return `STRUCT('${col}' AS key, ${valueSql} AS value)`;
         }).join(',\n      ');
 
@@ -67,9 +67,9 @@ module.exports = (params) => {
                    (ctx.ref below), so they don't need repeating here. The reconciliation apply
                    operation is not in the ref graph, so it does. */
                 dependencies: [
-                    ...(params.airbyteReconciliation.enabled
-                        ? [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName]
-                        : [])
+                    ...(params.airbyteReconciliation.enabled ?
+                        [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName] :
+                        [])
                 ],
                 ...(materialisation == 'table' ? {
                     assertions: {
@@ -165,12 +165,13 @@ WHERE
                 /* Key constraints can only be set on tables - ALTER TABLE ... ADD PRIMARY KEY /
                    ADD CONSTRAINT fails with "ALTER TABLE only supports altering constraints for
                    tables" when the entity is materialised as a view. */
-                ? `${data_functions.setKeyConstraints(ctx, dataform, {
+                ?
+                `${data_functions.setKeyConstraints(ctx, dataform, {
                     primaryKey: `${primaryKey}, occurred_at, key_updated`,
                     foreignKeys: [
                         {keyInThisTable: `${primaryKey}, occurred_at`, foreignTable: versionTableName, keyInForeignTable: `${primaryKey}, valid_from`}
                     ]
-                })}`
-                : ``)
+                })}` :
+                ``)
     }).filter(Boolean);
 };
