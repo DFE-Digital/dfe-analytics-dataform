@@ -2,6 +2,7 @@
 
 const parameterFunctions = require("./parameter_functions");
 const airbyteReconciliation = require("./airbyte_reconciliation");
+const data_functions = require("./data_functions");
 
 module.exports = (params) => {
     if (!params.enableAirbyteSource) return null;
@@ -65,5 +66,10 @@ FROM
 WHERE
     valid_to IS NULL
 `)
+        /* Match the dfe-analytics _latest_ tables, which get a primary key constraint in
+           flattened_entity_latest.js, so downstream foreign keys can point at airbyte tables. */
+        .postOps(ctx => (tableSchema.materialisation || 'table') == "table"
+            ? data_functions.setKeyConstraints(ctx, dataform, { primaryKey: primaryKey })
+            : ``)
     });
 };
