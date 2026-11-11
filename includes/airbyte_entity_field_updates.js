@@ -1,7 +1,7 @@
 /* Generates {entity}_field_updates_{source}{suffix} tables from the Airbyte version tables.
    One row for each time a field was updated on an entity, giving the field name, its previous
    value and its new value. Derived from the {entity}_version_{source}{suffix} table by comparing
-   each version to the version immediately before it (LAG over version_number).
+   each version to the version immediately before it (LAG ordered by valid_from).
 
    Differences vs the legacy {eventSourceName}_entity_field_updates model:
    - One output relation per entity (like the flattened field updates tables), keyed on the
@@ -54,9 +54,9 @@ module.exports = (params) => {
            column names consumers see in the version and flattened tables. */
         const newDataStructSql = trackedKeys.map(k => {
             const col = outName(k);
-            const valueSql = (k.dataType === 'json' || k.isArray)
-                ? `TO_JSON_STRING(\`${col}\`)`
-                : `CAST(\`${col}\` AS STRING)`;
+            const valueSql = (k.dataType === 'json' || k.isArray) ?
+                `TO_JSON_STRING(\`${col}\`)` :
+                `CAST(\`${col}\` AS STRING)`;
             return `STRUCT('${col}' AS key, ${valueSql} AS value)`;
         }).join(',\n      ');
 
@@ -67,9 +67,7 @@ module.exports = (params) => {
                    (ctx.ref below), so they don't need repeating here. The reconciliation apply
                    operation is not in the ref graph, so it does. */
                 dependencies: [
-                    ...(params.airbyteReconciliation.enabled
-                        ? [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName]
-                        : [])
+                    ...(params.airbyteReconciliation.enabled ? [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName] : [])
                 ],
                 ...(materialisation == 'table' ? {
                     assertions: {
@@ -139,7 +137,9 @@ versions_with_field_arrays AS (
     versions_with_new_data
   WINDOW versions_of_this_entity AS (
     PARTITION BY ${primaryKey}
-    ORDER BY version_number ASC
+    /* Order by valid_from (aliased occurred_at), not version_number: incremental runs of the
+       version table number only that run's batch, so version_number repeats within an entity. */
+    ORDER BY occurred_at ASC
   )
 )
 SELECT
@@ -163,12 +163,13 @@ WHERE
                 /* Key constraints can only be set on tables - ALTER TABLE ... ADD PRIMARY KEY /
                    ADD CONSTRAINT fails with "ALTER TABLE only supports altering constraints for
                    tables" when the entity is materialised as a view. */
-                ? `${data_functions.setKeyConstraints(ctx, dataform, {
+                ?
+                `${data_functions.setKeyConstraints(ctx, dataform, {
                     primaryKey: `${primaryKey}, occurred_at, key_updated`,
                     foreignKeys: [
                         {keyInThisTable: `${primaryKey}, occurred_at`, foreignTable: versionTableName, keyInForeignTable: `${primaryKey}, valid_from`}
                     ]
-                })}`
-                : ``)
+                })}` :
+                ``)
     }).filter(Boolean);
 };
