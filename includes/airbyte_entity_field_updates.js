@@ -1,7 +1,7 @@
 /* Generates {entity}_field_updates_{source}{suffix} tables from the Airbyte version tables.
    One row for each time a field was updated on an entity, giving the field name, its previous
    value and its new value. Derived from the {entity}_version_{source}{suffix} table by comparing
-   each version to the version immediately before it (LAG over version_number).
+   each version to the version immediately before it (LAG ordered by valid_from).
 
    Differences vs the legacy {eventSourceName}_entity_field_updates model:
    - One output relation per entity (like the flattened field updates tables), keyed on the
@@ -139,7 +139,9 @@ versions_with_field_arrays AS (
     versions_with_new_data
   WINDOW versions_of_this_entity AS (
     PARTITION BY ${primaryKey}
-    ORDER BY version_number ASC
+    /* Order by valid_from (aliased occurred_at), not version_number: incremental runs of the
+       version table number only that run's batch, so version_number repeats within an entity. */
+    ORDER BY occurred_at ASC
   )
 )
 SELECT
