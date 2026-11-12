@@ -216,6 +216,22 @@ module.exports = (params) => {
             }
         });
 
+        /* Unavailable values (Debezium / Postgres TOAST):
+           When a row is updated in Postgres, large TOASTed columns (text, jsonb, bytea) that were not
+           changed are left out of the WAL unless the table has REPLICA IDENTITY FULL. Debezium then sends
+           a placeholder string instead of the value. It means "unchanged", so it is replaced with the
+           entity's previous value in placeholders_filled, before content dedup and version numbering.
+           Only string and json keys (and valueMappings keys, which pass unknown values through as
+           strings) can carry it; array keys are not handled. */
+        const unavailablePlaceholder = params.airbyteConfig.unavailableValuePlaceholder || '__debezium_unavailable_value';
+        const placeholderSql = `'${unavailablePlaceholder.replace(/'/g, "\\'")}'`;
+        const placeholderKeys = mergeKeys.filter(k =>
+            !k.historic && !isArrayKey(k) &&
+            (k.valueMappings || !k.dataType || k.dataType === 'string' || k.dataType === 'json'));
+        const isPlaceholderSql = k => (k.dataType === 'json' && !k.valueMappings) ?
+            `JSON_VALUE(\`${outName(k)}\`) = ${placeholderSql}` :
+            `\`${outName(k)}\` = ${placeholderSql}`;
+
         /* Cast raw columns to match the data type in dataSchema.*/
         function airbyteKeyCast(key) {
             /* Arrays are handled first: the scalar historic/valueMappings branches below would
@@ -275,7 +291,10 @@ module.exports = (params) => {
                       ${data_functions.stringToDate(s)}
                     )`;
                 case 'json':
-                    return `SAFE.PARSE_JSON(${s})`;
+                    /* The unavailable-value placeholder isn't valid JSON, so SAFE.PARSE_JSON would turn it
+                       into NULL and it could no longer be told apart from a real NULL. Keep it as a JSON
+                       string so placeholders_filled can replace it. */
+                    return `IF(${s} = ${placeholderSql}, TO_JSON(${placeholderSql}), SAFE.PARSE_JSON(${s}))`;
                 default:
                     return s; // string / undefined
             }
@@ -429,6 +448,10 @@ module.exports = (params) => {
                     `combined_with_current_versions` :
                     (injectLegacy ? `merged_full_history` : `source_data`);
 
+                /* What the deletions / live_records split reads: versionInput with unavailable-value
+                   placeholders replaced, when the entity has keys that can carry one. */
+                const filledInput = placeholderKeys.length > 0 ? `placeholders_filled` : versionInput;
+
                 return `
         
 WITH
@@ -547,6 +570,28 @@ ${ctx.incremental() ? `
   ),
 ` : ``}
 
+${placeholderKeys.length > 0 ? `
+  placeholders_filled AS (
+  /* Replace unavailable-value placeholders (see the comment above airbyteKeyCast) with the entity's
+     previous value. The previous value is wrapped in a STRUCT so that a real NULL still counts as a
+     value and is carried forward; placeholders and deletion rows are skipped as sources. On incremental
+     runs the open version re-read from self() supplies the previous value. A placeholder with no earlier
+     value (e.g. versions already stored with one) is left as it is; a full refresh replaces those. */
+    SELECT * EXCEPT (${placeholderKeys.map((k, i) => `_prev_${i}`).join(', ')}) REPLACE (
+      ${placeholderKeys.map((k, i) => `IF(${isPlaceholderSql(k)} AND _prev_${i} IS NOT NULL, _prev_${i}.v, \`${outName(k)}\`) AS \`${outName(k)}\``).join(',\n      ')}
+    )
+    FROM (
+      SELECT
+        *,
+        ${placeholderKeys.map((k, i) => `LAST_VALUE(IF(${isPlaceholderSql(k)} OR deleted_at IS NOT NULL, NULL, STRUCT(\`${outName(k)}\` AS v)) IGNORE NULLS) OVER (
+          PARTITION BY \`${primaryKey}\`
+          ORDER BY ${orderAsc}
+          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) AS _prev_${i}`).join(',\n        ')}
+      FROM ${versionInput}
+    )
+  ),
+` : ``}
   deletions AS (
     /* Filter out deletion rows, they signal that the previous version ended. Keep them in a separate CTE.
        On the full-refresh legacy build, legacy_deletions is unioned in here so pre-cutoff deletions use the same channel.*/
@@ -555,7 +600,7 @@ ${ctx.incremental() ? `
     MAX(deleted_at) AS deleted_at
     FROM (
         SELECT ${primaryKey}, deleted_at
-        FROM ${versionInput}
+        FROM ${filledInput}
         WHERE deleted_at IS NOT NULL
         ${injectLegacy ? `
         UNION ALL
@@ -585,13 +630,13 @@ ${ctx.incremental() ? `
         SELECT
           *,
           TO_JSON_STRING((SELECT AS STRUCT ${payloadCols})) AS _payload
-        FROM ${versionInput}
+        FROM ${filledInput}
         WHERE deleted_at IS NULL
       )
     )
     WHERE _payload IS DISTINCT FROM _prev_payload` : `
     SELECT *
-    FROM ${versionInput}
+    FROM ${filledInput}
     WHERE deleted_at IS NULL`}
   )
     SELECT
