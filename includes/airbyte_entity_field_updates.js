@@ -58,7 +58,7 @@ module.exports = (params) => {
             params.hasTimestamps === true :
             tableSchema.hasTimestamps === true;
         const fieldUpdateColumns = [primaryKey, 'occurred_at', 'update_id', 'key_updated', 'new_value', 'previous_value',
-            'previous_occurred_at', 'seconds_since_previous_update', 'seconds_since_created'
+            'previous_occurred_at', 'seconds_since_previous_update', 'seconds_since_created', 'version_number', 'new_data', 'previous_data'
         ];
         const entityColumns = includeEntityColumns ? [
             ...trackedKeys.map(outName),
