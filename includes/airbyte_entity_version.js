@@ -563,22 +563,40 @@ ${ctx.incremental() ? `
   ),
 ` : ``}
 
+${ctx.incremental() && placeholderKeys.length > 0 ? `
+  saved_current AS (
+  /* the saved current versions, so a replayed event with the same timestamp can still be filled
+     after combined_with_current_versions drops the saved copy */
+    SELECT
+      \`${primaryKey}\` AS _saved_pk,
+      ${orderCol} AS _saved_order,
+      ${placeholderKeys.map((k, i) => `\`${outName(k)}\` AS _saved_${i}`).join(',\n      ')}
+    FROM ${ctx.self()}
+    WHERE valid_to IS NULL
+  ),
+` : ``}
 ${placeholderKeys.length > 0 ? `
   placeholders_filled AS (
   /* swap placeholders for the entity's previous value. it's wrapped in a STRUCT so a real NULL still counts.
-     on incremental runs the open version from self() gives the previous value. */
+     on incremental runs the open version from self() gives the previous value. if there's nothing earlier
+     (a replayed event), it falls back to the saved current version with the same timestamp */
     SELECT * EXCEPT (${placeholderKeys.map((k, i) => `_prev_${i}`).join(', ')}) REPLACE (
       ${placeholderKeys.map((k, i) => `IF(${isPlaceholderSql(k)} AND _prev_${i} IS NOT NULL, _prev_${i}.v, \`${outName(k)}\`) AS \`${outName(k)}\``).join(',\n      ')}
     )
     FROM (
       SELECT
-        *,
-        ${placeholderKeys.map((k, i) => `LAST_VALUE(IF(${isPlaceholderSql(k)} OR deleted_at IS NOT NULL, NULL, STRUCT(\`${outName(k)}\` AS v)) IGNORE NULLS) OVER (
+        src.*,
+        ${placeholderKeys.map((k, i) => `COALESCE(LAST_VALUE(${ctx.incremental() ?
+          `IF(deleted_at IS NOT NULL OR (${isPlaceholderSql(k)} AND saved_current._saved_pk IS NULL), NULL, STRUCT(IF(${isPlaceholderSql(k)}, saved_current._saved_${i}, \`${outName(k)}\`) AS v))` :
+          `IF(${isPlaceholderSql(k)} OR deleted_at IS NOT NULL, NULL, STRUCT(\`${outName(k)}\` AS v))`} IGNORE NULLS) OVER (
           PARTITION BY \`${primaryKey}\`
           ORDER BY ${orderAsc}
           ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-        ) AS _prev_${i}`).join(',\n        ')}
-      FROM ${versionInput}
+        )${ctx.incremental() ? `, IF(saved_current._saved_pk IS NULL, NULL, STRUCT(saved_current._saved_${i} AS v))` : `, NULL`}) AS _prev_${i}`).join(',\n        ')}
+      FROM ${versionInput} AS src${ctx.incremental() ? `
+      LEFT JOIN saved_current
+        ON saved_current._saved_pk = src.\`${primaryKey}\`
+        AND saved_current._saved_order = src.${orderCol}` : ``}
     )
   ),
 ` : ``}
