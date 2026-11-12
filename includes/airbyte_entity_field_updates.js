@@ -48,11 +48,11 @@ module.exports = (params) => {
         /* Nothing to diff for this entity - don't publish a field updates relation at all. */
         if (trackedKeys.length === 0) return null;
 
-        /* Optional (airbyteConfig.fieldUpdatesIncludeEntityColumns): carry the entity's column values
-           from the version this update belongs to onto every row, like the legacy field updates tables,
-           so consumers don't need to join back to the version table. Off by default as it makes the
-           table much wider. created_at is always on the version table; updated_at only when the entity
-           has timestamps. Keys whose names clash with this table's own columns are left out. */
+        /* Optional (airbyteConfig.fieldUpdatesIncludeEntityColumns): optionally carries the entity's column values. 
+            Off by default as it makes the table much wider. takes into account that created_at is already always on 
+            the version table; updated_at only when the entity has timestamps. 
+            The filter line (.filter((c, i, all)...) ensures version table columns with the same name as a field
+            updates column are skipped (field_updates works out itself: key_updated, new_value, update_id, etc).. */
         const includeEntityColumns = params.airbyteConfig.fieldUpdatesIncludeEntityColumns === true;
         const versionHasTimestamps = tableSchema.hasTimestamps === undefined ?
             params.hasTimestamps === true :

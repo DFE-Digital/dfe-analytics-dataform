@@ -566,8 +566,7 @@ ${ctx.incremental() ? `
 ${placeholderKeys.length > 0 ? `
   placeholders_filled AS (
   /* swap placeholders for the entity's previous value. it's wrapped in a STRUCT so a real NULL still counts.
-     on incremental runs the open version from self() gives the previous value. versions already
-     stored with a placeholder need a full refresh to fix */
+     on incremental runs the open version from self() gives the previous value. */
     SELECT * EXCEPT (${placeholderKeys.map((k, i) => `_prev_${i}`).join(', ')}) REPLACE (
       ${placeholderKeys.map((k, i) => `IF(${isPlaceholderSql(k)} AND _prev_${i} IS NOT NULL, _prev_${i}.v, \`${outName(k)}\`) AS \`${outName(k)}\``).join(',\n      ')}
     )
