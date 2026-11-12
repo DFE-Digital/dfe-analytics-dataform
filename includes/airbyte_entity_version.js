@@ -216,13 +216,9 @@ module.exports = (params) => {
             }
         });
 
-        /* Unavailable values (Debezium / Postgres TOAST):
-           When a row is updated in Postgres, large TOASTed columns (text, jsonb, bytea) that were not
-           changed are left out of the WAL unless the table has REPLICA IDENTITY FULL. Debezium then sends
-           a placeholder string instead of the value. It means "unchanged", so it is replaced with the
-           entity's previous value in placeholders_filled, before content dedup and version numbering.
-           Only string and json keys (and valueMappings keys, which pass unknown values through as
-           strings) can carry it; array keys are not handled. */
+        /* debezium sends this placeholder instead of the value when a big postgres column (text/jsonb) didn't
+           change and the table isn't REPLICA IDENTITY FULL. it just means no change, so placeholders_filled
+           swaps it for the previous value. only string/json/valueMappings keys, not arrays */
         const unavailablePlaceholder = params.airbyteConfig.unavailableValuePlaceholder || '__debezium_unavailable_value';
         const placeholderSql = `'${unavailablePlaceholder.replace(/'/g, "\\'")}'`;
         const placeholderKeys = mergeKeys.filter(k =>
@@ -291,9 +287,7 @@ module.exports = (params) => {
                       ${data_functions.stringToDate(s)}
                     )`;
                 case 'json':
-                    /* The unavailable-value placeholder isn't valid JSON, so SAFE.PARSE_JSON would turn it
-                       into NULL and it could no longer be told apart from a real NULL. Keep it as a JSON
-                       string so placeholders_filled can replace it. */
+                    /* keep the placeholder as a json string, otherwise SAFE.PARSE_JSON turns it into NULL and we can't spot it */
                     return `IF(${s} = ${placeholderSql}, TO_JSON(${placeholderSql}), SAFE.PARSE_JSON(${s}))`;
                 default:
                     return s; // string / undefined
@@ -448,8 +442,7 @@ module.exports = (params) => {
                     `combined_with_current_versions` :
                     (injectLegacy ? `merged_full_history` : `source_data`);
 
-                /* What the deletions / live_records split reads: versionInput with unavailable-value
-                   placeholders replaced, when the entity has keys that can carry one. */
+                /* versionInput but with the placeholders filled in (if any keys can have one) */
                 const filledInput = placeholderKeys.length > 0 ? `placeholders_filled` : versionInput;
 
                 return `
@@ -572,11 +565,9 @@ ${ctx.incremental() ? `
 
 ${placeholderKeys.length > 0 ? `
   placeholders_filled AS (
-  /* Replace unavailable-value placeholders (see the comment above airbyteKeyCast) with the entity's
-     previous value. The previous value is wrapped in a STRUCT so that a real NULL still counts as a
-     value and is carried forward; placeholders and deletion rows are skipped as sources. On incremental
-     runs the open version re-read from self() supplies the previous value. A placeholder with no earlier
-     value (e.g. versions already stored with one) is left as it is; a full refresh replaces those. */
+  /* swap placeholders for the entity's previous value. it's wrapped in a STRUCT so a real NULL still counts.
+     on incremental runs the open version from self() gives the previous value. versions already
+     stored with a placeholder need a full refresh to fix */
     SELECT * EXCEPT (${placeholderKeys.map((k, i) => `_prev_${i}`).join(', ')}) REPLACE (
       ${placeholderKeys.map((k, i) => `IF(${isPlaceholderSql(k)} AND _prev_${i} IS NOT NULL, _prev_${i}.v, \`${outName(k)}\`) AS \`${outName(k)}\``).join(',\n      ')}
     )

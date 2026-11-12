@@ -98,8 +98,8 @@ module.exports = (params) => {
             tablePrefix: '', // prefix for Airbyte table names (e.g., '_airbyte_raw_')
             tableSuffix: '_airbyte', // Suffix for Airbyte output tables (to distinguish from dfe-analytics)
             defaultPrimaryKeyField: 'id', // Default primary key field name (can be overridden per entity via tableSchema.primaryKey)
-            unavailableValuePlaceholder: '__debezium_unavailable_value', // Text the CDC connector sends for unchanged TOASTed columns; replaced with the previous value in the version tables
-            fieldUpdatesIncludeEntityColumns: false, // If true, airbyte field updates tables also carry the entity's column values from the version each update belongs to (like the legacy field updates tables)
+            unavailableValuePlaceholder: '__debezium_unavailable_value', // what debezium sends for big columns that didn't change, gets swapped for the previous value in the version tables
+            fieldUpdatesIncludeEntityColumns: false, // if true, airbyte field updates tables also get the entity's columns (like the legacy ones)
 
         },
 

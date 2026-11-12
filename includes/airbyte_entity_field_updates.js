@@ -52,8 +52,7 @@ module.exports = (params) => {
            from the version this update belongs to onto every row, like the legacy field updates tables,
            so consumers don't need to join back to the version table. Off by default as it makes the
            table much wider. created_at is always on the version table; updated_at only when the entity
-           has timestamps (resolved as the version model does). Keys whose names clash with this
-           table's own columns are left out. */
+           has timestamps. Keys whose names clash with this table's own columns are left out. */
         const includeEntityColumns = params.airbyteConfig.fieldUpdatesIncludeEntityColumns === true;
         const versionHasTimestamps = tableSchema.hasTimestamps === undefined ?
             params.hasTimestamps === true :
@@ -66,7 +65,7 @@ module.exports = (params) => {
             'created_at',
             ...(versionHasTimestamps ? ['updated_at'] : [])
         ].filter((c, i, all) => !fieldUpdateColumns.includes(c) && all.indexOf(c) === i) : [];
-        /* created_at is already selected in the CTEs when hasTimestamps is set on the entity. */
+        /* created_at is already in the CTEs if hasTimestamps is set on the entity */
         const entityCteColumnsSql = entityColumns
             .filter(c => !(hasTimestamps && c === 'created_at'))
             .map(c => `\`${c}\`,`).join('\n    ');
