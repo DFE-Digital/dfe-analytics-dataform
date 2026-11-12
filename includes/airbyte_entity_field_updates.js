@@ -19,6 +19,7 @@
 */
 
 const data_functions = require("./data_functions");
+const parameterFunctions = require("./parameter_functions");
 const airbyteReconciliation = require("./airbyte_reconciliation");
 
 module.exports = (params) => {
@@ -46,6 +47,30 @@ module.exports = (params) => {
 
         /* Nothing to diff for this entity - don't publish a field updates relation at all. */
         if (trackedKeys.length === 0) return null;
+
+        /* Optional (airbyteConfig.fieldUpdatesIncludeEntityColumns): optionally carries the entity's column values. 
+            Off by default as it makes the table much wider. takes into account that created_at is already always on 
+            the version table; updated_at only when the entity has timestamps. 
+            The filter line (.filter((c, i, all)...) ensures version table columns with the same name as a field
+            updates column are skipped (field_updates works out itself: key_updated, new_value, update_id, etc).. */
+        const includeEntityColumns = params.airbyteConfig.fieldUpdatesIncludeEntityColumns === true;
+        const versionHasTimestamps = tableSchema.hasTimestamps === undefined ?
+            params.hasTimestamps === true :
+            tableSchema.hasTimestamps === true;
+        const fieldUpdateColumns = [primaryKey, 'occurred_at', 'update_id', 'key_updated', 'new_value', 'previous_value',
+            'previous_occurred_at', 'seconds_since_previous_update', 'seconds_since_created', 'version_number', 'new_data', 'previous_data'
+        ];
+        const entityColumns = includeEntityColumns ? [
+            ...trackedKeys.map(outName),
+            'created_at',
+            ...(versionHasTimestamps ? ['updated_at'] : [])
+        ].filter((c, i, all) => !fieldUpdateColumns.includes(c) && all.indexOf(c) === i) : [];
+        /* created_at is already in the CTEs if hasTimestamps is set on the entity */
+        const entityCteColumnsSql = entityColumns
+            .filter(c => !(hasTimestamps && c === 'created_at'))
+            .map(c => `\`${c}\`,`).join('\n    ');
+        const entityOutputColumnsSql = entityColumns
+            .map(c => `,\n  versions_with_field_arrays.\`${c}\``).join('');
 
         /* Reference version table columns by their output (aliased) names - the raw keyName does
            not exist as a column in the version table when an alias is configured.
@@ -108,6 +133,13 @@ module.exports = (params) => {
                         bigqueryPolicyTags: params.hiddenPolicyTagLocation ? [params.hiddenPolicyTagLocation] : []
                     },
                     previous_occurred_at: "Timestamp this entity was previously updated (valid_from of the previous version).",
+                    ...(includeEntityColumns ? {
+                        ...Object.assign({}, ...parameterFunctions.getKeyColumns(trackedKeys.filter(k => entityColumns.includes(outName(k))))),
+                        created_at: "Timestamp this entity was first saved in the source database, as of the version this update belongs to.",
+                        ...(versionHasTimestamps ? {
+                            updated_at: "Timestamp this entity was last updated in the source database, as of the version this update belongs to."
+                        } : {})
+                    } : {}),
                     seconds_since_previous_update: "The number of seconds between occurred_at and previous_occurred_at.",
                     ...(hasTimestamps ? {
                         seconds_since_created: "The number of seconds between occurred_at and created_at."
@@ -121,6 +153,7 @@ WITH versions_with_new_data AS (
     version_number,
     valid_from AS occurred_at,
     ${hasTimestamps ? `created_at,` : ``}
+    ${entityCteColumnsSql}
     [${newDataStructSql}] AS new_data
   FROM
     ${ctx.ref(versionTableName)}
@@ -130,6 +163,7 @@ versions_with_field_arrays AS (
     ${primaryKey},
     occurred_at,
     ${hasTimestamps ? `created_at,` : ``}
+    ${entityCteColumnsSql}
     new_data,
     LAG(new_data) OVER versions_of_this_entity AS previous_data,
     LAG(occurred_at) OVER versions_of_this_entity AS previous_occurred_at
@@ -151,7 +185,7 @@ SELECT
   previous_data_combined.value AS previous_value,
   previous_occurred_at,
   TIMESTAMP_DIFF(occurred_at, previous_occurred_at, SECOND) AS seconds_since_previous_update
-  ${hasTimestamps ? `, TIMESTAMP_DIFF(occurred_at, created_at, SECOND) AS seconds_since_created` : ``}
+  ${hasTimestamps ? `, TIMESTAMP_DIFF(occurred_at, created_at, SECOND) AS seconds_since_created` : ``}${entityOutputColumnsSql}
 FROM
   versions_with_field_arrays
   CROSS JOIN UNNEST(new_data) AS new_data_combined

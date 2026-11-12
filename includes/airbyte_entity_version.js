@@ -216,6 +216,18 @@ module.exports = (params) => {
             }
         });
 
+        /* debezium sends this placeholder instead of the value when a big postgres column (text/jsonb) didn't
+           change and the table isn't REPLICA IDENTITY FULL. it just means no change, so placeholders_filled
+           swaps it for the previous value. only string/json/valueMappings keys, not arrays */
+        const unavailablePlaceholder = params.airbyteConfig.unavailableValuePlaceholder || '__debezium_unavailable_value';
+        const placeholderSql = `'${unavailablePlaceholder.replace(/'/g, "\\'")}'`;
+        const placeholderKeys = mergeKeys.filter(k =>
+            !k.historic && !isArrayKey(k) &&
+            (k.valueMappings || !k.dataType || k.dataType === 'string' || k.dataType === 'json'));
+        const isPlaceholderSql = k => (k.dataType === 'json' && !k.valueMappings) ?
+            `JSON_VALUE(\`${outName(k)}\`) = ${placeholderSql}` :
+            `\`${outName(k)}\` = ${placeholderSql}`;
+
         /* Cast raw columns to match the data type in dataSchema.*/
         function airbyteKeyCast(key) {
             /* Arrays are handled first: the scalar historic/valueMappings branches below would
@@ -275,7 +287,8 @@ module.exports = (params) => {
                       ${data_functions.stringToDate(s)}
                     )`;
                 case 'json':
-                    return `SAFE.PARSE_JSON(${s})`;
+                    /* keep the placeholder as a json string, otherwise SAFE.PARSE_JSON turns it into NULL and we can't spot it */
+                    return `IF(${s} = ${placeholderSql}, TO_JSON(${placeholderSql}), SAFE.PARSE_JSON(${s}))`;
                 default:
                     return s; // string / undefined
             }
@@ -429,6 +442,9 @@ module.exports = (params) => {
                     `combined_with_current_versions` :
                     (injectLegacy ? `merged_full_history` : `source_data`);
 
+                /* versionInput but with the placeholders filled in (if any keys can have one) */
+                const filledInput = placeholderKeys.length > 0 ? `placeholders_filled` : versionInput;
+
                 return `
         
 WITH
@@ -547,6 +563,43 @@ ${ctx.incremental() ? `
   ),
 ` : ``}
 
+${ctx.incremental() && placeholderKeys.length > 0 ? `
+  saved_current AS (
+  /* the saved current versions, so a replayed event with the same timestamp can still be filled
+     after combined_with_current_versions drops the saved copy */
+    SELECT
+      \`${primaryKey}\` AS _saved_pk,
+      ${orderCol} AS _saved_order,
+      ${placeholderKeys.map((k, i) => `\`${outName(k)}\` AS _saved_${i}`).join(',\n      ')}
+    FROM ${ctx.self()}
+    WHERE valid_to IS NULL
+  ),
+` : ``}
+${placeholderKeys.length > 0 ? `
+  placeholders_filled AS (
+  /* swap placeholders for the entity's previous value. it's wrapped in a STRUCT so a real NULL still counts.
+     on incremental runs the open version from self() gives the previous value. if there's nothing earlier
+     (a replayed event), it falls back to the saved current version with the same timestamp */
+    SELECT * EXCEPT (${placeholderKeys.map((k, i) => `_prev_${i}`).join(', ')}) REPLACE (
+      ${placeholderKeys.map((k, i) => `IF(${isPlaceholderSql(k)} AND _prev_${i} IS NOT NULL, _prev_${i}.v, \`${outName(k)}\`) AS \`${outName(k)}\``).join(',\n      ')}
+    )
+    FROM (
+      SELECT
+        src.*,
+        ${placeholderKeys.map((k, i) => `COALESCE(LAST_VALUE(${ctx.incremental() ?
+          `IF(deleted_at IS NOT NULL OR (${isPlaceholderSql(k)} AND saved_current._saved_pk IS NULL), NULL, STRUCT(IF(${isPlaceholderSql(k)}, saved_current._saved_${i}, \`${outName(k)}\`) AS v))` :
+          `IF(${isPlaceholderSql(k)} OR deleted_at IS NOT NULL, NULL, STRUCT(\`${outName(k)}\` AS v))`} IGNORE NULLS) OVER (
+          PARTITION BY \`${primaryKey}\`
+          ORDER BY ${orderAsc}
+          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        )${ctx.incremental() ? `, IF(saved_current._saved_pk IS NULL, NULL, STRUCT(saved_current._saved_${i} AS v))` : `, NULL`}) AS _prev_${i}`).join(',\n        ')}
+      FROM ${versionInput} AS src${ctx.incremental() ? `
+      LEFT JOIN saved_current
+        ON saved_current._saved_pk = src.\`${primaryKey}\`
+        AND saved_current._saved_order = src.${orderCol}` : ``}
+    )
+  ),
+` : ``}
   deletions AS (
     /* Filter out deletion rows, they signal that the previous version ended. Keep them in a separate CTE.
        On the full-refresh legacy build, legacy_deletions is unioned in here so pre-cutoff deletions use the same channel.*/
@@ -555,7 +608,7 @@ ${ctx.incremental() ? `
     MAX(deleted_at) AS deleted_at
     FROM (
         SELECT ${primaryKey}, deleted_at
-        FROM ${versionInput}
+        FROM ${filledInput}
         WHERE deleted_at IS NOT NULL
         ${injectLegacy ? `
         UNION ALL
@@ -585,13 +638,13 @@ ${ctx.incremental() ? `
         SELECT
           *,
           TO_JSON_STRING((SELECT AS STRUCT ${payloadCols})) AS _payload
-        FROM ${versionInput}
+        FROM ${filledInput}
         WHERE deleted_at IS NULL
       )
     )
     WHERE _payload IS DISTINCT FROM _prev_payload` : `
     SELECT *
-    FROM ${versionInput}
+    FROM ${filledInput}
     WHERE deleted_at IS NULL`}
   )
     SELECT

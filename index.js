@@ -90,34 +90,36 @@ module.exports = (params) => {
         }], // an array of day or date ranges between which some assertions will be disabled if other parameters are set to disable them. Each range is a hash containing either the integer values fromDay, fromMonth, toDay and toMonth *or* the date values fromDate and toDate. Defaults to an approximation to school holidays each year.
 
         enableAirbyteSource: false, // Master switch for Airbyte processing
-        hasTimestamps: true,       // global default; set to false for non-Rails services without created_at/updated_at
-        versionOrderBy: null,      // 'updated_at' or 'cdc'; null uses updated_at for entities with timestamps, cdc otherwise
+        hasTimestamps: true, // global default; set to false for non-Rails services without created_at/updated_at
+        versionOrderBy: null, // 'updated_at' or 'cdc'; null uses updated_at for entities with timestamps, cdc otherwise
 
         airbyteConfig: {
             datasetName: null, // name of the BigQuery dataset that Airbyte streams data into
             tablePrefix: '', // prefix for Airbyte table names (e.g., '_airbyte_raw_')
             tableSuffix: '_airbyte', // Suffix for Airbyte output tables (to distinguish from dfe-analytics)
             defaultPrimaryKeyField: 'id', // Default primary key field name (can be overridden per entity via tableSchema.primaryKey)
-            
+            unavailableValuePlaceholder: '__debezium_unavailable_value', // what debezium sends for big columns that didn't change, gets swapped for the previous value in the version tables
+            fieldUpdatesIncludeEntityColumns: false, // if true, airbyte field updates tables also get the entity's columns (like the legacy ones)
+
         },
 
         enabledAirbyteLegacyMerge: false,
         airbyteLegacyMergeCutoff: null,
 
         airbyteHeartbeat: {
-                freshnessHours: 12, // Number of hours to wait before triggering an assertion failure, if no new data has been received from Airbyte
-                datasetName: null, // name of the BigQuery dataset for heartbeat data.
-                tableName: 'airbyte_heartbeat', // name of the heartbeat table
-                disableFreshnessCheckDuringRange: false // Boolean. If true, disables the heartbeat freshness check assertion during the date ranges specified in assertionDisableDuringDateRanges
+            freshnessHours: 12, // Number of hours to wait before triggering an assertion failure, if no new data has been received from Airbyte
+            datasetName: null, // name of the BigQuery dataset for heartbeat data.
+            tableName: 'airbyte_heartbeat', // name of the heartbeat table
+            disableFreshnessCheckDuringRange: false // Boolean. If true, disables the heartbeat freshness check assertion during the date ranges specified in assertionDisableDuringDateRanges
         },
 
         airbyteReconciliation: {
-                enabled: false,                       // opt-in, like enableAirbyteSource itself
-                minLiveFraction: 0.8,                 // snapshot mass threshold vs live rows
-                maxDeleteFraction: 0.2,               // circuit breaker trip level
-                minSnapshotAgeMinutes: 60,            // in-flight snapshot guard
-                detectionWindowDays: 7,               // raw-table scan window (partition pruning)
-                forceReconcileSnapshotLsn: null       // one-shot guard override; set, run, remove
+            enabled: false, // opt-in, like enableAirbyteSource itself
+            minLiveFraction: 0.8, // snapshot mass threshold vs live rows
+            maxDeleteFraction: 0.2, // circuit breaker trip level
+            minSnapshotAgeMinutes: 60, // in-flight snapshot guard
+            detectionWindowDays: 7, // raw-table scan window (partition pruning)
+            forceReconcileSnapshotLsn: null // one-shot guard override; set, run, remove
         },
 
         ...params
@@ -154,7 +156,7 @@ module.exports = (params) => {
         customEventDataNotFresh: customEventDataNotFresh(params),
         dfeAnalyticsConfiguration: dfeAnalyticsConfiguration(params),
         version
-        };
+    };
 
     // EXISTING: dfe-analytics processing
     // Publish and return datasets - assertions first for quick access in the Dataform UI
