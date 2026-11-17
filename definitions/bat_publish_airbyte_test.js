@@ -61,7 +61,8 @@ dfeAnalyticsDataform({
     airbyteAudit: {
         enabled: true,
         auditsTableName: 'audit',
-        matchToleranceSeconds: 5
+        matchToleranceSeconds: 5,
+        backfill: true
     },
 
     dataSchema: [{
