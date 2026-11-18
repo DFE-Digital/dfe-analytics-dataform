@@ -445,6 +445,10 @@ module.exports = (params) => {
                 /* versionInput but with the placeholders filled in (if any keys can have one) */
                 const filledInput = placeholderKeys.length > 0 ? `placeholders_filled` : versionInput;
 
+                /* on incremental runs with placeholder keys, the saved copy of a replayed row is kept (flagged)
+                   instead of dropped, so placeholders_filled can use it, then it's dropped there */
+                const keepSavedCopies = ctx.incremental() && placeholderKeys.length > 0;
+
                 return `
         
 WITH
@@ -544,60 +548,51 @@ ${ctx.incremental() ? `
   /* Re-read current versions from self() (partition 0 only).
      NOT EXISTS excludes any row whose (primaryKey, ordering timestamp) already exists in source_data.
      This handles full syncs that arrive days later: source_data's copy of the row wins, and the stale self() copy is dropped before any window functions run. 
-     Without this,the QUALIFY in source_data would not help because it only deduplicates within the new batch, it cannot see rows already sitting in self(). */
-    SELECT * FROM source_data
+     Without this,the QUALIFY in source_data would not help because it only deduplicates within the new batch, it cannot see rows already sitting in self().
+     if the entity has placeholder keys the self() copy is kept and flagged instead, placeholders_filled uses it then drops it. */
+    SELECT *${keepSavedCopies ? `, FALSE AS _is_saved_copy` : ``} FROM source_data
     
     UNION ALL
 
-    SELECT * EXCEPT (valid_from, valid_to, is_deleted, is_current, version_number)
+    SELECT * EXCEPT (valid_from, valid_to, is_deleted, is_current, version_number)${keepSavedCopies ? `,
+      EXISTS (
+        SELECT 1
+        FROM source_data s
+        WHERE s.${primaryKey} = ${ctx.self()}.${primaryKey}
+          AND s.${orderCol} = ${ctx.self()}.${orderCol}
+      ) AS _is_saved_copy` : ``}
     FROM ${ctx.self()}
     WHERE
-      valid_to IS NULL
+      valid_to IS NULL${keepSavedCopies ? `` : `
       AND NOT EXISTS (
         SELECT 1
         FROM source_data s
         WHERE s.${primaryKey} = ${ctx.self()}.${primaryKey}
           AND s.${orderCol} 
             = ${ctx.self()}.${orderCol}
-      )
+      )`}
   ),
 ` : ``}
 
-${ctx.incremental() && placeholderKeys.length > 0 ? `
-  saved_current AS (
-  /* the saved current versions, so a replayed event with the same timestamp can still be filled
-     after combined_with_current_versions drops the saved copy */
-    SELECT
-      \`${primaryKey}\` AS _saved_pk,
-      ${orderCol} AS _saved_order,
-      ${placeholderKeys.map((k, i) => `\`${outName(k)}\` AS _saved_${i}`).join(',\n      ')}
-    FROM ${ctx.self()}
-    WHERE valid_to IS NULL
-  ),
-` : ``}
 ${placeholderKeys.length > 0 ? `
   placeholders_filled AS (
   /* swap placeholders for the entity's previous value. it's wrapped in a STRUCT so a real NULL still counts.
-     on incremental runs the open version from self() gives the previous value. if there's nothing earlier
-     (a replayed event), it falls back to the saved current version with the same timestamp */
-    SELECT * EXCEPT (${placeholderKeys.map((k, i) => `_prev_${i}`).join(', ')}) REPLACE (
+     on incremental runs the open version from self() gives the previous value. for a replayed event the
+     saved copy (same timestamp) is sorted just before it so it gives the value, then it's dropped */
+    SELECT * EXCEPT (${placeholderKeys.map((k, i) => `_prev_${i}`).join(', ')}${keepSavedCopies ? `, _is_saved_copy` : ``}) REPLACE (
       ${placeholderKeys.map((k, i) => `IF(${isPlaceholderSql(k)} AND _prev_${i} IS NOT NULL, _prev_${i}.v, \`${outName(k)}\`) AS \`${outName(k)}\``).join(',\n      ')}
     )
     FROM (
       SELECT
-        src.*,
-        ${placeholderKeys.map((k, i) => `COALESCE(LAST_VALUE(${ctx.incremental() ?
-          `IF(deleted_at IS NOT NULL OR (${isPlaceholderSql(k)} AND saved_current._saved_pk IS NULL), NULL, STRUCT(IF(${isPlaceholderSql(k)}, saved_current._saved_${i}, \`${outName(k)}\`) AS v))` :
-          `IF(${isPlaceholderSql(k)} OR deleted_at IS NOT NULL, NULL, STRUCT(\`${outName(k)}\` AS v))`} IGNORE NULLS) OVER (
+        *,
+        ${placeholderKeys.map((k, i) => `LAST_VALUE(IF(${isPlaceholderSql(k)} OR deleted_at IS NOT NULL, NULL, STRUCT(\`${outName(k)}\` AS v)) IGNORE NULLS) OVER (
           PARTITION BY \`${primaryKey}\`
-          ORDER BY ${orderAsc}
+          ORDER BY ${keepSavedCopies ? `${orderCol} ASC, _is_saved_copy DESC, ` : ``}${orderAsc}
           ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-        )${ctx.incremental() ? `, IF(saved_current._saved_pk IS NULL, NULL, STRUCT(saved_current._saved_${i} AS v))` : `, NULL`}) AS _prev_${i}`).join(',\n        ')}
-      FROM ${versionInput} AS src${ctx.incremental() ? `
-      LEFT JOIN saved_current
-        ON saved_current._saved_pk = src.\`${primaryKey}\`
-        AND saved_current._saved_order = src.${orderCol}` : ``}
-    )
+        ) AS _prev_${i}`).join(',\n        ')}
+      FROM ${versionInput}
+    )${keepSavedCopies ? `
+    WHERE NOT _is_saved_copy` : ``}
   ),
 ` : ``}
   deletions AS (
