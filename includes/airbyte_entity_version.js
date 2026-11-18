@@ -219,6 +219,18 @@ module.exports = (params) => {
             }
         });
 
+        /* debezium sends this placeholder instead of the value when a big postgres column (text/jsonb) didn't
+           change and the table isn't REPLICA IDENTITY FULL. it just means no change, so placeholders_filled
+           swaps it for the previous value. only string/json/valueMappings keys, not arrays */
+        const unavailablePlaceholder = params.airbyteConfig.unavailableValuePlaceholder || '__debezium_unavailable_value';
+        const placeholderSql = `'${unavailablePlaceholder.replace(/'/g, "\\'")}'`;
+        const placeholderKeys = mergeKeys.filter(k =>
+            !k.historic && !isArrayKey(k) &&
+            (k.valueMappings || !k.dataType || k.dataType === 'string' || k.dataType === 'json'));
+        const isPlaceholderSql = k => (k.dataType === 'json' && !k.valueMappings) ?
+            `JSON_VALUE(\`${outName(k)}\`) = ${placeholderSql}` :
+            `\`${outName(k)}\` = ${placeholderSql}`;
+
         /* Cast raw columns to match the data type in dataSchema.*/
         function airbyteKeyCast(key) {
             /* Arrays are handled first: the scalar historic/valueMappings branches below would
@@ -278,7 +290,8 @@ module.exports = (params) => {
                       ${data_functions.stringToDate(s)}
                     )`;
                 case 'json':
-                    return `SAFE.PARSE_JSON(${s})`;
+                    /* keep the placeholder as a json string, otherwise SAFE.PARSE_JSON turns it into NULL and we can't spot it */
+                    return `IF(${s} = ${placeholderSql}, TO_JSON(${placeholderSql}), SAFE.PARSE_JSON(${s}))`;
                 default:
                     return s; // string / undefined
             }
@@ -384,7 +397,7 @@ module.exports = (params) => {
                         ...(auditLinked ? {
                             request_uuid: "request_uuid of the web request linked to this version via the audits table. NULL until the audit-link apply operation runs, or if no matching audit was found.",
                             audit_id: "Primary key of the audits record linked to this version. NULL until linked."
-                        } : {}),    
+                        } : {}),
                     },
                     ...(entitySchema.keys ? parameterFunctions.getKeyColumns(entitySchema.keys) : [])
                 ),
@@ -440,6 +453,13 @@ module.exports = (params) => {
                 const versionInput = ctx.incremental() ?
                     `combined_with_current_versions` :
                     (injectLegacy ? `merged_full_history` : `source_data`);
+
+                /* versionInput but with the placeholders filled in (if any keys can have one) */
+                const filledInput = placeholderKeys.length > 0 ? `placeholders_filled` : versionInput;
+
+                /* on incremental runs with placeholder keys, the saved copy of a replayed row is kept (flagged)
+                   instead of dropped, so placeholders_filled can use it, then it's dropped there */
+                const keepSavedCopies = ctx.incremental() && placeholderKeys.length > 0;
 
                 return `
         
@@ -546,8 +566,9 @@ ${ctx.incremental() ? `
   /* Re-read current versions from self() (partition 0 only).
      NOT EXISTS excludes any row whose (primaryKey, ordering timestamp) already exists in source_data.
      This handles full syncs that arrive days later: source_data's copy of the row wins, and the stale self() copy is dropped before any window functions run. 
-     Without this,the QUALIFY in source_data would not help because it only deduplicates within the new batch, it cannot see rows already sitting in self(). */
-    SELECT ${auditLinked ? `source_data.* REPLACE (cur.request_uuid AS request_uuid, cur.audit_id AS audit_id)` : `source_data.*`}
+     Without this,the QUALIFY in source_data would not help because it only deduplicates within the new batch, it cannot see rows already sitting in self().
+     if the entity has placeholder keys the self() copy is kept and flagged instead, placeholders_filled uses it then drops it. */
+    SELECT ${auditLinked ? `source_data.* REPLACE (cur.request_uuid AS request_uuid, cur.audit_id AS audit_id)` : `source_data.*`}${keepSavedCopies ? `, FALSE AS _is_saved_copy` : ``}
     FROM source_data
     ${auditLinked ? `LEFT JOIN (
     SELECT ${primaryKey}, ${orderCol}, request_uuid, audit_id
@@ -556,19 +577,47 @@ ${ctx.incremental() ? `
     
     UNION ALL
 
-    SELECT ${versionColsSql} FROM ${ctx.self()}
+    SELECT ${versionColsSql}${keepSavedCopies ? `,
+      EXISTS (
+        SELECT 1
+        FROM source_data s
+        WHERE s.${primaryKey} = ${ctx.self()}.${primaryKey}
+          AND s.${orderCol} = ${ctx.self()}.${orderCol}
+      ) AS _is_saved_copy` : ``}
+    FROM ${ctx.self()}
     WHERE
-      valid_to IS NULL
+      valid_to IS NULL${keepSavedCopies ? `` : `
       AND NOT EXISTS (
         SELECT 1
         FROM source_data s
         WHERE s.${primaryKey} = ${ctx.self()}.${primaryKey}
           AND s.${orderCol} 
             = ${ctx.self()}.${orderCol}
-      )
+      )`}
   ),
 ` : ``}
 
+${placeholderKeys.length > 0 ? `
+  placeholders_filled AS (
+  /* swap placeholders for the entity's previous value. it's wrapped in a STRUCT so a real NULL still counts.
+     on incremental runs the open version from self() gives the previous value. for a replayed event the
+     saved copy (same timestamp) is sorted just before it so it gives the value, then it's dropped */
+    SELECT * EXCEPT (${placeholderKeys.map((k, i) => `_prev_${i}`).join(', ')}${keepSavedCopies ? `, _is_saved_copy` : ``}) REPLACE (
+      ${placeholderKeys.map((k, i) => `IF(${isPlaceholderSql(k)} AND _prev_${i} IS NOT NULL, _prev_${i}.v, \`${outName(k)}\`) AS \`${outName(k)}\``).join(',\n      ')}
+    )
+    FROM (
+      SELECT
+        *,
+        ${placeholderKeys.map((k, i) => `LAST_VALUE(IF(${isPlaceholderSql(k)} OR deleted_at IS NOT NULL, NULL, STRUCT(\`${outName(k)}\` AS v)) IGNORE NULLS) OVER (
+          PARTITION BY \`${primaryKey}\`
+          ORDER BY ${keepSavedCopies ? `${orderCol} ASC, _is_saved_copy DESC, ` : ``}${orderAsc}
+          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ) AS _prev_${i}`).join(',\n        ')}
+      FROM ${versionInput}
+    )${keepSavedCopies ? `
+    WHERE NOT _is_saved_copy` : ``}
+  ),
+` : ``}
   deletions AS (
     /* Filter out deletion rows, they signal that the previous version ended. Keep them in a separate CTE.
        On the full-refresh legacy build, legacy_deletions is unioned in here so pre-cutoff deletions use the same channel.*/
@@ -577,7 +626,7 @@ ${ctx.incremental() ? `
     MAX(deleted_at) AS deleted_at
     FROM (
         SELECT ${primaryKey}, deleted_at
-        FROM ${versionInput}
+        FROM ${filledInput}
         WHERE deleted_at IS NOT NULL
         ${injectLegacy ? `
         UNION ALL
@@ -607,13 +656,13 @@ ${ctx.incremental() ? `
         SELECT
           *,
           TO_JSON_STRING((SELECT AS STRUCT ${payloadCols})) AS _payload
-        FROM ${versionInput}
+        FROM ${filledInput}
         WHERE deleted_at IS NULL
       )
     )
     WHERE _payload IS DISTINCT FROM _prev_payload` : `
     SELECT *
-    FROM ${versionInput}
+    FROM ${filledInput}
     WHERE deleted_at IS NULL`}
   )
     SELECT
