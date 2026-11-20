@@ -14,6 +14,11 @@
      prior version exists to diff against.
    - key_updated reports the *output* (aliased) field name, matching the column names in the
      version and flattened tables, not the raw source column name.
+   - With the legacy merge on, the comparison between an entity's last legacy version and its
+     first Airbyte version is skipped. Legacy was sometimes stale or stored values differently
+     (e.g. 'not_set' vs NULL), so that comparison shows changes that never happened. Downside: a
+     real change made in that same first Airbyte version is dropped too. The version table still
+     has both versions.
 */
 
 const data_functions = require("./data_functions");
@@ -55,11 +60,14 @@ module.exports = (params) => {
             The filter line (.filter((c, i, all)...) ensures version table columns with the same name as a field
             updates column are skipped (field_updates works out itself: key_updated, new_value, update_id, etc).. */
         const includeEntityColumns = params.airbyteConfig.fieldUpdatesIncludeEntityColumns === true;
+        /* legacy versions have a NULL _airbyte_raw_id, so we can spot where legacy meets airbyte */
+        const skipLegacySeam = parameterFunctions.airbyteLegacyMergeEnabledFor(params, tableSchema);
         const versionHasTimestamps = tableSchema.hasTimestamps === undefined ?
             params.hasTimestamps === true :
             tableSchema.hasTimestamps === true;
         const fieldUpdateColumns = [primaryKey, 'occurred_at', 'update_id', 'key_updated', 'new_value', 'previous_value',
-            'previous_occurred_at', 'seconds_since_previous_update', 'seconds_since_created', 'version_number', 'new_data', 'previous_data'
+            'previous_occurred_at', 'seconds_since_previous_update', 'seconds_since_created', 'version_number', 'new_data', 'previous_data',
+            'from_legacy', 'previous_from_legacy'
         ];
         const entityColumns = includeEntityColumns ? [
             ...trackedKeys.map(outName),
@@ -93,12 +101,12 @@ module.exports = (params) => {
                    (ctx.ref below), so they don't need repeating here. The reconciliation apply
                    operation is not in the ref graph, so it does. */
                 dependencies: [
-                    ...(params.airbyteReconciliation.enabled
-                        ? [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName]
-                        : []),
-                    ...(airbyteAudits.isAuditLinkEnabled(params, tableSchema)
-                        ? [airbyteAudits.auditNames(params, tableSchema).applyOperationName]
-                        : [])
+                    ...(params.airbyteReconciliation.enabled ?
+                        [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName] :
+                        []),
+                    ...(airbyteAudits.isAuditLinkEnabled(params, tableSchema) ?
+                        [airbyteAudits.auditNames(params, tableSchema).applyOperationName] :
+                        [])
                 ],
                 ...(materialisation == 'table' ? {
                     assertions: {
@@ -121,7 +129,7 @@ module.exports = (params) => {
                     }
                 },
                 tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'field_updates'],
-                description: `[AIRBYTE] One row for each time a field was updated on a ${tableSchema.entityTableName} entity, giving the field name, its previous value and its new value. Derived from ${versionTableName} by comparing each version to the one immediately before it. An entity's first version, and changes to created_at/updated_at/${primaryKey}, are not included. ${tableSchema.description || ''}`,
+                description: `[AIRBYTE] One row for each time a field was updated on a ${tableSchema.entityTableName} entity, giving the field name, its previous value and its new value. Derived from ${versionTableName} by comparing each version to the one immediately before it. An entity's first version, and changes to created_at/updated_at/${primaryKey}, are not included.${skipLegacySeam ? ` The comparison between an entity's last legacy version and its first Airbyte version is skipped, as legacy values were sometimes stale or stored differently; a real change in that first Airbyte version is not included either.` : ``} ${tableSchema.description || ''}`,
                 columns: {
                     [primaryKey]: {
                         description: `Primary key of the ${tableSchema.entityTableName} entity that was updated.`,
@@ -147,7 +155,7 @@ module.exports = (params) => {
                         } : {})
                     } : {}),
                     seconds_since_previous_update: "The number of seconds between occurred_at and previous_occurred_at.",
-                    ...(auditLinked ? { 
+                    ...(auditLinked ? {
                         request_uuid: "UUID of the web request that caused this update, linked via the audits table. NULL if no matching audit was found (e.g. the change was made by a background job rather than a web request).",
                         request_user_id: "If a user was logged in when they sent a web request event that caused this update, then this is the UID of this user.",
                         request_method: "Whether the web request that caused this update was a GET or a POST request.",
@@ -163,7 +171,7 @@ module.exports = (params) => {
                         browser_version: "The version of the browser that caused this update.",
                         operating_system_name: "The name of the operating system that caused this update.",
                         operating_system_vendor: "The vendor of the operating system that caused this update.",
-                        operating_system_version: "The version of the operating system that caused this update." 
+                        operating_system_version: "The version of the operating system that caused this update."
                     } : {}),
                     ...(hasTimestamps ? {
                         seconds_since_created: "The number of seconds between occurred_at and created_at."
@@ -179,6 +187,7 @@ WITH versions_with_new_data AS (
     valid_from AS occurred_at,
     ${hasTimestamps ? `created_at,` : ``}
     ${entityCteColumnsSql}
+    ${skipLegacySeam ? `_airbyte_raw_id IS NULL AS from_legacy,` : ``}
     [${newDataStructSql}] AS new_data
   FROM
     ${ctx.ref(versionTableName)}
@@ -191,6 +200,8 @@ versions_with_field_arrays AS (
     ${hasTimestamps ? `created_at,` : ``}
     ${entityCteColumnsSql}
     new_data,
+    ${skipLegacySeam ? `from_legacy,
+    LAG(from_legacy) OVER versions_of_this_entity AS previous_from_legacy,` : ``}
     LAG(new_data) OVER versions_of_this_entity AS previous_data,
     LAG(occurred_at) OVER versions_of_this_entity AS previous_occurred_at
   FROM
@@ -219,7 +230,9 @@ FROM
   CROSS JOIN UNNEST(new_data) AS new_data_combined
   JOIN UNNEST(previous_data) AS previous_data_combined ON new_data_combined.key = previous_data_combined.key
 WHERE
-  IFNULL(new_data_combined.value, "null") != IFNULL(previous_data_combined.value, "null")
+  IFNULL(new_data_combined.value, "null") != IFNULL(previous_data_combined.value, "null")${skipLegacySeam ? `
+  /* skip the legacy -> airbyte comparison (see header) */
+  AND NOT (IFNULL(previous_from_legacy, FALSE) AND NOT from_legacy)` : ``}
 )
 ${auditLinked ? `
 SELECT

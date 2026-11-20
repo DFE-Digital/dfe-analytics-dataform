@@ -158,6 +158,8 @@ In addition to step 13 of the setup instructions, the following Airbyte-related 
 
 ```airbyteLegacyMergeCutoff``` - date string (`'YYY-MM-DD'`). Only legacy rows with `valid_from` on or before this date are included in the merge. Required when `enabledAirbyteLegacyMerge` is `true`. Run as a full refresh the first time to seed the legacy data.
 
+When the legacy merge is on, the Airbyte ```_field_updates_``` tables skip the comparison between each entity's last legacy version and its first Airbyte version (the migration boundary). Legacy data was sometimes stale (e.g. changes that never came through the event stream) or stored values differently (e.g. ```'not_set'``` vs ```NULL```), so that comparison would show changes that never happened. The trade-off is that a genuine change made in that same first Airbyte version is not included in the field updates either. The version table still has both versions, so nothing is lost there.
+
 ## Updating to a new version
 Users are notified through internal channels when a new version of ```dfe-analytics-dataform``` is released. To update:
 1. In your Dataform project, modify your ```package.json``` file to change the version number in this line from the version number you are currently using to the version number you wish to update to:
