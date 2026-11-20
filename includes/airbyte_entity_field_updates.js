@@ -14,11 +14,14 @@
      prior version exists to diff against.
    - key_updated reports the *output* (aliased) field name, matching the column names in the
      version and flattened tables, not the raw source column name.
-   - With the legacy merge on, the comparison between an entity's last legacy version and its
-     first Airbyte version is skipped. Legacy was sometimes stale or stored values differently
-     (e.g. 'not_set' vs NULL), so that comparison shows changes that never happened. Downside: a
-     real change made in that same first Airbyte version is dropped too. The version table still
-     has both versions.
+   - With the legacy merge on, for entities ordered by CDC time (versionOrderBy 'cdc'), the
+     comparison between an entity's last legacy version and its first Airbyte version is skipped.
+     There the first Airbyte version is the snapshot from when Airbyte first read the row, and
+     legacy was sometimes stale or stored values differently (e.g. 'not_set' vs NULL), so that
+     comparison shows changes that never happened. Downside: a real change made in that same first
+     Airbyte version is dropped too. Not skipped for entities ordered by updated_at: there the
+     first Airbyte version is dated by the row's last real write (often well before the cutoff),
+     so that comparison is a real change. The version table still has both versions.
 */
 
 const data_functions = require("./data_functions");
@@ -60,11 +63,16 @@ module.exports = (params) => {
             The filter line (.filter((c, i, all)...) ensures version table columns with the same name as a field
             updates column are skipped (field_updates works out itself: key_updated, new_value, update_id, etc).. */
         const includeEntityColumns = params.airbyteConfig.fieldUpdatesIncludeEntityColumns === true;
-        /* legacy versions have a NULL _airbyte_raw_id, so we can spot where legacy meets airbyte */
-        const skipLegacySeam = parameterFunctions.airbyteLegacyMergeEnabledFor(params, tableSchema);
         const versionHasTimestamps = tableSchema.hasTimestamps === undefined ?
             params.hasTimestamps === true :
             tableSchema.hasTimestamps === true;
+        /* same rule the version table uses to pick its ordering column */
+        const versionOrderBy = tableSchema.versionOrderBy ||
+            (versionHasTimestamps ? (params.versionOrderBy || 'updated_at') : 'cdc');
+        /* legacy versions have a NULL _airbyte_raw_id, so we can spot where legacy meets airbyte.
+           only skipped for cdc-ordered entities (see header) */
+        const skipLegacySeam = parameterFunctions.airbyteLegacyMergeEnabledFor(params, tableSchema) &&
+            versionOrderBy === 'cdc';
         const fieldUpdateColumns = [primaryKey, 'occurred_at', 'update_id', 'key_updated', 'new_value', 'previous_value',
             'previous_occurred_at', 'seconds_since_previous_update', 'seconds_since_created', 'version_number', 'new_data', 'previous_data',
             'is_legacy_version', 'previous_is_legacy_version'
