@@ -67,7 +67,7 @@ module.exports = (params) => {
             tableSchema.hasTimestamps === true;
         const fieldUpdateColumns = [primaryKey, 'occurred_at', 'update_id', 'key_updated', 'new_value', 'previous_value',
             'previous_occurred_at', 'seconds_since_previous_update', 'seconds_since_created', 'version_number', 'new_data', 'previous_data',
-            'from_legacy', 'previous_from_legacy'
+            'is_legacy_version', 'previous_is_legacy_version'
         ];
         const entityColumns = includeEntityColumns ? [
             ...trackedKeys.map(outName),
@@ -101,12 +101,12 @@ module.exports = (params) => {
                    (ctx.ref below), so they don't need repeating here. The reconciliation apply
                    operation is not in the ref graph, so it does. */
                 dependencies: [
-                    ...(params.airbyteReconciliation.enabled ?
-                        [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName] :
-                        []),
-                    ...(airbyteAudits.isAuditLinkEnabled(params, tableSchema) ?
-                        [airbyteAudits.auditNames(params, tableSchema).applyOperationName] :
-                        [])
+                    ...(params.airbyteReconciliation.enabled
+                        ? [airbyteReconciliation.reconciliationNames(params, tableSchema).applyOperationName]
+                        : []),
+                    ...(airbyteAudits.isAuditLinkEnabled(params, tableSchema)
+                        ? [airbyteAudits.auditNames(params, tableSchema).applyOperationName]
+                        : [])
                 ],
                 ...(materialisation == 'table' ? {
                     assertions: {
@@ -187,7 +187,7 @@ WITH versions_with_new_data AS (
     valid_from AS occurred_at,
     ${hasTimestamps ? `created_at,` : ``}
     ${entityCteColumnsSql}
-    ${skipLegacySeam ? `_airbyte_raw_id IS NULL AS from_legacy,` : ``}
+    ${skipLegacySeam ? `_airbyte_raw_id IS NULL AS is_legacy_version,` : ``}
     [${newDataStructSql}] AS new_data
   FROM
     ${ctx.ref(versionTableName)}
@@ -200,8 +200,8 @@ versions_with_field_arrays AS (
     ${hasTimestamps ? `created_at,` : ``}
     ${entityCteColumnsSql}
     new_data,
-    ${skipLegacySeam ? `from_legacy,
-    LAG(from_legacy) OVER versions_of_this_entity AS previous_from_legacy,` : ``}
+    ${skipLegacySeam ? `is_legacy_version,
+    LAG(is_legacy_version) OVER versions_of_this_entity AS previous_is_legacy_version,` : ``}
     LAG(new_data) OVER versions_of_this_entity AS previous_data,
     LAG(occurred_at) OVER versions_of_this_entity AS previous_occurred_at
   FROM
@@ -232,7 +232,7 @@ FROM
 WHERE
   IFNULL(new_data_combined.value, "null") != IFNULL(previous_data_combined.value, "null")${skipLegacySeam ? `
   /* skip the legacy -> airbyte comparison (see header) */
-  AND NOT (IFNULL(previous_from_legacy, FALSE) AND NOT from_legacy)` : ``}
+  AND NOT (IFNULL(previous_is_legacy_version, FALSE) AND NOT is_legacy_version)` : ``}
 )
 ${auditLinked ? `
 SELECT
