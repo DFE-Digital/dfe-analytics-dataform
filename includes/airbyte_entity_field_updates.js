@@ -14,14 +14,16 @@
      prior version exists to diff against.
    - key_updated reports the *output* (aliased) field name, matching the column names in the
      version and flattened tables, not the raw source column name.
-   - With the legacy merge on, for entities ordered by CDC time (versionOrderBy 'cdc'), the
-     comparison between an entity's last legacy version and its first Airbyte version is skipped.
-     There the first Airbyte version is the snapshot from when Airbyte first read the row, and
-     legacy was sometimes stale or stored values differently (e.g. 'not_set' vs NULL), so that
-     comparison shows changes that never happened. Downside: a real change made in that same first
-     Airbyte version is dropped too. Not skipped for entities ordered by updated_at: there the
-     first Airbyte version is dated by the row's last real write (often well before the cutoff),
-     so that comparison is a real change. The version table still has both versions.
+   - With the legacy merge on, the comparison between an entity's last legacy version and its
+     first Airbyte version (the seam) is not made against the Airbyte row. Legacy and Airbyte store
+     some values differently (e.g. NULL vs '', or codes vs labels), so comparing across them shows
+     changes that never happened. Instead, the last legacy version is compared with legacy's own
+     copy of that same database write (the "echo": a legacy version a few ms after the first
+     Airbyte version, which the version model drops as a duplicate but is still in the legacy
+     version table). Both sides are then in legacy format, so only real changes show up, dated at
+     the first Airbyte version. Where legacy has no echo (legacy never saw that write, or the first
+     Airbyte version is just the snapshot taken at the cutoff), the seam comparison is skipped.
+     Every other comparison is unchanged: legacy vs legacy before the seam, Airbyte vs Airbyte after.
 */
 
 const data_functions = require("./data_functions");
@@ -66,13 +68,13 @@ module.exports = (params) => {
         const versionHasTimestamps = tableSchema.hasTimestamps === undefined ?
             params.hasTimestamps === true :
             tableSchema.hasTimestamps === true;
-        /* same rule the version table uses to pick its ordering column */
-        const versionOrderBy = tableSchema.versionOrderBy ||
-            (versionHasTimestamps ? (params.versionOrderBy || 'updated_at') : 'cdc');
         /* legacy versions have a NULL _airbyte_raw_id, so we can spot where legacy meets airbyte.
-           only skipped for cdc-ordered entities (see header) */
-        const skipLegacySeam = parameterFunctions.airbyteLegacyMergeEnabledFor(params, tableSchema) &&
-            versionOrderBy === 'cdc';
+           at that point the comparison uses legacy's echo of the write instead (see header) */
+        const legacySeam = parameterFunctions.airbyteLegacyMergeEnabledFor(params, tableSchema);
+        const legacyModel = `${tableSchema.entityTableName}_version_${params.eventSourceName}`;
+        /* how long after the first airbyte version legacy's echo of the same write can be. it's
+           normally a few ms (legacy valid_from is the event's occurred_at) */
+        const echoWindowSeconds = 5;
         const fieldUpdateColumns = [primaryKey, 'occurred_at', 'update_id', 'key_updated', 'new_value', 'previous_value',
             'previous_occurred_at', 'seconds_since_previous_update', 'seconds_since_created', 'version_number', 'new_data', 'previous_data',
             'is_legacy_version', 'previous_is_legacy_version'
@@ -97,6 +99,19 @@ module.exports = (params) => {
         const newDataStructSql = trackedKeys.map(k => {
             const col = outName(k);
             const valueSql = (k.dataType === 'json' || k.isArray) ?
+                `TO_JSON_STRING(\`${col}\`)` :
+                `CAST(\`${col}\` AS STRING)`;
+            return `STRUCT('${col}' AS key, ${valueSql} AS value)`;
+        }).join(',\n      ');
+
+        /* same struct read from the legacy version table, for the seam comparison. the legacy table has
+           the same column names and types (the version model unions the two), only array keys need
+           sorting the same way the version model sorts them */
+        const legacyDataStructSql = trackedKeys.map(k => {
+            const col = outName(k);
+            const valueSql = k.isArray ?
+                `TO_JSON_STRING(ARRAY(SELECT x FROM UNNEST(\`${col}\`) AS x WHERE x IS NOT NULL ORDER BY x))` :
+                k.dataType === 'json' ?
                 `TO_JSON_STRING(\`${col}\`)` :
                 `CAST(\`${col}\` AS STRING)`;
             return `STRUCT('${col}' AS key, ${valueSql} AS value)`;
@@ -137,7 +152,7 @@ module.exports = (params) => {
                     }
                 },
                 tags: [params.eventSourceName.toLowerCase(), 'airbyte', 'field_updates'],
-                description: `[AIRBYTE] One row for each time a field was updated on a ${tableSchema.entityTableName} entity, giving the field name, its previous value and its new value. Derived from ${versionTableName} by comparing each version to the one immediately before it. An entity's first version, and changes to created_at/updated_at/${primaryKey}, are not included.${skipLegacySeam ? ` The comparison between an entity's last legacy version and its first Airbyte version is skipped, as legacy values were sometimes stale or stored differently; a real change in that first Airbyte version is not included either.` : ``} ${tableSchema.description || ''}`,
+                description: `[AIRBYTE] One row for each time a field was updated on a ${tableSchema.entityTableName} entity, giving the field name, its previous value and its new value. Derived from ${versionTableName} by comparing each version to the one immediately before it. An entity's first version, and changes to created_at/updated_at/${primaryKey}, are not included.${legacySeam ? ` At the point an entity moves from legacy to Airbyte versions, the last legacy version is compared with legacy's own copy of that first Airbyte write (so both sides are in the same format), and the comparison is skipped where legacy has no copy.` : ``} ${tableSchema.description || ''}`,
                 columns: {
                     [primaryKey]: {
                         description: `Primary key of the ${tableSchema.entityTableName} entity that was updated.`,
@@ -195,12 +210,12 @@ WITH versions_with_new_data AS (
     valid_from AS occurred_at,
     ${hasTimestamps ? `created_at,` : ``}
     ${entityCteColumnsSql}
-    ${skipLegacySeam ? `_airbyte_raw_id IS NULL AS is_legacy_version,` : ``}
+    ${legacySeam ? `_airbyte_raw_id IS NULL AS is_legacy_version,` : ``}
     [${newDataStructSql}] AS new_data
   FROM
     ${ctx.ref(versionTableName)}
 ),
-versions_with_field_arrays AS (
+${legacySeam ? `versions_with_field_arrays_before_seam_swap` : `versions_with_field_arrays`} AS (
   SELECT
     ${primaryKey},
     ${auditLinked ? `request_uuid,` : ``}
@@ -208,7 +223,7 @@ versions_with_field_arrays AS (
     ${hasTimestamps ? `created_at,` : ``}
     ${entityCteColumnsSql}
     new_data,
-    ${skipLegacySeam ? `is_legacy_version,
+    ${legacySeam ? `is_legacy_version,
     LAG(is_legacy_version) OVER versions_of_this_entity AS previous_is_legacy_version,` : ``}
     LAG(new_data) OVER versions_of_this_entity AS previous_data,
     LAG(occurred_at) OVER versions_of_this_entity AS previous_occurred_at
@@ -221,6 +236,53 @@ versions_with_field_arrays AS (
     ORDER BY occurred_at ASC
   )
 ),
+${legacySeam ? `
+legacy_versions AS (
+  /* the original (unmerged) legacy version table, which still has the echoes */
+  SELECT
+    CAST(${primaryKey} AS STRING) AS ${primaryKey},
+    valid_from,
+    [${legacyDataStructSql}] AS legacy_data
+  FROM
+    ${ctx.ref(legacyModel)}
+),
+seam_swaps AS (
+  /* at the seam, take both sides from the legacy table: the last legacy version, and legacy's echo
+     of the first airbyte write (the earliest legacy version within the window after it) */
+  SELECT
+    v.${primaryKey},
+    v.occurred_at,
+    previous_legacy.legacy_data AS seam_previous_data,
+    echo.legacy_data AS seam_new_data
+  FROM
+    versions_with_field_arrays_before_seam_swap AS v
+    JOIN legacy_versions AS previous_legacy
+      ON previous_legacy.${primaryKey} = CAST(v.${primaryKey} AS STRING)
+      AND previous_legacy.valid_from = v.previous_occurred_at
+    JOIN legacy_versions AS echo
+      ON echo.${primaryKey} = CAST(v.${primaryKey} AS STRING)
+      AND echo.valid_from BETWEEN v.occurred_at AND TIMESTAMP_ADD(v.occurred_at, INTERVAL ${echoWindowSeconds} SECOND)
+  WHERE
+    IFNULL(v.previous_is_legacy_version, FALSE) AND NOT v.is_legacy_version
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY v.${primaryKey}, v.occurred_at ORDER BY echo.valid_from ASC) = 1
+),
+versions_with_field_arrays AS (
+  /* every comparison as normal, except the seam: swap in the legacy pair where there's an echo,
+     and drop the seam comparison where there isn't one */
+  SELECT
+    v.* REPLACE (
+      IF(s.${primaryKey} IS NOT NULL, s.seam_new_data, v.new_data) AS new_data,
+      IF(s.${primaryKey} IS NOT NULL, s.seam_previous_data, v.previous_data) AS previous_data
+    )
+  FROM
+    versions_with_field_arrays_before_seam_swap AS v
+    LEFT JOIN seam_swaps AS s
+      ON s.${primaryKey} = v.${primaryKey}
+      AND s.occurred_at = v.occurred_at
+  WHERE
+    NOT (IFNULL(v.previous_is_legacy_version, FALSE) AND NOT v.is_legacy_version)
+    OR s.${primaryKey} IS NOT NULL
+),` : ``}
 field_updates AS (
   SELECT
   versions_with_field_arrays.${primaryKey},
@@ -238,9 +300,7 @@ FROM
   CROSS JOIN UNNEST(new_data) AS new_data_combined
   JOIN UNNEST(previous_data) AS previous_data_combined ON new_data_combined.key = previous_data_combined.key
 WHERE
-  IFNULL(new_data_combined.value, "null") != IFNULL(previous_data_combined.value, "null")${skipLegacySeam ? `
-  /* skip the legacy -> airbyte comparison (see header) */
-  AND NOT (IFNULL(previous_is_legacy_version, FALSE) AND NOT is_legacy_version)` : ``}
+  IFNULL(new_data_combined.value, "null") != IFNULL(previous_data_combined.value, "null")
 )
 ${auditLinked ? `
 SELECT
