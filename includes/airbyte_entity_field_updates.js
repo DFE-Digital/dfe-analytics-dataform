@@ -24,6 +24,8 @@
      the first Airbyte version. Where legacy has no echo (legacy never saw that write, or the first
      Airbyte version is just the snapshot taken at the cutoff), the seam comparison is skipped.
      Every other comparison is unchanged: legacy vs legacy before the seam, Airbyte vs Airbyte after.
+     Because both sides of the seam come from legacy, new_value on a seam row is the legacy value, so
+     fields stored differently in Airbyte (e.g. codes vs labels) show the legacy form on that row.
 */
 
 const data_functions = require("./data_functions");
@@ -73,7 +75,10 @@ module.exports = (params) => {
         const legacySeam = parameterFunctions.airbyteLegacyMergeEnabledFor(params, tableSchema);
         const legacyModel = `${tableSchema.entityTableName}_version_${params.eventSourceName}`;
         /* how long after the first airbyte version legacy's echo of the same write can be. it's
-           normally a few ms (legacy valid_from is the event's occurred_at) */
+           normally a few ms (legacy valid_from is the event's occurred_at). checked on Publish
+           course_enrichment: nearly all echoes land within 5s, and where there's more than one legacy
+           row in the window the later ones are import_entity re-sends with identical data, so taking
+           the earliest is right */
         const echoWindowSeconds = 5;
         const fieldUpdateColumns = [primaryKey, 'occurred_at', 'update_id', 'key_updated', 'new_value', 'previous_value',
             'previous_occurred_at', 'seconds_since_previous_update', 'seconds_since_created', 'version_number', 'new_data', 'previous_data',
@@ -91,6 +96,11 @@ module.exports = (params) => {
         const entityOutputColumnsSql = entityColumns
             .map(c => `,\n  versions_with_field_arrays.\`${c}\``).join('');
 
+        /* same array definition and element types as the version model */
+        const isArrayKey = k => k.isArray === true || k.dataType === 'integer_array';
+        const arrayElementTypes = { boolean: 'BOOL', integer: 'INT64', float: 'FLOAT64', timestamp: 'TIMESTAMP', date: 'DATE', string: 'STRING' };
+        const arrayElementType = k => arrayElementTypes[k.elementDataType || (k.dataType === 'integer_array' ? 'integer' : 'string')] || 'STRING';
+
         /* Reference version table columns by their output (aliased) names - the raw keyName does
            not exist as a column in the version table when an alias is configured.
            JSON-typed columns can't be CAST to STRING directly.
@@ -98,19 +108,20 @@ module.exports = (params) => {
            column names consumers see in the version and flattened tables. */
         const newDataStructSql = trackedKeys.map(k => {
             const col = outName(k);
-            const valueSql = (k.dataType === 'json' || k.isArray) ?
+            const valueSql = (k.dataType === 'json' || isArrayKey(k)) ?
                 `TO_JSON_STRING(\`${col}\`)` :
                 `CAST(\`${col}\` AS STRING)`;
             return `STRUCT('${col}' AS key, ${valueSql} AS value)`;
         }).join(',\n      ');
 
         /* same struct read from the legacy version table, for the seam comparison. the legacy table has
-           the same column names and types (the version model unions the two), only array keys need
-           sorting the same way the version model sorts them */
+           the same column names (the version model unions the two), only array keys need casting to
+           their element type and sorting the same way the version model does it, so they come out in
+           the same format as the rest of the table */
         const legacyDataStructSql = trackedKeys.map(k => {
             const col = outName(k);
-            const valueSql = k.isArray ?
-                `TO_JSON_STRING(ARRAY(SELECT x FROM UNNEST(\`${col}\`) AS x WHERE x IS NOT NULL ORDER BY x))` :
+            const valueSql = isArrayKey(k) ?
+                `TO_JSON_STRING(ARRAY(SELECT x FROM UNNEST(ARRAY(SELECT SAFE_CAST(v AS ${arrayElementType(k)}) FROM UNNEST(\`${col}\`) AS v)) AS x WHERE x IS NOT NULL ORDER BY x))` :
                 k.dataType === 'json' ?
                 `TO_JSON_STRING(\`${col}\`)` :
                 `CAST(\`${col}\` AS STRING)`;
